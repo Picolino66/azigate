@@ -1,0 +1,52 @@
+services:
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: deepseek-gateway:local
+    restart: unless-stopped
+    init: true
+    ports:
+      - "${GATEWAY_BIND_ADDRESS:-127.0.0.1}:${PORT:-3000}:${PORT:-3000}"
+    environment:
+      NODE_ENV: production
+      PORT: ${PORT:-3000}
+      HOST: 0.0.0.0
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:?DEEPSEEK_API_KEY deve ser definida no .env}
+      GATEWAY_API_KEYS: ${GATEWAY_API_KEYS:?GATEWAY_API_KEYS deve ser definida no .env}
+      ALLOWED_MODELS: ${ALLOWED_MODELS:-}
+      DEFAULT_MODEL: ${DEFAULT_MODEL:-}
+      ALLOWED_IPS: ${ALLOWED_IPS:-}
+      REQUEST_TIMEOUT_MS: ${REQUEST_TIMEOUT_MS:-600000}
+      CONNECT_TIMEOUT_MS: ${CONNECT_TIMEOUT_MS:-30000}
+      MAX_REQUEST_BODY_BYTES: ${MAX_REQUEST_BODY_BYTES:-10485760}
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-60}
+      RATE_LIMIT_IP_MAX: ${RATE_LIMIT_IP_MAX:-60}
+      RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-60000}
+      MODELS_CACHE_TTL_SECONDS: ${MODELS_CACHE_TTL_SECONDS:-300}
+      READY_CHECK_UPSTREAM: ${READY_CHECK_UPSTREAM:-false}
+      UPSTREAM_MAX_RETRIES: ${UPSTREAM_MAX_RETRIES:-0}
+      RETRY_MAX_DELAY_MS: ${RETRY_MAX_DELAY_MS:-2000}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      TRUST_PROXY: ${TRUST_PROXY:-true}
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: ${MEMORY_LIMIT:-512m}
+    cpus: ${CPU_LIMIT:-1.0}
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

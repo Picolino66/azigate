@@ -1,0 +1,101 @@
+{
+  "orchestration_id": "c16a8ea6-06e8-4ec2-bb2c-7ac4cd272dc5",
+  "created_at": "2026-07-14T13:35:00Z",
+  "current_phase": "F6",
+  "snapshot_version": "O5",
+  "last_stable_snapshot": "O5",
+  "product": {
+    "name": "deepseek-gateway",
+    "domain": "gateway de API compatível com OpenAI",
+    "personas": [
+      { "name": "Operador", "goal": "publicar acesso seguro à DeepSeek" },
+      { "name": "Desenvolvedor Cline", "goal": "usar chat, streaming e ferramentas pela VPN" }
+    ],
+    "business_rules": [
+      "o cliente nunca controla o upstream",
+      "as duas credenciais nunca atravessam a fronteira errada",
+      "payloads de chat e ferramentas são transparentes"
+    ],
+    "mvp_hypothesis": "Cline opera contra /v1 com a mesma semântica OpenAI da DeepSeek"
+  },
+  "requirements": {
+    "functional": ["health", "readiness", "models", "chat JSON", "chat SSE"],
+    "non_functional": ["segurança", "streaming imediato", "logs sem conteúdo", "deploy portátil"],
+    "constraints": ["sem redirecionamento para DeepSeek", "sem proxy aberto", "sem credenciais no código"]
+  },
+  "scope": {
+    "included": ["gateway Node", "testes", "Docker", "Compose", "Nginx", "README"],
+    "excluded": ["frontend", "banco", "deploy real", "teste contra DeepSeek real"],
+    "boundaries": "Somente quatro rotas públicas, das quais duas acessam dois paths upstream fixos"
+  },
+  "feasibility": { "verdict": "VIAVEL", "risks": ["SSE longo", "credenciais", "rate limit local"] },
+  "architecture": {
+    "pattern": "modular-monolith",
+    "tech_stack": { "runtime": "Node.js >=20", "language": "TypeScript", "web": "Fastify", "http": "Undici", "tests": "Vitest" },
+    "integration_contracts": ["Cline OpenAI Compatible /v1", "DeepSeek /models e /chat/completions", "Nginx reverse proxy"],
+    "security_model": { "authentication": "Bearer gateway", "authorization": "allowlists", "secrets": "ambiente ou arquivos", "ssrf": "upstream e paths fixos" },
+    "adrs": ["ADR-001", "ADR-002", "ADR-003", "ADR-004"]
+  },
+  "contracts": {
+    "api_version": "v1",
+    "api_spec": "specs/openapi.yaml",
+    "consistency_model": "strong",
+    "schemas": ["payload de chat aberto com validação mínima", "lista OpenAI de modelos"]
+  },
+  "engineering": {
+    "module_map": { "edge": ["config", "auth", "rate-limit"], "application": ["health", "models", "chat"], "infrastructure": ["upstream", "observability"] },
+    "backlog": ["GW-01", "GW-02", "GW-03", "GW-04", "GW-05", "GW-06", "GW-07", "GW-08", "GW-09", "GW-10"],
+    "test_coverage_threshold": 80
+  },
+  "agentic": {
+    "project_structure": { "docs": true, "specs": true, "tasks": true, "skills": true, "agents": true, "adr": true },
+    "docs_map": { "architecture": "docs/architecture.md", "security": "docs/security/threat-model.md" },
+    "specs_map": { "gateway": "specs/gateway-api.md", "openapi": "specs/openapi.yaml" },
+    "tasks_workflow": { "plan": "tasks/implementation-plan.md" },
+    "agents_map": { "ownership": "agents/README.md" },
+    "skills_map": { "activated": "skills/README.md" },
+    "traceability_rules": ["requisito -> ADR/spec -> arquivo -> teste -> gate"]
+  },
+  "quality": {
+    "gates_passed": [
+      "F1-escopo-fornecido-pelo-usuario",
+      "F2-arquitetura-seguranca-stack",
+      "F3-contrato-v1",
+      "F4-estrutura-agentic-e-plano",
+      "F5-lint-typecheck-30-testes-build-cobertura"
+    ],
+    "gates_failed": ["F6-post-deployment-validation-pendente-infraestrutura-real"],
+    "test_results": {
+      "files": 2,
+      "tests_passed": 30,
+      "tests_failed": 0
+    },
+    "coverage_report": {
+      "statements": 82.56,
+      "branches": 74.3,
+      "functions": 88.88,
+      "lines": 86.18
+    },
+    "security_report": "docs/security/2026-07-14-security-review.md"
+  },
+  "operations": {
+    "deployment_record": "imagem Docker local construída e validada; produção não executada",
+    "smoke_test_results": "container healthy, /health ok e uid 1000(node); Nginx -t ok",
+    "slos": [],
+    "alerts": [],
+    "incidents": []
+  },
+  "orchestration": {
+    "external_skills_activated": [
+      {
+        "skill_name": "defensive-security-auditor",
+        "source": "~/.agents/skills/defensive-security-auditor",
+        "reason": "especialização em autenticação de API, secrets, Docker e Nginx",
+        "replaces_internal": "security-architecture-engine e security-testing-engine (parcial)",
+        "mode": "complementar",
+        "phase": "F2-F6",
+        "timestamp": "2026-07-14T13:40:00Z"
+      }
+    ]
+  }
+}

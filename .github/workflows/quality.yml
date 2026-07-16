@@ -1,0 +1,29 @@
+name: Qualidade
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Configurar Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Instalar dependências
+        run: npm ci --ignore-scripts
+      - name: Validar qualidade
+        run: npm run check
+      - name: Verificar dependências de produção
+        run: npm audit --omit=dev --audit-level=high
+      - name: Construir imagem
+        run: docker build -t deepseek-gateway:ci .

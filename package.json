@@ -1,0 +1,36 @@
+{
+  "name": "deepseek-gateway",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Gateway seguro e compatível com OpenAI entre Cline e DeepSeek",
+  "type": "module",
+  "engines": {
+    "node": ">=20.18.1"
+  },
+  "scripts": {
+    "dev": "tsx watch --env-file=.env src/server.ts",
+    "start": "node dist/server.js",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "check": "npm run lint && npm run typecheck && npm run test && npm run build"
+  },
+  "dependencies": {
+    "dotenv": "17.4.2",
+    "fastify": "5.10.0",
+    "pino": "10.3.1",
+    "undici": "7.28.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "20.19.43",
+    "@vitest/coverage-v8": "4.1.10",
+    "eslint": "10.7.0",
+    "tsx": "4.23.1",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.64.0",
+    "vitest": "4.1.10"
+  }
+}
