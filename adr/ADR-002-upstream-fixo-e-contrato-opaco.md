@@ -1,6 +1,6 @@
 # ADR-002 — Upstream fixo e contrato opaco
 
-- Status: aceito
+- Status: aceito, parcialmente substituído pelo ADR-005
 - Fase: F2/F3
 - Data: 14/07/2026
 
@@ -22,3 +22,6 @@ Somente `/models` e `/chat/completions` serão construídos por enumeração int
 
 Parâmetros inválidos são decididos pela DeepSeek e seus status são preservados. O cliente nunca escolhe esquema, host, porta ou caminho upstream.
 
+## Reavaliação de 16/07/2026
+
+O ADR-005 substitui somente a premissa de que todo `model` usa a DeepSeek. Os paths HTTPS da DeepSeek continuam fixos e o passthrough opaco continua obrigatório nesse adaptador. Os aliases CLI são reservados por um registry fechado e nunca fornecem URL, path, comando ou argumentos ao cliente.

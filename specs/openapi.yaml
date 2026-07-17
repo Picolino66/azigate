@@ -1,22 +1,55 @@
 openapi: 3.1.0
 info:
-  title: DeepSeek Gateway
-  version: 1.0.0
+  title: Gateway AI
+  version: 2.0.0
+  description: Gateway OpenAI Compatible para DeepSeek e aliases CLI isolados.
 paths:
   /health:
     get:
       responses:
-        '200': { description: Processo saudável }
+        '200':
+          description: Processo saudável
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Health' }
   /ready:
     get:
       responses:
-        '200': { description: Processo pronto }
-        '503': { description: Processo não pronto }
+        '200':
+          description: Ao menos um provider utilizável
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Ready' }
+        '503':
+          description: Nenhum provider pronto
   /v1/models:
     get:
       security: [{ bearerAuth: [] }]
       responses:
-        '200': { description: Lista de modelos compatível com OpenAI }
+        '200':
+          description: Catálogo combinado compatível com OpenAI
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [object, data]
+                properties:
+                  object: { const: list }
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, object]
+                      properties:
+                        id: { type: string }
+                        object: { const: model }
+                      additionalProperties: true
+                additionalProperties: true
+        '503':
+          description: Nenhum provider utilizável
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
   /v1/chat/completions:
     post:
       security: [{ bearerAuth: [] }]
@@ -31,12 +64,69 @@ paths:
                 model: { type: string, minLength: 1 }
                 messages: { type: array, items: {} }
                 stream: { type: boolean }
+                tools: { type: array, items: {} }
+                tool_choice: {}
+                parallel_tool_calls: { type: boolean }
               additionalProperties: true
       responses:
-        '200': { description: Chat Completion JSON ou SSE }
+        '200':
+          description: Chat Completion JSON ou SSE
+          content:
+            application/json:
+              schema: { type: object, additionalProperties: true }
+            text/event-stream:
+              schema: { type: string }
+        '400':
+          description: Requisição inválida ou conteúdo CLI não suportado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429':
+          description: Rate limit ou broker ocupado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '502':
+          description: Falha/saída inválida do provider
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '503':
+          description: Provider CLI indisponível
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '504':
+          description: Timeout do provider
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
-
+  schemas:
+    Health:
+      type: object
+      required: [status, service]
+      properties:
+        status: { const: ok }
+        service: { const: gateway-ai }
+    Ready:
+      type: object
+      required: [status, service]
+      properties:
+        status: { const: ready }
+        service: { const: gateway-ai }
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [message, type, code]
+          properties:
+            message: { type: string }
+            type: { const: gateway_error }
+            code: { type: string }

@@ -3,6 +3,11 @@ import type { AppConfig } from '../config.js'
 import { publicError } from '../http/errors.js'
 import { createClientAbortSignal } from '../http/client-abort.js'
 import type { GatewayMetrics } from '../observability/metrics.js'
+import type { CliBrokerClientLike } from '../providers/broker-client.js'
+import { CliRequestValidationError, normalizeCliRequest, validateCliDecision } from '../providers/cli-request.js'
+import { CliUnavailableError } from '../providers/errors.js'
+import { cliCompletionJson, streamCliCompletion } from '../providers/openai-response.js'
+import { resolveProvider } from '../providers/registry.js'
 import type { ChatBody } from '../types.js'
 import type { DeepSeekClient } from '../upstream/client.js'
 import { forwardBufferedResponse, forwardStreamingResponse } from '../upstream/response.js'
@@ -20,6 +25,7 @@ export function registerChatRoute(
   config: AppConfig,
   protectedHook: onRequestHookHandler,
   client: DeepSeekClient,
+  broker: CliBrokerClientLike,
   metrics: GatewayMetrics,
 ): void {
   app.post(
@@ -58,22 +64,54 @@ export function registerChatRoute(
       request.telemetry.model = model
       request.telemetry.stream = stream
       const cancellation = createClientAbortSignal(request, reply)
+      const selection = resolveProvider(model, config)
 
       try {
-        const exchange = await client.request({
-          path: 'chat/completions',
-          method: 'POST',
-          requestId: request.id,
-          accept: stream ? 'text/event-stream' : 'application/json',
-          body: JSON.stringify(chatBody),
-          signal: cancellation.signal,
-        })
-        request.telemetry.upstreamStatus = exchange.response.status
-        if (!exchange.response.ok || !stream) {
-          await forwardBufferedResponse(exchange, request, reply, [config.deepseekApiKey, ...config.gatewayApiKeys])
+        if (selection.kind === 'deepseek') {
+          const exchange = await client.request({
+            path: 'chat/completions',
+            method: 'POST',
+            requestId: request.id,
+            accept: stream ? 'text/event-stream' : 'application/json',
+            body: JSON.stringify(chatBody),
+            signal: cancellation.signal,
+          })
+          request.telemetry.upstreamStatus = exchange.response.status
+          if (!exchange.response.ok || !stream) {
+            await forwardBufferedResponse(exchange, request, reply, [config.deepseekApiKey, ...config.gatewayApiKeys])
+            return
+          }
+          await forwardStreamingResponse(exchange, request, reply, metrics)
           return
         }
-        await forwardStreamingResponse(exchange, request, reply, metrics)
+
+        if (!selection.enabled) throw new CliUnavailableError()
+        let brokerRequest
+        try {
+          brokerRequest = normalizeCliRequest(chatBody, request.id, selection.provider)
+        } catch (error) {
+          if (!(error instanceof CliRequestValidationError)) throw error
+          request.telemetry.error = error.name
+          return reply.code(400).send(publicError(error.publicMessage, 'invalid_cli_request'))
+        }
+        const execute = async () => {
+          const result = await broker.execute(brokerRequest, cancellation.signal)
+          return { decision: validateCliDecision(result.decision, brokerRequest), ...(result.usage ? { usage: result.usage } : {}) }
+        }
+        if (stream) {
+          await streamCliCompletion(
+            reply,
+            request,
+            model,
+            brokerRequest,
+            execute,
+            config.cliHeartbeatIntervalMs,
+            metrics,
+          )
+          return
+        }
+        const result = await execute()
+        return reply.send(cliCompletionJson(model, result.decision, result.usage, request))
       } finally {
         cancellation.cleanup()
       }

@@ -3,9 +3,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: deepseek-gateway:local
+    image: gateway-ai:local
     restart: unless-stopped
     init: true
+    user: "${BROKER_UID:-1000}:${BROKER_GID:-1000}"
     ports:
       - "${GATEWAY_BIND_ADDRESS:-127.0.0.1}:${PORT:-3000}:${PORT:-3000}"
     environment:
@@ -28,8 +29,20 @@ services:
       READY_CHECK_UPSTREAM: ${READY_CHECK_UPSTREAM:-false}
       UPSTREAM_MAX_RETRIES: ${UPSTREAM_MAX_RETRIES:-0}
       RETRY_MAX_DELAY_MS: ${RETRY_MAX_DELAY_MS:-2000}
+      CLI_BROKER_SOCKET_PATH: ${CLI_BROKER_SOCKET_PATH:-/run/gateway-ai/broker.sock}
+      ENABLE_CODEX_CLI: ${ENABLE_CODEX_CLI:-false}
+      ENABLE_CLAUDE_CLI: ${ENABLE_CLAUDE_CLI:-false}
+      CLI_REQUEST_TIMEOUT_MS: ${CLI_REQUEST_TIMEOUT_MS:-600000}
+      CLI_HEARTBEAT_INTERVAL_MS: ${CLI_HEARTBEAT_INTERVAL_MS:-15000}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       TRUST_PROXY: ${TRUST_PROXY:-true}
+    volumes:
+      - type: bind
+        source: ${BROKER_RUNTIME_DIR:-/run/gateway-ai}
+        target: /run/gateway-ai
+        read_only: true
+        bind:
+          create_host_path: true
     read_only: true
     tmpfs:
       - /tmp:size=16m,mode=1777

@@ -33,19 +33,23 @@ Valide links internos da documentação alterada.
 
 ## Contexto do projeto
 
-Este é um gateway stateless, em Node.js/TypeScript com Fastify e Undici, entre clientes OpenAI Compatible e a DeepSeek:
+Este é o `gateway-ai`, um gateway stateless em Node.js/TypeScript com Fastify e Undici. O Qwen Code escolhe um provedor pelo `model`, mas continua sendo o único processo autorizado a executar ferramentas e alterar os repositórios do computador da VPN:
 
 ```text
-Cliente -> HTTPS/Nginx -> Fastify -> HTTPS/DeepSeek
+Qwen Code -> HTTPS/Nginx -> Fastify
+                              ├── HTTPS/DeepSeek
+                              └── Unix socket -> broker host -> Codex/Claude em Bubblewrap
 ```
 
-O serviço é um monólito modular sem banco, fila ou frontend. Rate limit e cache de modelos são locais a cada processo.
+O gateway é um monólito modular sem banco, fila ou frontend. O broker é um serviço host privado e isolado. Rate limit e cache de modelos são locais a cada processo.
 
 Mapa principal:
 
 - `src/config.ts`: leitura e validação de configuração e secrets;
 - `src/security/`: autenticação e rate limit;
 - `src/upstream/`: único adaptador autorizado a construir requisições para a DeepSeek;
+- `src/providers/`: registry fechado, cliente do broker, normalização CLI e respostas OpenAI/SSE;
+- `src/broker/`: protocolo privado, checks de capacidade, prompt, isolamento e subprocessos;
 - `src/models/`: cache e filtro da lista de modelos;
 - `src/routes/`: health, readiness, models e chat completions;
 - `src/http/`: erros HTTP e cancelamento do cliente;
@@ -57,12 +61,16 @@ Mapa principal:
 ## Invariantes obrigatórias
 
 - A superfície HTTP permanece fechada a `GET /health`, `GET /ready`, `GET /v1/models` e `POST /v1/chat/completions`. Não crie proxy genérico nem aceite URL, host ou path upstream vindos do cliente.
+- `codex-cli` e `claude-cli` são aliases reservados. Nunca faça fallback automático para a DeepSeek ou entre provedores.
 - O upstream usa apenas os paths tipados `models` e `chat/completions`, HTTPS em produção e `redirect: 'error'`.
 - A credencial Bearer do gateway nunca segue para a DeepSeek. Reconstrua `Authorization` exclusivamente com `DEEPSEEK_API_KEY` e mantenha allowlists explícitas de headers.
 - Nunca registre prompts, mensagens, respostas, bodies, tool arguments, cookies, Authorization ou secrets. Erros públicos e respostas bufferizadas precisam continuar sanitizados.
 - Não leia, imprima, versione ou inclua `.env` e arquivos de `secrets/` em saídas. Use `.env.example` para entender a configuração e valores fictícios nos testes.
-- Preserve o passthrough opaco de campos OpenAI/DeepSeek desconhecidos, inclusive `tools`, `tool_choice`, `reasoning_content` e campos futuros. Faça somente a validação mínima documentada de chat.
-- Preserve SSE incremental, keep-alives, usage e `data: [DONE]` sem remontar eventos. Não introduza buffering ou compressão e propague cancelamento do cliente ao upstream.
+- Preserve o passthrough opaco de campos OpenAI/DeepSeek desconhecidos, inclusive `tools`, `tool_choice`, `reasoning_content` e campos futuros. A validação textual/function tool adicional vale somente para aliases CLI.
+- Preserve o SSE DeepSeek incremental, keep-alives, usage e `data: [DONE]` sem remontar eventos. Para CLI, preserve o regime sintético documentado: heartbeat, decisão validada atômica e erro sem `[DONE]` depois do início.
+- O Qwen Code é o único executor. Codex/Claude não recebem cwd, repositório, home completo ou ferramentas locais; o broker recusa evento de execução e nunca interpreta texto como patch.
+- O protocolo do broker aceita somente request ID, provider, mensagens e ferramentas normalizadas. Não acrescente comando, argv, ambiente, URL ou path fornecidos pelo cliente.
+- Subprocessos do broker usam `spawn` sem shell, argv fixo, ambiente mínimo, grupo de processos, limite de tempo/saída, concorrência global 1 sem fila e Bubblewrap.
 - Preserve status e respostas seguras da DeepSeek. Retentativas só podem ocorrer antes do início da resposta e devem continuar limitadas aos status configurados.
 - Altere limites de body, timeouts e comportamento de proxy de forma coerente entre aplicação, Compose, Nginx e documentação.
 - Não transforme cache ou rate limit local em garantia distribuída sem novo backend e decisão arquitetural explícita.
@@ -98,7 +106,7 @@ npm run test:coverage
 npm audit --omit=dev --audit-level=high
 ```
 
-A cobertura mínima é 80% para linhas, funções e statements, e 70% para branches. Testes automatizados não devem chamar a DeepSeek real: use `createTestConfig` e `test/mock-upstream.ts`. Toda correção de bug ou mudança observável deve incluir teste de regressão, especialmente para autenticação, sanitização, allowlists, status upstream, streaming e cancelamento.
+A cobertura mínima é 80% para linhas, funções e statements, e 70% para branches. Testes automatizados não devem chamar DeepSeek, Codex ou Claude reais: use `createTestConfig`, `test/mock-upstream.ts`, executáveis falsos e broker mockado. Os scripts `gate:codex`/`gate:claude` são validações manuais explícitas e nunca pertencem à suíte comum. Toda correção de bug ou mudança observável deve incluir teste de regressão, especialmente para autenticação, sanitização, allowlists, roteamento, protocolo interno, saída CLI, streaming e cancelamento.
 
 Quando houver mudança de infraestrutura, valide adicionalmente o artefato afetado, por exemplo `docker compose config`, `docker build` ou `nginx -t` em ambiente apropriado.
 

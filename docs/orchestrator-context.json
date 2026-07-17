@@ -1,86 +1,201 @@
 {
   "orchestration_id": "c16a8ea6-06e8-4ec2-bb2c-7ac4cd272dc5",
   "created_at": "2026-07-14T13:35:00Z",
+  "updated_at": "2026-07-17T19:09:02-03:00",
+  "mode": "phase-resume",
   "current_phase": "F6",
   "snapshot_version": "O5",
   "last_stable_snapshot": "O5",
+  "evolution_cycle": {
+    "name": "multiprovider-cli-broker",
+    "status": "local-activation-and-codex-smoke-passed-remote-qwen-pending",
+    "reassessed_phases": ["F2", "F3", "F5", "F6"],
+    "next_snapshot": "pending-remote-qwen-smoke"
+  },
   "product": {
-    "name": "deepseek-gateway",
-    "domain": "gateway de API compatível com OpenAI",
+    "name": "gateway-ai",
+    "domain": "gateway OpenAI Compatible multiprovedor para uso pessoal em LAN/VPN",
     "personas": [
-      { "name": "Operador", "goal": "publicar acesso seguro à DeepSeek" },
-      { "name": "Desenvolvedor Cline", "goal": "usar chat, streaming e ferramentas pela VPN" }
+      { "name": "Operador", "goal": "publicar provedores com isolamento e rollback independente" },
+      { "name": "Desenvolvedor Qwen Code", "goal": "receber texto/tool calls e executar alterações somente no PC da VPN" }
     ],
     "business_rules": [
-      "o cliente nunca controla o upstream",
-      "as duas credenciais nunca atravessam a fronteira errada",
-      "payloads de chat e ferramentas são transparentes"
+      "o cliente nunca controla URL, path, comando, argv, ambiente ou cwd upstream",
+      "DeepSeek, Codex e Claude nunca fazem fallback automático entre si",
+      "Qwen Code é o único executor de leitura, shell e edição",
+      "credenciais do gateway/DeepSeek e sessões CLI permanecem em processos separados",
+      "DeepSeek continua opaca; CLIs usam somente texto e function tools validados"
     ],
-    "mvp_hypothesis": "Cline opera contra /v1 com a mesma semântica OpenAI da DeepSeek"
+    "mvp_hypothesis": "Qwen Code usa codex-cli como decisor remoto sem expor ou alterar o servidor gateway"
   },
   "requirements": {
-    "functional": ["health", "readiness", "models", "chat JSON", "chat SSE"],
-    "non_functional": ["segurança", "streaming imediato", "logs sem conteúdo", "deploy portátil"],
-    "constraints": ["sem redirecionamento para DeepSeek", "sem proxy aberto", "sem credenciais no código"]
+    "functional": [
+      "quatro rotas públicas invariantes",
+      "roteamento por model",
+      "catálogo combinado com degradação parcial",
+      "DeepSeek JSON/SSE transparente",
+      "Codex e Claude JSON/SSE sintéticos",
+      "protocolo Unix v1 health/execute"
+    ],
+    "non_functional": [
+      "Qwen como único executor",
+      "broker isolado por Bubblewrap",
+      "logs sem conteúdo",
+      "cancelamento do grupo de processo",
+      "concorrência global 1 sem fila",
+      "timeout 10 minutos e saída 4 MiB"
+    ],
+    "constraints": [
+      "uso pessoal single-user em LAN/IP allowlist",
+      "sem novas API keys Codex/Claude",
+      "aliases dependem do login e modelo padrão existentes",
+      "Claude é segunda fase opt-in",
+      "sem repositório/home completo no servidor ou sandbox"
+    ]
   },
   "scope": {
-    "included": ["gateway Node", "testes", "Docker", "Compose", "Nginx", "README"],
-    "excluded": ["frontend", "banco", "deploy real", "teste contra DeepSeek real"],
-    "boundaries": "Somente quatro rotas públicas, das quais duas acessam dois paths upstream fixos"
+    "included": [
+      "gateway Fastify multiprovedor",
+      "broker host Node",
+      "Codex CLI e Claude CLI isolados",
+      "testes e gates de viabilidade",
+      "Docker/Compose/systemd",
+      "configuração Qwen e documentação"
+    ],
+    "excluded": [
+      "YOLO/auto-approval",
+      "API keys novas para CLIs",
+      "fallback automático",
+      "deploy real",
+      "edição do PC da VPN pelo broker",
+      "teste automatizado consumindo provedores reais"
+    ],
+    "boundaries": "Somente quatro rotas públicas; DeepSeek em HTTPS fixo e CLIs por Unix socket privado sem ferramentas"
   },
-  "feasibility": { "verdict": "VIAVEL", "risks": ["SSE longo", "credenciais", "rate limit local"] },
+  "feasibility": {
+    "verdict": "VIAVEL_PARA_DEPLOY_CONTROLADO",
+    "codex_gate": {
+      "version": "0.133.0",
+      "structurally_valid": "20/20",
+      "local_tool_executions": 0,
+      "category_correct": "20/20",
+      "passed": true
+    },
+    "claude_gate": {
+      "version": "2.1.150",
+      "structurally_valid": "20/20",
+      "local_tool_executions": 0,
+      "category_correct": "20/20",
+      "passed": true,
+      "publication": "second-phase-opt-in"
+    },
+    "risks": [
+      "mudança de flags/semântica das CLIs",
+      "dependência de Bubblewrap/user namespaces/DNS do host",
+      "smoke Qwen remoto pendente",
+      "rate limit e cache locais"
+    ]
+  },
   "architecture": {
-    "pattern": "modular-monolith",
-    "tech_stack": { "runtime": "Node.js >=20", "language": "TypeScript", "web": "Fastify", "http": "Undici", "tests": "Vitest" },
-    "integration_contracts": ["Cline OpenAI Compatible /v1", "DeepSeek /models e /chat/completions", "Nginx reverse proxy"],
-    "security_model": { "authentication": "Bearer gateway", "authorization": "allowlists", "secrets": "ambiente ou arquivos", "ssrf": "upstream e paths fixos" },
-    "adrs": ["ADR-001", "ADR-002", "ADR-003", "ADR-004"]
+    "pattern": "modular-monolith-plus-private-host-broker",
+    "tech_stack": {
+      "runtime": "Node.js >=20; imagem Node.js 22",
+      "language": "TypeScript ESM NodeNext strict",
+      "web": "Fastify",
+      "http": "Undici e HTTP/Unix socket nativo",
+      "isolation": "Bubblewrap + systemd",
+      "tests": "Vitest"
+    },
+    "integration_contracts": [
+      "Qwen Code OpenAI Compatible /v1",
+      "DeepSeek /models e /chat/completions",
+      "broker Unix protocol v1 /health e /execute",
+      "Codex exec --json --output-schema --ephemeral",
+      "Claude print mode com JSON schema e tools/MCP vazios"
+    ],
+    "security_model": {
+      "authentication": "Bearer gateway e logins CLI existentes no host",
+      "authorization": "IP/model/tool allowlists e aliases reservados",
+      "secrets": "gateway/container separados dos auth dirs do broker",
+      "ssrf": "DeepSeek e paths fixos; protocolo broker sem URL/path",
+      "execution": "Qwen único executor; CLIs sem ferramentas locais"
+    },
+    "adrs": ["ADR-001", "ADR-002", "ADR-003", "ADR-004", "ADR-005", "ADR-006", "ADR-007"]
   },
   "contracts": {
     "api_version": "v1",
     "api_spec": "specs/openapi.yaml",
-    "consistency_model": "strong",
-    "schemas": ["payload de chat aberto com validação mínima", "lista OpenAI de modelos"]
+    "broker_spec": "specs/broker-api.md",
+    "consistency_model": "stateless-request-response",
+    "schemas": [
+      "payload DeepSeek aberto com validação mínima",
+      "payload CLI textual/function tool reconstruído",
+      "decisão CLI content xor tool_calls",
+      "lista OpenAI de modelos combinada"
+    ]
   },
   "engineering": {
-    "module_map": { "edge": ["config", "auth", "rate-limit"], "application": ["health", "models", "chat"], "infrastructure": ["upstream", "observability"] },
-    "backlog": ["GW-01", "GW-02", "GW-03", "GW-04", "GW-05", "GW-06", "GW-07", "GW-08", "GW-09", "GW-10"],
-    "test_coverage_threshold": 80
+    "module_map": {
+      "edge": ["config", "auth", "rate-limit", "routes"],
+      "providers": ["registry", "deepseek-upstream", "broker-client", "cli-request", "openai-response"],
+      "broker": ["protocol", "capabilities", "prompt", "isolation", "process-runner", "executor", "server"],
+      "operations": ["Docker", "Compose", "Nginx", "systemd"]
+    },
+    "backlog": ["GW-01..GW-10", "MP-01..MP-07"],
+    "test_coverage_thresholds": {
+      "statements": 80,
+      "branches": 70,
+      "functions": 80,
+      "lines": 80
+    }
   },
   "agentic": {
     "project_structure": { "docs": true, "specs": true, "tasks": true, "skills": true, "agents": true, "adr": true },
-    "docs_map": { "architecture": "docs/architecture.md", "security": "docs/security/threat-model.md" },
-    "specs_map": { "gateway": "specs/gateway-api.md", "openapi": "specs/openapi.yaml" },
+    "docs_map": {
+      "architecture": "docs/architecture.md",
+      "providers": "docs/modules/providers/index.md",
+      "security": "docs/security/threat-model.md",
+      "broker_operations": "docs/operations/broker.md",
+      "qwen_operations": "docs/operations/qwen-code.md"
+    },
+    "specs_map": { "gateway": "specs/gateway-api.md", "openapi": "specs/openapi.yaml", "broker": "specs/broker-api.md" },
     "tasks_workflow": { "plan": "tasks/implementation-plan.md" },
     "agents_map": { "ownership": "agents/README.md" },
     "skills_map": { "activated": "skills/README.md" },
-    "traceability_rules": ["requisito -> ADR/spec -> arquivo -> teste -> gate"]
+    "traceability_rules": ["requisito -> ADR/spec -> arquivo -> teste/gate -> evidência operacional"]
   },
   "quality": {
     "gates_passed": [
-      "F1-escopo-fornecido-pelo-usuario",
-      "F2-arquitetura-seguranca-stack",
-      "F3-contrato-v1",
-      "F4-estrutura-agentic-e-plano",
-      "F5-lint-typecheck-30-testes-build-cobertura"
+      "F2-ADR-registry-broker-executor-streaming",
+      "F3-contrato-publico-e-broker-v1",
+      "F5-lint-typecheck-95-testes-build",
+      "F5-cobertura-acima-dos-limiares",
+      "F5-audit-zero-vulnerabilidades",
+      "F5-codex-gate-20-de-20",
+      "F5-claude-gate-20-de-20",
+      "F6-compose-systemd-docker-bwrap-container-smoke",
+      "F6-broker-host-systemd-apparmor-ready",
+      "F6-gateway-local-catalog-and-codex-chat-smoke",
+      "F6-colored-model-logs-check"
     ],
-    "gates_failed": ["F6-post-deployment-validation-pendente-infraestrutura-real"],
-    "test_results": {
-      "files": 2,
-      "tests_passed": 30,
-      "tests_failed": 0
-    },
-    "coverage_report": {
-      "statements": 82.56,
-      "branches": 74.3,
-      "functions": 88.88,
-      "lines": 86.18
-    },
-    "security_report": "docs/security/2026-07-14-security-review.md"
+    "gates_failed": [],
+    "gates_pending": ["F6-smoke-qwen-no-pc-da-vpn", "F6-deploy-tls-lan-real"],
+    "test_results": { "files": 6, "tests_passed": 96, "tests_failed": 0 },
+    "coverage_report": { "statements": 80.5, "branches": 74.39, "functions": 86.02, "lines": 85.96 },
+    "security_report": "docs/security/2026-07-16-security-review.md"
   },
   "operations": {
-    "deployment_record": "imagem Docker local construída e validada; produção não executada",
-    "smoke_test_results": "container healthy, /health ok e uid 1000(node); Nginx -t ok",
+    "deployment_record": "broker host habilitado em systemd e imagem gateway-ai:local ativa no Compose em 192.168.2.6:3000; Claude permanece desabilitado",
+    "smoke_test_results": "broker ready com Codex disponível; gateway /health e /ready 200; catálogo contém DeepSeek e codex-cli; chat real codex-cli retornou 200; Qwen remoto pendente",
+    "observability_config": "stdout padrão colore o campo model: deepseek-v4-flash em verde, deepseek-v4-pro em azul e codex-cli em vermelho; logs continuam restritos a metadados",
+    "local_activation": {
+      "gateway_env": "sincronizado com os 47 campos do .env.example, codex-cli habilitado, claude-cli desabilitado e UID/GID 1000:1001; secrets preservados e arquivo 0600",
+      "allowed_models": "deepseek-v4-pro, deepseek-v4-flash e codex-cli presentes na allowlist local",
+      "broker": "gateway-ai-broker@isaiasgr habilitado e ativo; socket 0600 em diretório 0700; AppArmor nominal do bwrap carregado; health ready com Codex disponível",
+      "gateway_restart": "gateway recriado com gateway-ai:local, container healthy e codex-cli publicado; smoke textual real aprovado"
+    },
+    "runbooks": ["docs/operations/broker.md", "docs/operations/qwen-code.md"],
+    "rollback": "desabilitar aliases e recriar o gateway preserva DeepSeek",
     "slos": [],
     "alerts": [],
     "incidents": []
@@ -88,13 +203,44 @@
   "orchestration": {
     "external_skills_activated": [
       {
+        "skill_name": "arch-refactor-engine",
+        "source": "~/.agents/skills/arch-refactor-engine",
+        "reason": "evoluir monólito para registry e broker preservando o adaptador DeepSeek",
+        "mode": "complementar",
+        "phase": "F2-F5",
+        "timestamp": "2026-07-16T18:00:00-03:00"
+      },
+      {
         "skill_name": "defensive-security-auditor",
         "source": "~/.agents/skills/defensive-security-auditor",
-        "reason": "especialização em autenticação de API, secrets, Docker e Nginx",
-        "replaces_internal": "security-architecture-engine e security-testing-engine (parcial)",
+        "reason": "isolar subprocessos, credenciais, Unix socket, containers e contrato de ferramentas",
         "mode": "complementar",
         "phase": "F2-F6",
-        "timestamp": "2026-07-14T13:40:00Z"
+        "timestamp": "2026-07-16T18:00:00-03:00"
+      },
+      {
+        "skill_name": "task-breakdown-engine",
+        "source": "~/.agents/skills/task-breakdown-engine",
+        "reason": "decompor a evolução em tarefas rastreáveis MP-01..MP-07",
+        "mode": "complementar",
+        "phase": "F4",
+        "timestamp": "2026-07-16T18:00:00-03:00"
+      },
+      {
+        "skill_name": "ai-docs-self-healing",
+        "source": "~/.agents/skills/ai-docs-self-healing",
+        "reason": "sincronizar docs-first, ADRs, specs, operação, segurança e índices",
+        "mode": "complementar",
+        "phase": "F3-F6",
+        "timestamp": "2026-07-16T18:00:00-03:00"
+      },
+      {
+        "skill_name": "openai-docs",
+        "source": "Codex skill system",
+        "reason": "validar controles oficiais do modo programático do Codex CLI",
+        "mode": "referência-oficial",
+        "phase": "F2-F5",
+        "timestamp": "2026-07-16T18:00:00-03:00"
       }
     ]
   }

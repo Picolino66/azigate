@@ -1,0 +1,48 @@
+[Unit]
+Description=Gateway AI CLI broker para %i
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=%i
+Group=%i
+WorkingDirectory=/opt/gateway-ai
+Environment=BROKER_SOCKET_PATH=/run/gateway-ai/broker.sock
+Environment=BROKER_ENABLE_CODEX_CLI=true
+Environment=BROKER_ENABLE_CLAUDE_CLI=false
+EnvironmentFile=-/etc/gateway-ai/broker.env
+ExecStart=/usr/bin/node /opt/gateway-ai/dist/broker/server.js
+Restart=on-failure
+RestartSec=5s
+UMask=0077
+RuntimeDirectory=gateway-ai
+RuntimeDirectoryMode=0700
+
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=tmpfs
+BindPaths=-/home/%i/.codex -/home/%i/.claude
+BindReadOnlyPaths=-/home/%i/.local/bin/claude -/home/%i/.local/share/claude
+ReadWritePaths=/run/gateway-ai
+ProtectKernelModules=yes
+# ProtectKernelTunables, ProtectKernelLogs e ProtectHostname conflitam com
+# namespaces aninhados do Bubblewrap em Ubuntu/AppArmor.
+# O serviço permanece sem capabilities e executado como usuário não root.
+ProtectControlGroups=yes
+ProtectClock=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictRealtime=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+TasksMax=64
+MemoryMax=1G
+KillMode=control-group
+TimeoutStopSec=15s
+
+[Install]
+WantedBy=multi-user.target

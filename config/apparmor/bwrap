@@ -1,0 +1,12 @@
+# Este perfil dá um rótulo próprio ao Bubblewrap e permite que ele crie
+# user namespaces mesmo quando a restrição global do AppArmor está ativa.
+
+abi <abi/4.0>,
+include <tunables/global>
+
+profile bwrap /usr/bin/bwrap flags=(unconfined) {
+  userns,
+
+  # Extensões locais opcionais administradas pelo host.
+  include if exists <local/bwrap>
+}

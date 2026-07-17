@@ -1,30 +1,40 @@
 # Inventário e matriz de endpoints
 
-Data: 14/07/2026.
+Data: 16/07/2026.
 
-| Método | Rota | Auth exigida | Role | Recurso | IDs sensíveis | BOLA/IDOR | Mass assignment | Exposição excessiva | Teste executado | Status |
-|---|---|---|---|---|---|---|---|---|---|---|
-| GET | `/health` | não | N/A | liveness local | nenhum | N/A | N/A | baixo | resposta local e ausência de upstream | OK |
-| GET | `/ready` | não | N/A | prontidão sanitizada | nenhum | N/A | N/A | baixo | resposta sem secrets e modo sem upstream | OK |
-| GET | `/v1/models` | Bearer gateway | chave válida | catálogo DeepSeek | nenhum | N/A | N/A | baixo | sem token, token inválido, troca de chave, cache e filtro | OK |
-| POST | `/v1/chat/completions` | Bearer gateway | chave válida | inferência DeepSeek | nenhum | N/A | intencionalmente aberto apenas para passthrough | médio controlado | auth, body, allowlist, campos extras, tools, SSE e erros | OK |
+## Superfície pública
 
-## Rotas públicas
+| Método | Rota | Auth | Recurso | Validação e exposição | Evidência | Status |
+|---|---|---|---|---|---|---|
+| GET | `/health` | não | liveness local | nome/status estáticos, sem consulta a provider | teste local e smoke do container | OK |
+| GET | `/ready` | não | prontidão agregada | somente status/nome; ao menos um provider utilizável | testes de degradação | OK |
+| GET | `/v1/models` | Bearer gateway | catálogo combinado | allowlists; aliases apenas habilitados/saudáveis; `503` se vazio | testes auth/cache/falha parcial | OK |
+| POST | `/v1/chat/completions` | Bearer gateway | inferência roteada | rate limit; allowlists; DeepSeek opaco ou subconjunto CLI estrito | regressão DeepSeek e integração broker | OK |
 
-- `/health`: retorna somente status e nome estático do serviço.
-- `/ready`: retorna somente status e nome; conectividade upstream é opcional e não expõe detalhes.
+Qualquer outra rota recebe `404`. Não existem login, cadastro, upload, download, pagamentos, administração, tenants, webhooks ou recursos por ID; BOLA/IDOR não se aplicam.
 
-## Rotas privadas
+## Superfície privada do broker
 
-- `/v1/models`: exige uma das chaves configuradas no gateway.
-- `/v1/chat/completions`: exige chave, rate limit e allowlists opcionais de IP/modelo.
+Não é TCP nem pública. Existe somente no Unix socket `0600`, sob diretório `0700`.
+
+| Método | Rota | Controle | Entrada | Saída | Status |
+|---|---|---|---|---|---|
+| GET | `/health` | filesystem/UID + protocolo local | nenhuma | versão e capacidade sanitizada | OK |
+| POST | `/execute` | filesystem/UID + header v1 + JSON | request ID, provider, mensagens e function tools | decisão estruturada ou erro sanitizado | OK |
+
+`/execute` rejeita campos extras, inclusive `cwd`, comando, argv, ambiente, URL e path. O gateway reconstrói a entrada; nenhum campo HTTP do Qwen escolhe binário ou filesystem.
 
 ## Operações críticas
 
-| Operação | Endpoint | Auth | Autorização | Rate limit | Validação | Log | Risco | Status |
-|---|---|---|---|---|---|---|---|---|
-| Consultar modelos | `/v1/models` | sim | chave/IP | sim | rota fixa e resposta OpenAI | somente metadados | consumo de cota | OK |
-| Executar inferência | `/v1/chat/completions` | sim | chave/IP/modelo | sim | JSON, tamanho, model e messages | sem conteúdo | custo, dados sensíveis, stream longo | OK |
+| Operação | Autenticação/autorizacão | Limites | Logs | Risco | Status |
+|---|---|---|---|---|---|
+| Consultar modelos | chave/IP/model allowlist | rate limit e cache local | metadados sem body | consumo de cota/enumeração | OK |
+| Inferência DeepSeek | chave/IP/model | body, timeout e retries pré-resposta | sem conteúdo | custo e dados sensíveis | OK |
+| Decisão Codex/Claude | chave/IP/alias + socket UID | 1 execução, 10 min, 4 MiB, sem retry | sem prompt/stdout/stderr | login CLI e prompt injection | OK local |
+| Executar ferramenta | confirmação do Qwen no PC da VPN | política do Qwen | fora do gateway | alteração no repositório | smoke remoto pendente |
 
-Não existem login, cadastro, reset de senha, upload, download, pagamentos, administração, recursos por ID, tenants ou webhooks. Campos extras de chat não alteram estado local; são encaminhados somente à rota fixa da DeepSeek por exigência do contrato compatível com OpenAI.
+## Mass assignment e exposição
 
+- DeepSeek aceita campos extras intencionalmente para preservar o contrato opaco, mas o destino continua fixo.
+- CLI usa reconstrução allowlist: somente mensagens textuais, function tools, `tool_choice` e `parallel_tool_calls` entram no broker.
+- Catálogo, health e erros não expõem paths de binário/auth, argv, stderr, account ID ou secrets.

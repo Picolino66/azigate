@@ -11,7 +11,7 @@ export function registerModelsRoute(
     const cancellation = createClientAbortSignal(request, reply)
     try {
       const result = await models.list(request.id, cancellation.signal)
-      request.telemetry.upstreamStatus = result.status
+      if (result.upstreamStatus !== undefined) request.telemetry.upstreamStatus = result.upstreamStatus
       reply.headers(result.headers).code(result.status).send(result.body)
     } finally {
       cancellation.cleanup()

@@ -1,21 +1,25 @@
 {
-  "name": "deepseek-gateway",
+  "name": "gateway-ai",
   "version": "1.0.0",
   "private": true,
-  "description": "Gateway seguro e compatível com OpenAI entre Cline e DeepSeek",
+  "description": "Gateway OpenAI Compatible seguro para DeepSeek e CLIs locais isoladas",
   "type": "module",
   "engines": {
     "node": ">=20.18.1"
   },
   "scripts": {
     "dev": "tsx watch --env-file=.env src/server.ts",
+    "broker:dev": "tsx watch src/broker/server.ts",
+    "broker:start": "node dist/broker/server.js",
     "start": "node dist/server.js",
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "check": "npm run lint && npm run typecheck && npm run test && npm run build"
+    "check": "npm run lint && npm run typecheck && npm run test && npm run build",
+    "gate:codex": "tsx src/broker/viability-gate.ts codex",
+    "gate:claude": "tsx src/broker/viability-gate.ts claude"
   },
   "dependencies": {
     "dotenv": "17.4.2",

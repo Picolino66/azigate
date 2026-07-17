@@ -6,7 +6,7 @@
 
 ## Contexto
 
-Prompts do Cline podem conter código-fonte e tool arguments; logs operacionais não podem armazená-los.
+Prompts de clientes como o Qwen Code podem conter código-fonte e tool arguments; logs operacionais não podem armazená-los.
 
 ## Opções consideradas
 
@@ -20,4 +20,3 @@ Registrar somente request ID, método, path, status, duração, stream, modelo, 
 ## Trade-offs e consequências
 
 Análises de conteúdo exigirão reprodução controlada fora dos logs de produção. Métricas ficam prontas internamente para um adaptador Prometheus futuro, sem criar rota pública adicional.
-

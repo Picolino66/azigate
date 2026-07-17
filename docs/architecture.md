@@ -1,43 +1,93 @@
-# Arquitetura do gateway
+# Arquitetura do gateway-ai
 
 ## Contexto
 
-O Cline alcança o domínio do servidor, mas não alcança diretamente a API da DeepSeek. O serviço precisa terminar uma requisição autenticada do Cline e iniciar outra requisição HTTPS, com uma credencial diferente, para um conjunto fechado de rotas da DeepSeek.
+O Qwen Code executado no computador da VPN usa uma API OpenAI Compatible. O gateway escolhe um provedor pelo `model`, mas nunca executa as ferramentas oferecidas pelo Qwen.
 
 ```text
-Cline (OpenAI Compatible)
-  -> HTTPS ia.meudominio.com/v1
-  -> Nginx (TLS, sem buffering)
-  -> Fastify em 127.0.0.1:3000
-  -> HTTPS api.deepseek.com/{models|chat/completions}
+PC da VPN
+  Qwen Code + VS Code + repositórios
+  lê arquivos, confirma ações, executa comandos e aplica alterações
+             │ HTTPS/LAN
+             ▼
+Servidor
+  Nginx -> container gateway-ai
+              ├── DeepSeek adapter -> HTTPS api.deepseek.com
+              └── CLI adapter -> Unix socket 0600 -> broker host
+                                                   └── Bubblewrap -> Codex/Claude
+             │
+             ▼
+  Chat Completion/texto/tool calls
+             │
+             ▼
+  Qwen executa somente no PC da VPN
 ```
 
 ## Padrão e módulos
 
-O sistema é um monólito modular e stateless:
+O gateway continua um monólito modular e stateless. O broker é um serviço host auxiliar, privado:
 
-- `config`: leitura, validação e suporte a segredos por arquivo;
-- `auth`: comparação constante das chaves do gateway;
-- `rate-limit`: limites locais em memória por credencial e por IP;
-- `upstream`: único adaptador autorizado a construir URLs da DeepSeek;
-- `models`: consulta, filtro e cache curto da lista oficial;
-- `chat`: validação mínima e passthrough opaco de Chat Completions;
-- `streaming`: cópia incremental de bytes e cancelamento cooperativo;
-- `observability`: métricas internas e logs estruturados sem conteúdo.
+- `config`: configuração e secrets do processo HTTP;
+- `security`: autenticação, allowlist e rate limit local;
+- `providers/registry`: registry fechado dos aliases e roteamento sem fallback;
+- `upstream`: adaptador DeepSeek, único construtor de URLs HTTPS;
+- `providers/broker-client`: cliente HTTP sobre Unix socket;
+- `providers/cli-request`: validação e tradução do contrato OpenAI para o protocolo interno;
+- `providers/openai-response`: Chat Completions e SSE sintéticos dos CLIs;
+- `broker`: capacidade, protocolo, prompt, isolamento, subprocessos e servidor host;
+- `models`: catálogo DeepSeek cacheado combinado com aliases CLI saudáveis;
+- `observability`: métricas e logs somente de metadados, com destaque ANSI do campo `model` para
+  `deepseek-v4-flash`, `deepseek-v4-pro` e `codex-cli` no stdout padrão.
 
-Não há banco de dados, fila, frontend ou endpoint genérico de proxy. O processo pode ser replicado, mas rate limit e cache são locais a cada réplica; uma futura escala horizontal deve substituir esses dois estados por um backend compartilhado.
+Não há banco, fila, frontend, proxy genérico ou estado de conversa. Rate limit e cache continuam locais a cada processo.
+
+## Registry e disponibilidade
+
+- `codex-cli` e `claude-cli` são reservados mesmo quando desabilitados; nunca caem na DeepSeek.
+- Qualquer outro ID permitido é encaminhado ao adaptador DeepSeek.
+- Não existe fallback automático entre provedores.
+- `/v1/models` combina o catálogo DeepSeek com aliases habilitados e saudáveis.
+- Se a DeepSeek falhar, os aliases locais continuam listados. Se nenhum provedor estiver utilizável, a resposta é `503`.
+- `/ready` considera a DeepSeek configurada quando `READY_CHECK_UPSTREAM=false`; com a checagem ativa, basta DeepSeek ou um alias CLI estar saudável.
+
+## Broker e isolamento
+
+O protocolo v1 oferece somente `GET /health` e `POST /execute` em Unix socket. Sua entrada é reconstruída pelo gateway e contém request ID, provedor, mensagens textuais, function tools, `tool_choice` e `parallel_tool_calls`. Cwd, path de host, URL, comando, argv e ambiente não pertencem ao contrato.
+
+Cada execução:
+
+1. verifica se o provedor passou os checks de binário, autenticação, flags e Bubblewrap;
+2. adquire a única vaga global ou retorna `cli_busy` sem fila;
+3. cria `/work` descartável, schema, settings e MCP vazio;
+4. executa Bubblewrap por `spawn`, com argv fixo, `shell: false` e ambiente limpo;
+5. limita stdout+stderr a 4 MiB e o tempo a 10 minutos;
+6. recusa eventos que indiquem ferramenta local e valida a decisão final;
+7. remove o workspace; cancelamento envia `SIGTERM` ao grupo e `SIGKILL` após 2 segundos.
+
+Somente o diretório de autenticação do CLI selecionado entra na sandbox. Nenhum repositório, home completo do operador ou secret do gateway entra nela.
+
+## Dois regimes de streaming
+
+- DeepSeek: bytes SSE são copiados imediatamente, inclusive keep-alive, campos futuros, usage e `[DONE]`.
+- Codex/Claude: heartbeat a cada 15 segundos; a decisão é bufferizada até o limite, validada e emitida atomicamente. Falha depois do heartbeat gera `event: error` sanitizado e encerra sem `[DONE]`.
 
 ## Fronteiras de confiança
 
-1. Cliente -> Nginx: tráfego não confiável, HTTPS obrigatório.
-2. Nginx -> aplicação: rede local/container, ainda submetida a autenticação e allowlists.
-3. Aplicação -> DeepSeek: apenas HTTPS e apenas rotas compiladas no servidor.
-4. Ambiente/secret files -> aplicação: fonte confiável de configuração operacional.
+1. Qwen -> Nginx: tráfego não confiável, HTTPS, Bearer, IP/model allowlists e limites.
+2. Nginx -> container: rede local ainda autenticada; somente quatro rotas públicas.
+3. Container -> DeepSeek: HTTPS, paths tipados e credencial reconstruída.
+4. Container -> broker: Unix socket read-only no mount, UID igual e protocolo fechado.
+5. Broker -> CLI: subprocesso não confiável, Bubblewrap, ambiente mínimo e saída validada.
+6. Auth dirs -> CLI: credenciais necessárias, nunca montadas no container nem registradas.
 
-## Contratos externos verificados em 14/07/2026
+## Decisões
 
-- O [Cline OpenAI Compatible](https://docs.cline.bot/provider-config/openai-compatible) recebe uma Base URL terminada em `/v1`; sua implementação consulta `${baseUrl}/models` e acrescenta `/chat/completions` para chat.
-- A [DeepSeek](https://api-docs.deepseek.com/) documenta compatibilidade OpenAI, `POST /chat/completions` e [GET `/models`](https://api-docs.deepseek.com/api/list-models/).
-- O streaming da DeepSeek é SSE, pode conter comentários de keep-alive e termina em `data: [DONE]`; os bytes não são reinterpretados pelo gateway.
-- A [documentação do Nginx](https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_buffering) recomenda desabilitar buffering para repasse imediato da resposta.
+- [ADR-005](../adr/ADR-005-registro-multiprovedor-e-broker-local.md): registry e broker host.
+- [ADR-006](../adr/ADR-006-qwen-como-unico-executor.md): Qwen como único executor.
+- [ADR-007](../adr/ADR-007-streaming-dividido-por-provedor.md): streaming por tipo de provedor.
 
+## Referências de integração
+
+- [Codex non-interactive mode](https://learn.chatgpt.com/docs/non-interactive-mode.md)
+- [Claude CLI usage](https://code.claude.com/docs/en/cli-usage)
+- [Qwen Code model providers](https://qwenlm.github.io/qwen-code-docs/en/users/configuration/model-providers/)

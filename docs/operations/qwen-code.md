@@ -1,0 +1,103 @@
+# Configuração do Qwen Code no PC da VPN
+
+## Responsabilidade
+
+O Qwen Code permanece no computador que contém VS Code e os repositórios. Ele envia histórico e function tools ao gateway, pede confirmação e executa leitura, edição e shell localmente. Codex/Claude nunca recebem o cwd desse computador.
+
+## Descobrir a versão
+
+```bash
+qwen --version
+```
+
+Use `modelProviders` quando a versão instalada o suportar. A documentação oficial define a chave `openai`, `protocol: openai`, `models[].id`, `envKey` e `baseUrl`.
+
+## Configuração recomendada
+
+Em `~/.qwen/settings.json`, mescle sem remover outras configurações:
+
+```json
+{
+  "modelProviders": {
+    "openai": {
+      "protocol": "openai",
+      "models": [
+        {
+          "id": "deepseek-v4-pro",
+          "name": "DeepSeek V4 Pro via gateway-ai",
+          "description": "Passthrough para a DeepSeek",
+          "envKey": "GATEWAY_AI_API_KEY",
+          "baseUrl": "https://ia.meudominio.com/v1",
+          "generationConfig": {
+            "timeout": 610000,
+            "maxRetries": 0
+          }
+        },
+        {
+          "id": "deepseek-v4-flash",
+          "name": "DeepSeek V4 Flash via gateway-ai",
+          "description": "Passthrough para a DeepSeek",
+          "envKey": "GATEWAY_AI_API_KEY",
+          "baseUrl": "https://ia.meudominio.com/v1",
+          "generationConfig": {
+            "timeout": 610000,
+            "maxRetries": 0
+          }
+        },
+        {
+          "id": "codex-cli",
+          "name": "Codex CLI via gateway-ai",
+          "description": "Decisão remota; execução local pelo Qwen",
+          "envKey": "GATEWAY_AI_API_KEY",
+          "baseUrl": "https://ia.meudominio.com/v1",
+          "generationConfig": {
+            "timeout": 610000,
+            "maxRetries": 0
+          }
+        }
+      ]
+    }
+  }
+}
+```
+
+Quando `claude-cli` passar o gate, adicione uma segunda entrada com o mesmo `envKey` e `baseUrl`. Não grave o valor da chave no JSON:
+
+```bash
+export GATEWAY_AI_API_KEY='CHAVE_DO_GATEWAY'
+qwen
+```
+
+Dentro do Qwen, use `/model`: selecione `deepseek-v4-pro` ou `deepseek-v4-flash` para a DeepSeek e `codex-cli` para a sessão Codex do servidor. Todos usam a mesma `baseUrl` e a mesma chave do gateway; somente o ID do modelo muda. Mantenha o approval mode interativo e não use YOLO/auto-approval para este fluxo.
+
+## Fallback para versão antiga
+
+Se `modelProviders` não existir na versão instalada, use o mapeamento OpenAI-compatible por ambiente:
+
+```bash
+export OPENAI_BASE_URL='https://ia.meudominio.com/v1'
+export OPENAI_API_KEY='CHAVE_DO_GATEWAY'
+export OPENAI_MODEL='codex-cli'
+qwen
+```
+
+Esse fallback seleciona um modelo por processo. Use `OPENAI_MODEL=deepseek-v4-pro` ou `OPENAI_MODEL=deepseek-v4-flash` para DeepSeek e `OPENAI_MODEL=codex-cli` para Codex. Não é preciso atualizar o Qwen apenas para esta integração.
+
+## Smoke manual em repositório descartável
+
+Depois de ativar o alias:
+
+1. peça uma explicação sem ferramentas;
+2. peça leitura e busca em dois arquivos;
+3. peça uma edição e confirme a ação no Qwen;
+4. peça um comando simples e confirme;
+5. valide o retorno de uma tool e a continuação da conversa;
+6. cancele uma execução pendente;
+7. alterne entre `codex-cli` e um modelo DeepSeek;
+8. confirme no servidor que nenhum arquivo do repositório apareceu no broker.
+
+O resultado correto é alteração somente no computador da VPN. Logs do gateway/broker devem conter metadados, nunca prompt, código, resposta ou argumentos.
+
+## Referência
+
+[Qwen Code — Model Providers](https://qwenlm.github.io/qwen-code-docs/en/users/configuration/model-providers/)

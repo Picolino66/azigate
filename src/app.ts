@@ -13,6 +13,7 @@ import './types.js'
 import { publicError, registerErrorHandler } from './http/errors.js'
 import { ModelsService } from './models/service.js'
 import { GatewayMetrics } from './observability/metrics.js'
+import { createColorizedStdoutDestination } from './observability/log-colors.js'
 import { safeError } from './observability/sanitize.js'
 import { registerChatRoute } from './routes/chat.js'
 import { registerHealthRoutes } from './routes/health.js'
@@ -20,10 +21,12 @@ import { registerModelsRoute } from './routes/models.js'
 import { GatewayAuthenticator } from './security/auth.js'
 import { FixedWindowRateLimiter } from './security/rate-limiter.js'
 import { DeepSeekClient } from './upstream/client.js'
+import { CliBrokerClient, type CliBrokerClientLike } from './providers/broker-client.js'
 
 export interface AppDependencies {
   logger?: FastifyBaseLogger
   metrics?: GatewayMetrics
+  brokerClient?: CliBrokerClientLike
 }
 
 function createLogger(config: AppConfig): FastifyBaseLogger {
@@ -35,7 +38,7 @@ function createLogger(config: AppConfig): FastifyBaseLogger {
       paths: ['req.headers.authorization', 'req.headers.cookie', 'headers.authorization', 'authorization'],
       censor: '[SEGREDO_REMOVIDO]',
     },
-  })
+  }, createColorizedStdoutDestination())
 }
 
 function normalizeIp(ip: string): string {
@@ -55,7 +58,8 @@ export function createApp(config: AppConfig, dependencies: AppDependencies = {})
   const authenticator = new GatewayAuthenticator(config.gatewayApiKeys)
   const limiter = new FixedWindowRateLimiter(config.rateLimitWindowMs, config.rateLimitMax, config.rateLimitIpMax)
   const client = new DeepSeekClient(config)
-  const models = new ModelsService(config, client)
+  const broker = dependencies.brokerClient ?? new CliBrokerClient(config.cliBrokerSocketPath, config.cliRequestTimeoutMs)
+  const models = new ModelsService(config, client, broker)
 
   app.decorateRequest('telemetry')
   app.addHook('onRequest', async (request) => {
@@ -131,9 +135,9 @@ export function createApp(config: AppConfig, dependencies: AppDependencies = {})
   }
 
   registerErrorHandler(app)
-  registerHealthRoutes(app, config, client)
+  registerHealthRoutes(app, config, client, broker)
   registerModelsRoute(app, protectedHook, models)
-  registerChatRoute(app, config, protectedHook, client, metrics)
+  registerChatRoute(app, config, protectedHook, client, broker, metrics)
 
   app.setNotFoundHandler((request, reply) => {
     request.telemetry.error = 'RouteNotFound'

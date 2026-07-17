@@ -1,31 +1,48 @@
 import { randomUUID } from 'node:crypto'
 import type { FastifyInstance } from 'fastify'
 import type { AppConfig } from '../config.js'
+import type { CliBrokerClientLike } from '../providers/broker-client.js'
+import { healthyCliAliases } from '../providers/registry.js'
 import type { DeepSeekClient } from '../upstream/client.js'
 
-export function registerHealthRoutes(app: FastifyInstance, config: AppConfig, client: DeepSeekClient): void {
-  app.get('/health', async () => ({ status: 'ok', service: 'deepseek-gateway' }))
+async function deepSeekReady(config: AppConfig, client: DeepSeekClient): Promise<boolean> {
+  if (!config.deepseekApiKey) return false
+  if (!config.readyCheckUpstream) return true
+  try {
+    const exchange = await client.request({
+      path: 'models',
+      method: 'GET',
+      requestId: randomUUID(),
+      accept: 'application/json',
+    })
+    const ready = exchange.response.ok
+    await exchange.response.body?.cancel()
+    exchange.dispose()
+    return ready
+  } catch {
+    return false
+  }
+}
+
+export function registerHealthRoutes(
+  app: FastifyInstance,
+  config: AppConfig,
+  client: DeepSeekClient,
+  broker: CliBrokerClientLike,
+): void {
+  app.get('/health', async () => ({ status: 'ok', service: 'gateway-ai' }))
 
   app.get('/ready', async (_request, reply) => {
-    if (!config.deepseekApiKey || config.gatewayApiKeys.length === 0) {
-      return reply.code(503).send({ status: 'not_ready', service: 'deepseek-gateway' })
+    if (config.gatewayApiKeys.length === 0) {
+      return reply.code(503).send({ status: 'not_ready', service: 'gateway-ai' })
     }
-    if (config.readyCheckUpstream) {
-      try {
-        const exchange = await client.request({
-          path: 'models',
-          method: 'GET',
-          requestId: randomUUID(),
-          accept: 'application/json',
-        })
-        const ready = exchange.response.ok
-        await exchange.response.body?.cancel()
-        exchange.dispose()
-        if (!ready) return reply.code(503).send({ status: 'not_ready', service: 'deepseek-gateway' })
-      } catch {
-        return reply.code(503).send({ status: 'not_ready', service: 'deepseek-gateway' })
-      }
+    const [deepseek, aliases] = await Promise.all([
+      deepSeekReady(config, client),
+      healthyCliAliases(config, broker),
+    ])
+    if (!deepseek && aliases.length === 0) {
+      return reply.code(503).send({ status: 'not_ready', service: 'gateway-ai' })
     }
-    return { status: 'ready', service: 'deepseek-gateway' }
+    return { status: 'ready', service: 'gateway-ai' }
   })
 }

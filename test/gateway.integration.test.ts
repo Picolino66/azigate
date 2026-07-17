@@ -6,6 +6,7 @@ import pino from 'pino'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createApp } from '../src/app.js'
 import { createTestConfig, type AppConfig } from '../src/config.js'
+import { colorizeModelLogLine } from '../src/observability/log-colors.js'
 import { GatewayMetrics } from '../src/observability/metrics.js'
 import { MockUpstream, jsonResponse } from './mock-upstream.js'
 
@@ -81,9 +82,9 @@ describe('gateway DeepSeek', () => {
       jsonResponse(response, 401, { error: { message: 'deepseek-test-secret inválida' } }),
     )
     const response = await appFor().inject({ method: 'GET', url: '/v1/models', headers: AUTHORIZATION })
-    expect(response.statusCode).toBe(401)
+    expect(response.statusCode).toBe(503)
     expect(response.body).not.toContain('deepseek-test-secret')
-    expect(response.body).toContain('[SEGREDO_REMOVIDO]')
+    expect(response.json()).toMatchObject({ error: { code: 'providers_unavailable' } })
   })
 
   it('encaminha mensagens, tools, tool_choice e campos desconhecidos sem remoção', async () => {
@@ -342,8 +343,8 @@ describe('gateway DeepSeek', () => {
     const app = appFor()
     const health = await app.inject({ method: 'GET', url: '/health' })
     const ready = await app.inject({ method: 'GET', url: '/ready' })
-    expect(health.json()).toEqual({ status: 'ok', service: 'deepseek-gateway' })
-    expect(ready.json()).toEqual({ status: 'ready', service: 'deepseek-gateway' })
+    expect(health.json()).toEqual({ status: 'ok', service: 'gateway-ai' })
+    expect(ready.json()).toEqual({ status: 'ready', service: 'gateway-ai' })
     expect(ready.body).not.toContain('secret')
     expect(upstream.requests).toHaveLength(0)
   })
@@ -352,7 +353,7 @@ describe('gateway DeepSeek', () => {
     upstream.setHandler((_request, response) => jsonResponse(response, 200, { object: 'list', data: [] }))
     const response = await appFor({ readyCheckUpstream: true }).inject({ method: 'GET', url: '/ready' })
     expect(response.statusCode).toBe(200)
-    expect(response.json()).toEqual({ status: 'ready', service: 'deepseek-gateway' })
+    expect(response.json()).toEqual({ status: 'ready', service: 'gateway-ai' })
     expect(upstream.requests[0]?.url).toBe('/models')
   })
 
@@ -411,6 +412,17 @@ describe('gateway DeepSeek', () => {
     expect(logs).not.toContain('ARGUMENTO_SECRETO')
     expect(logs).not.toContain('gateway-test-secret')
     expect(logs).not.toContain('deepseek-test-secret')
+  })
+
+  it('colore modelos conhecidos nos logs de terminal', () => {
+    expect(colorizeModelLogLine('{"model":"deepseek-v4-flash"}\n')).toBe(
+      '{"model":"\x1b[32mdeepseek-v4-flash\x1b[0m"}\n',
+    )
+    expect(colorizeModelLogLine('{"model":"deepseek-v4-pro"}\n')).toBe(
+      '{"model":"\x1b[34mdeepseek-v4-pro\x1b[0m"}\n',
+    )
+    expect(colorizeModelLogLine('{"model":"codex-cli"}\n')).toBe('{"model":"\x1b[31mcodex-cli\x1b[0m"}\n')
+    expect(colorizeModelLogLine('{"model":"modelo-teste"}\n')).toBe('{"model":"modelo-teste"}\n')
   })
 
   it('mantém métricas internas sem endpoint público', async () => {
