@@ -4,8 +4,8 @@ import { loadBrokerConfig } from './config.js'
 import { BrokerExecutor } from './executor.js'
 import { UnexpectedCliToolEventError } from './executor.js'
 import { ProcessRunner } from './process-runner.js'
-import type { BrokerExecuteRequest, BrokerTool, CliProviderName } from './protocol.js'
-import { BROKER_PROTOCOL_VERSION } from './protocol.js'
+import type { BrokerExecuteRequest, BrokerTool, CliProviderName, CodexCliModel } from './protocol.js'
+import { BROKER_PROTOCOL_VERSION, CODEX_CLI_MODELS } from './protocol.js'
 import { GatewayError } from '../upstream/errors.js'
 
 interface GateScenario {
@@ -111,6 +111,14 @@ function repetitions(env: NodeJS.ProcessEnv): number {
   return value
 }
 
+function selectedCodexModel(env: NodeJS.ProcessEnv): CodexCliModel {
+  const model = env.GATE_CODEX_MODEL?.trim() || 'gpt-5.4'
+  if (!CODEX_CLI_MODELS.includes(model as CodexCliModel)) {
+    throw new Error(`GATE_CODEX_MODEL deve ser um destes valores: ${CODEX_CLI_MODELS.join(', ')}`)
+  }
+  return model as CodexCliModel
+}
+
 export async function runViabilityGate(provider: CliProviderName): Promise<boolean> {
   const env: NodeJS.ProcessEnv = {
     ...process.env,
@@ -118,6 +126,7 @@ export async function runViabilityGate(provider: CliProviderName): Promise<boole
     BROKER_ENABLE_CLAUDE_CLI: provider === 'claude' ? 'true' : 'false',
   }
   const config = loadBrokerConfig(env)
+  const codexModel = provider === 'codex' ? selectedCodexModel(env) : undefined
   const runner = new ProcessRunner()
   const capabilities = await inspectCapabilities(config, runner)
   if (!capabilities[provider].available) {
@@ -143,6 +152,7 @@ export async function runViabilityGate(provider: CliProviderName): Promise<boole
           version: BROKER_PROTOCOL_VERSION,
           requestId: `gate-${provider}-${round}-${index}`,
           provider,
+          ...(codexModel === undefined ? {} : { model: codexModel }),
           ...item.request,
         })
         structurallyValid += 1

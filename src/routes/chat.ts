@@ -88,7 +88,7 @@ export function registerChatRoute(
         if (!selection.enabled) throw new CliUnavailableError()
         let brokerRequest
         try {
-          brokerRequest = normalizeCliRequest(chatBody, request.id, selection.provider)
+          brokerRequest = normalizeCliRequest(chatBody, request.id, selection.provider, selection.model)
         } catch (error) {
           if (!(error instanceof CliRequestValidationError)) throw error
           request.telemetry.error = error.name

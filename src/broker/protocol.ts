@@ -1,6 +1,16 @@
-export const BROKER_PROTOCOL_VERSION = 1 as const
+export const BROKER_PROTOCOL_VERSION = 2 as const
 
 export type CliProviderName = 'codex' | 'claude'
+
+export const CODEX_CLI_MODELS = [
+  'gpt-5.6-sol',
+  'gpt-5.6-terra',
+  'gpt-5.6-luna',
+  'gpt-5.5',
+  'gpt-5.4',
+] as const
+
+export type CodexCliModel = typeof CODEX_CLI_MODELS[number]
 
 export interface BrokerHistoricalToolCall {
   id: string
@@ -27,6 +37,7 @@ export interface BrokerExecuteRequest {
   version: typeof BROKER_PROTOCOL_VERSION
   requestId: string
   provider: CliProviderName
+  model?: CodexCliModel
   messages: BrokerMessage[]
   tools: BrokerTool[]
   toolChoice: BrokerToolChoice

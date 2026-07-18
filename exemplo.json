@@ -1,0 +1,158 @@
+[
+	{
+		"name": "DeepSeek Gateway Local",
+		"vendor": "customendpoint",
+		"apiKey": "${input:chat.lm.secret.6f43c5be}",
+		"apiType": "chat-completions",
+		"models": [
+			{
+				"id": "deepseek-v4-pro",
+				"name": "DeepSeek V4 Pro",
+				"url": "http://192.168.2.6:3000/v1/chat/completions",
+				"toolCalling": true,
+				"thinking": true,
+				"supportsReasoningEffort": [
+					"none",
+					"high",
+					"max"
+				],
+				"vision": false,
+				"streaming": true,
+				"maxInputTokens": 616000,
+				"maxOutputTokens": 384000
+			},
+			{
+				"id": "deepseek-v4-flash",
+				"name": "DeepSeek V4 Flash",
+				"url": "http://192.168.2.6:3000/v1/chat/completions",
+				"toolCalling": true,
+				"thinking": true,
+				"supportsReasoningEffort": [
+					"none",
+					"high",
+					"max"
+				],
+				"vision": false,
+				"streaming": true,
+				"maxInputTokens": 616000,
+				"maxOutputTokens": 384000
+			},
+			{
+				"id": "codex-cli-sol",
+				"name": "Codex GPT-5.6 Sol",
+				"url": "http://192.168.2.6:3000/v1/chat/completions",
+				"toolCalling": true,
+				"thinking": true,
+				"supportsReasoningEffort": [
+					"none",
+					"low",
+					"medium",
+					"high",
+					"xhigh",
+					"max"
+				],
+				"vision": false,
+				"streaming": true,
+				"maxInputTokens": 616000,
+				"maxOutputTokens": 384000
+			},
+			{
+				"id": "codex-cli-terra",
+				"name": "Codex GPT-5.6 Terra",
+				"url": "http://192.168.2.6:3000/v1/chat/completions",
+				"toolCalling": true,
+				"thinking": true,
+				"supportsReasoningEffort": [
+					"none",
+					"low",
+					"medium",
+					"high",
+					"xhigh",
+					"max"
+				],
+				"vision": false,
+				"streaming": true,
+				"maxInputTokens": 616000,
+				"maxOutputTokens": 384000
+			},
+			{
+				"id": "codex-cli-luna",
+				"name": "Codex GPT-5.6 Luna",
+				"url": "http://192.168.2.6:3000/v1/chat/completions",
+				"toolCalling": true,
+				"thinking": true,
+				"supportsReasoningEffort": [
+					"none",
+					"low",
+					"medium",
+					"high",
+					"xhigh",
+					"max"
+				],
+				"vision": false,
+				"streaming": true,
+				"maxInputTokens": 616000,
+				"maxOutputTokens": 384000
+			},
+			{
+				"id": "codex-cli-5.5",
+				"name": "Codex GPT-5.5",
+				"url": "http://192.168.2.6:3000/v1/chat/completions",
+				"toolCalling": true,
+				"thinking": true,
+				"supportsReasoningEffort": [
+					"none",
+					"low",
+					"medium",
+					"high",
+					"xhigh"
+				],
+				"vision": false,
+				"streaming": true,
+				"maxInputTokens": 616000,
+				"maxOutputTokens": 384000
+			},
+			{
+				"id": "codex-cli-5.4",
+				"name": "Codex GPT-5.4",
+				"url": "http://192.168.2.6:3000/v1/chat/completions",
+				"toolCalling": true,
+				"thinking": true,
+				"supportsReasoningEffort": [
+					"none",
+					"low",
+					"medium",
+					"high",
+					"xhigh"
+				],
+				"vision": false,
+				"streaming": true,
+				"maxInputTokens": 616000,
+				"maxOutputTokens": 384000
+			}
+		],
+		"settings": {
+			"deepseek-v4-pro": {
+				"reasoningEffort": "high"
+			},
+			"deepseek-v4-flash": {
+				"reasoningEffort": "high"
+			},
+			"codex-cli-sol": {
+				"reasoningEffort": "high"
+			},
+			"codex-cli-terra": {
+				"reasoningEffort": "high"
+			},
+			"codex-cli-luna": {
+				"reasoningEffort": "high"
+			},
+			"codex-cli-5.5": {
+				"reasoningEffort": "high"
+			},
+			"codex-cli-5.4": {
+				"reasoningEffort": "high"
+			}
+		}
+	}
+]

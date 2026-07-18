@@ -1,7 +1,7 @@
 {
   "orchestration_id": "c16a8ea6-06e8-4ec2-bb2c-7ac4cd272dc5",
   "created_at": "2026-07-14T13:35:00Z",
-  "updated_at": "2026-07-17T19:09:02-03:00",
+  "updated_at": "2026-07-17T19:30:00-03:00",
   "mode": "phase-resume",
   "current_phase": "F6",
   "snapshot_version": "O5",
@@ -35,7 +35,7 @@
       "catálogo combinado com degradação parcial",
       "DeepSeek JSON/SSE transparente",
       "Codex e Claude JSON/SSE sintéticos",
-      "protocolo Unix v1 health/execute"
+      "protocolo Unix v2 health/execute com modelo Codex fixado"
     ],
     "non_functional": [
       "Qwen como único executor",
@@ -48,7 +48,7 @@
     "constraints": [
       "uso pessoal single-user em LAN/IP allowlist",
       "sem novas API keys Codex/Claude",
-      "aliases dependem do login e modelo padrão existentes",
+      "aliases Codex dependem do login existente e de modelos internos fixados por allowlist",
       "Claude é segunda fase opt-in",
       "sem repositório/home completo no servidor ou sandbox"
     ]
@@ -109,8 +109,8 @@
     "integration_contracts": [
       "Qwen Code OpenAI Compatible /v1",
       "DeepSeek /models e /chat/completions",
-      "broker Unix protocol v1 /health e /execute",
-      "Codex exec --json --output-schema --ephemeral",
+      "broker Unix protocol v2 /health e /execute",
+      "Codex exec --model fixado, --json, --output-schema e --ephemeral",
       "Claude print mode com JSON schema e tools/MCP vazios"
     ],
     "security_model": {
@@ -120,7 +120,7 @@
       "ssrf": "DeepSeek e paths fixos; protocolo broker sem URL/path",
       "execution": "Qwen único executor; CLIs sem ferramentas locais"
     },
-    "adrs": ["ADR-001", "ADR-002", "ADR-003", "ADR-004", "ADR-005", "ADR-006", "ADR-007"]
+    "adrs": ["ADR-001", "ADR-002", "ADR-003", "ADR-004", "ADR-005", "ADR-006", "ADR-007", "ADR-008"]
   },
   "contracts": {
     "api_version": "v1",
@@ -141,7 +141,7 @@
       "broker": ["protocol", "capabilities", "prompt", "isolation", "process-runner", "executor", "server"],
       "operations": ["Docker", "Compose", "Nginx", "systemd"]
     },
-    "backlog": ["GW-01..GW-10", "MP-01..MP-07"],
+    "backlog": ["GW-01..GW-10", "MP-01..MP-08"],
     "test_coverage_thresholds": {
       "statements": 80,
       "branches": 70,
@@ -179,20 +179,20 @@
       "F6-colored-model-logs-check"
     ],
     "gates_failed": [],
-    "gates_pending": ["F6-smoke-qwen-no-pc-da-vpn", "F6-deploy-tls-lan-real"],
-    "test_results": { "files": 6, "tests_passed": 96, "tests_failed": 0 },
-    "coverage_report": { "statements": 80.5, "branches": 74.39, "functions": 86.02, "lines": 85.96 },
+    "gates_pending": ["F6-deploy-aliases-codex-v2", "F6-smoke-qwen-no-pc-da-vpn", "F6-deploy-tls-lan-real"],
+    "test_results": { "files": 6, "tests_passed": 101, "tests_failed": 0 },
+    "coverage_report": { "statements": 80.62, "branches": 74.32, "functions": 85.89, "lines": 86.1 },
     "security_report": "docs/security/2026-07-16-security-review.md"
   },
   "operations": {
     "deployment_record": "broker host habilitado em systemd e imagem gateway-ai:local ativa no Compose em 192.168.2.6:3000; Claude permanece desabilitado",
-    "smoke_test_results": "broker ready com Codex disponível; gateway /health e /ready 200; catálogo contém DeepSeek e codex-cli; chat real codex-cli retornou 200; Qwen remoto pendente",
-    "observability_config": "stdout padrão colore o campo model: deepseek-v4-flash em verde, deepseek-v4-pro em azul e codex-cli em vermelho; logs continuam restritos a metadados",
+    "smoke_test_results": "broker ready com Codex disponível; gateway /health e /ready 200; catálogo contém DeepSeek e codex-cli; chat real codex-cli retornou 200; aliases Codex v2 aguardam deploy conjunto; Qwen remoto pendente",
+    "observability_config": "stdout padrão colore o campo model: deepseek-v4-flash em verde, deepseek-v4-pro em azul e aliases codex-cli em vermelho; logs continuam restritos a metadados",
     "local_activation": {
-      "gateway_env": "sincronizado com os 47 campos do .env.example, codex-cli habilitado, claude-cli desabilitado e UID/GID 1000:1001; secrets preservados e arquivo 0600",
-      "allowed_models": "deepseek-v4-pro, deepseek-v4-flash e codex-cli presentes na allowlist local",
+      "gateway_env": "sincronizado com os 47 campos do .env.example, aliases Codex habilitados, Claude desabilitado e UID/GID 1000:1001; secrets preservados e arquivo 0600",
+      "allowed_models": "DeepSeek, codex-cli-sol, codex-cli-terra, codex-cli-luna, codex-cli-5.5, codex-cli-5.4 e codex-cli presentes na allowlist local",
       "broker": "gateway-ai-broker@isaiasgr habilitado e ativo; socket 0600 em diretório 0700; AppArmor nominal do bwrap carregado; health ready com Codex disponível",
-      "gateway_restart": "gateway recriado com gateway-ai:local, container healthy e codex-cli publicado; smoke textual real aprovado"
+      "gateway_restart": "gateway atual ainda usa protocolo do broker v1; atualização conjunta do broker e do container para aliases Codex v2 pendente"
     },
     "runbooks": ["docs/operations/broker.md", "docs/operations/qwen-code.md"],
     "rollback": "desabilitar aliases e recriar o gateway preserva DeepSeek",

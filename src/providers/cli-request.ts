@@ -5,6 +5,7 @@ import type {
   BrokerTool,
   BrokerToolChoice,
   CliProviderName,
+  CodexCliModel,
 } from '../broker/protocol.js'
 import { BROKER_PROTOCOL_VERSION } from '../broker/protocol.js'
 import type { ChatBody } from '../types.js'
@@ -121,6 +122,7 @@ export function normalizeCliRequest(
   body: ChatBody,
   requestId: string,
   provider: CliProviderName,
+  model?: CodexCliModel,
 ): BrokerExecuteRequest {
   const tools = normalizeTools(body.tools)
   const offeredNames = new Set(tools.map((tool) => tool.name))
@@ -135,6 +137,7 @@ export function normalizeCliRequest(
     version: BROKER_PROTOCOL_VERSION,
     requestId,
     provider,
+    ...(model === undefined ? {} : { model }),
     messages: normalizeMessages(body.messages, offeredNames),
     tools,
     toolChoice,

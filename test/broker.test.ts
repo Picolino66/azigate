@@ -69,6 +69,7 @@ function brokerRequest(): BrokerExecuteRequest {
     version: BROKER_PROTOCOL_VERSION,
     requestId: 'request-1',
     provider: 'codex',
+    model: 'gpt-5.4',
     messages: [{ role: 'user', content: 'Responda texto' }],
     tools: [],
     toolChoice: 'none',
@@ -129,6 +130,8 @@ describe('broker local', () => {
     expect(call?.command).toBe(process.execPath)
     expect(call?.args).toContain('--clearenv')
     expect(call?.args).toContain('--disable')
+    expect(call?.args).toContain('--model')
+    expect(call?.args).toContain('gpt-5.4')
     expect(call?.args.join(' ')).not.toContain('/repos/privado')
     expect(Object.keys(call?.env ?? {}).sort()).toEqual(['LANG', 'LC_ALL', 'PATH'])
     expect(call?.stdin).toContain('cwd=/repos/privado')
@@ -408,7 +411,7 @@ describe('broker local', () => {
     await expect(call('/nao-existe', 'GET')).resolves.toMatchObject({ status: 404 })
     await expect(call('/execute', 'POST')).resolves.toMatchObject({ status: 400 })
     await expect(call('/execute', 'POST', {
-      'x-broker-protocol-version': '1',
+      'x-broker-protocol-version': String(BROKER_PROTOCOL_VERSION),
     })).resolves.toMatchObject({ status: 415 })
   })
 
@@ -428,7 +431,7 @@ describe('broker local', () => {
         headers: {
           'content-type': 'application/json',
           'content-length': Buffer.byteLength(payload),
-          'x-broker-protocol-version': '1',
+          'x-broker-protocol-version': String(BROKER_PROTOCOL_VERSION),
         },
       }, (response) => {
         response.resume()
@@ -457,7 +460,7 @@ describe('broker local', () => {
         headers: {
           'content-type': 'application/json',
           'content-length': Buffer.byteLength(payload),
-          'x-broker-protocol-version': '1',
+          'x-broker-protocol-version': String(BROKER_PROTOCOL_VERSION),
         },
       }, (response) => {
         response.resume()

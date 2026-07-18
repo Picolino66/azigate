@@ -9,7 +9,7 @@ Evoluir o monólito Fastify existente sem alterar suas quatro rotas públicas. A
 | Tarefa | Estado | Evidência principal |
 |---|---|---|
 | 1. ADRs | concluída | ADR-005, ADR-006 e ADR-007 |
-| 2. Contrato/prompt | concluída | protocolo v1, schema final e testes fail-closed |
+| 2. Contrato/prompt | concluída | protocolo v2, schema final e testes fail-closed |
 | 3. Núcleo multiprovedor | concluída | registry, catálogo/readiness e rename `gateway-ai` |
 | 4. Cliente/respostas CLI | concluída | Unix socket, JSON/SSE, erros e cancelamento |
 | 5. Broker isolado | concluída | Bubblewrap, systemd, socket privado e limites |
@@ -31,7 +31,7 @@ O5 continua sendo o último snapshot estável até o smoke Qwen e o deploy LAN/T
 
 2. **Definir contrato interno e prompt canônico**
    - Objetivo: limitar a tradução OpenAI para CLI a dados estritamente necessários.
-   - Escopo: protocolo v1, mensagens textuais, function tools, schema de decisão, erros e validação de transcript.
+   - Escopo: protocolo v2, mensagens textuais, modelo Codex fechado, function tools, schema de decisão, erros e validação de transcript.
    - Aceite: entrada rejeita cwd/comando/URL/path; saída aceita somente texto ou tool calls permitidas com JSON válido.
    - Dependências: tarefa 1.
 
@@ -56,7 +56,7 @@ O5 continua sendo o último snapshot estável até o smoke Qwen e o deploy LAN/T
    - Dependências: tarefa 2.
 
 6. **Adicionar adaptadores Codex e Claude**
-   - Objetivo: usar os logins existentes e o modelo padrão de cada sessão.
+   - Objetivo: usar os logins existentes e modelos Codex explicitamente fixados por alias.
    - Escopo: argv fixo, schema final, controles documentados, gate de 10 cenários executado duas vezes.
    - Aceite: alias só fica saudável com 100% de estrutura válida, zero ferramenta local e ao menos 90% de categoria correta; nenhuma API key nova.
    - Dependências: tarefa 5.
@@ -101,3 +101,4 @@ O5 continua sendo o último snapshot estável até o smoke Qwen e o deploy LAN/T
 | MP-05 | catálogo/readiness | spec API | models/health/providers | degradação parcial e `503` |
 | MP-06 | operação host/container | threat model | systemd/Compose | verificações de artefatos |
 | MP-07 | Qwen remoto | runbook | documentação | smoke manual no PC da VPN |
+| MP-08 | seleção Codex por alias | ADR-008 / protocolo v2 | registry + broker | roteamento, argv e catálogo |

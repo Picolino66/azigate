@@ -20,7 +20,7 @@ Não é TCP nem pública. Existe somente no Unix socket `0600`, sob diretório `
 | Método | Rota | Controle | Entrada | Saída | Status |
 |---|---|---|---|---|---|
 | GET | `/health` | filesystem/UID + protocolo local | nenhuma | versão e capacidade sanitizada | OK |
-| POST | `/execute` | filesystem/UID + header v1 + JSON | request ID, provider, mensagens e function tools | decisão estruturada ou erro sanitizado | OK |
+| POST | `/execute` | filesystem/UID + header v2 + JSON | request ID, provider, modelo Codex permitido, mensagens e function tools | decisão estruturada ou erro sanitizado | OK |
 
 `/execute` rejeita campos extras, inclusive `cwd`, comando, argv, ambiente, URL e path. O gateway reconstrói a entrada; nenhum campo HTTP do Qwen escolhe binário ou filesystem.
 

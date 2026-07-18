@@ -37,13 +37,14 @@ O gateway continua um monólito modular e stateless. O broker é um serviço hos
 - `broker`: capacidade, protocolo, prompt, isolamento, subprocessos e servidor host;
 - `models`: catálogo DeepSeek cacheado combinado com aliases CLI saudáveis;
 - `observability`: métricas e logs somente de metadados, com destaque ANSI do campo `model` para
-  `deepseek-v4-flash`, `deepseek-v4-pro` e `codex-cli` no stdout padrão.
+  `deepseek-v4-flash`, `deepseek-v4-pro` e aliases `codex-cli-*` no stdout padrão.
 
 Não há banco, fila, frontend, proxy genérico ou estado de conversa. Rate limit e cache continuam locais a cada processo.
 
 ## Registry e disponibilidade
 
-- `codex-cli` e `claude-cli` são reservados mesmo quando desabilitados; nunca caem na DeepSeek.
+- `codex-cli-sol`, `codex-cli-terra`, `codex-cli-luna`, `codex-cli-5.5`, `codex-cli-5.4`, o legado `codex-cli` e `claude-cli` são reservados mesmo quando desabilitados; nunca caem na DeepSeek.
+- Os aliases Codex escolhem modelos internos fixos por allowlist; `codex-cli` permanece sinônimo de `gpt-5.4`.
 - Qualquer outro ID permitido é encaminhado ao adaptador DeepSeek.
 - Não existe fallback automático entre provedores.
 - `/v1/models` combina o catálogo DeepSeek com aliases habilitados e saudáveis.
@@ -52,7 +53,7 @@ Não há banco, fila, frontend, proxy genérico ou estado de conversa. Rate limi
 
 ## Broker e isolamento
 
-O protocolo v1 oferece somente `GET /health` e `POST /execute` em Unix socket. Sua entrada é reconstruída pelo gateway e contém request ID, provedor, mensagens textuais, function tools, `tool_choice` e `parallel_tool_calls`. Cwd, path de host, URL, comando, argv e ambiente não pertencem ao contrato.
+O protocolo v2 oferece somente `GET /health` e `POST /execute` em Unix socket. Sua entrada é reconstruída pelo gateway e contém request ID, provedor, modelo Codex validado, mensagens textuais, function tools, `tool_choice` e `parallel_tool_calls`. Cwd, path de host, URL, comando, argv e ambiente não pertencem ao contrato.
 
 Cada execução:
 
@@ -85,6 +86,7 @@ Somente o diretório de autenticação do CLI selecionado entra na sandbox. Nenh
 - [ADR-005](../adr/ADR-005-registro-multiprovedor-e-broker-local.md): registry e broker host.
 - [ADR-006](../adr/ADR-006-qwen-como-unico-executor.md): Qwen como único executor.
 - [ADR-007](../adr/ADR-007-streaming-dividido-por-provedor.md): streaming por tipo de provedor.
+- [ADR-008](../adr/ADR-008-aliases-codex-com-modelo-fixo.md): seleção Codex por aliases fechados.
 
 ## Referências de integração
 

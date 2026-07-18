@@ -5,6 +5,11 @@ const MODEL_COLORS = new Map<string, string>([
   ['deepseek-v4-flash', '\x1b[32m'],
   ['deepseek-v4-pro', '\x1b[34m'],
   ['codex-cli', '\x1b[31m'],
+  ['codex-cli-sol', '\x1b[31m'],
+  ['codex-cli-terra', '\x1b[31m'],
+  ['codex-cli-luna', '\x1b[31m'],
+  ['codex-cli-5.5', '\x1b[31m'],
+  ['codex-cli-5.4', '\x1b[31m'],
 ])
 
 export function colorizeModelLogLine(line: string): string {

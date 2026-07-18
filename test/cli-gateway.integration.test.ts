@@ -139,6 +139,20 @@ describe('gateway multiprovedor CLI', () => {
     expect(upstream.requests).toHaveLength(0)
   })
 
+  it('encaminha somente o modelo interno mapeado para o alias Codex', async () => {
+    const response = await appFor().inject({
+      method: 'POST',
+      url: '/v1/chat/completions',
+      headers: CHAT_HEADERS,
+      payload: { model: 'codex-cli-luna', messages: [{ role: 'user', content: 'olá' }] },
+    })
+    expect(response.statusCode).toBe(200)
+    expect(broker.executeCalls[0]).toMatchObject({
+      provider: 'codex',
+      model: 'gpt-5.6-luna',
+    })
+  })
+
   it('rejeita multimodal antes de chamar o broker', async () => {
     const response = await appFor().inject({
       method: 'POST',
@@ -207,6 +221,11 @@ describe('gateway multiprovedor CLI', () => {
     expect(response.statusCode).toBe(200)
     expect(response.json<{ data: { id: string }[] }>().data.map((model) => model.id)).toEqual([
       'deepseek-chat',
+      'codex-cli-sol',
+      'codex-cli-terra',
+      'codex-cli-luna',
+      'codex-cli-5.5',
+      'codex-cli-5.4',
       'codex-cli',
     ])
   })
@@ -215,7 +234,14 @@ describe('gateway multiprovedor CLI', () => {
     upstream.setHandler((_request, response) => jsonResponse(response, 503, { error: 'indisponível' }))
     const degraded = await appFor().inject({ method: 'GET', url: '/v1/models', headers: AUTHORIZATION })
     expect(degraded.statusCode).toBe(200)
-    expect(degraded.json<{ data: { id: string }[] }>().data.map((model) => model.id)).toEqual(['codex-cli'])
+    expect(degraded.json<{ data: { id: string }[] }>().data.map((model) => model.id)).toEqual([
+      'codex-cli-sol',
+      'codex-cli-terra',
+      'codex-cli-luna',
+      'codex-cli-5.5',
+      'codex-cli-5.4',
+      'codex-cli',
+    ])
 
     broker.healthResult = health(false)
     const unavailable = await appFor().inject({ method: 'GET', url: '/v1/models', headers: AUTHORIZATION })

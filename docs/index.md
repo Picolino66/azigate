@@ -40,6 +40,7 @@
 - [ADR-005 — registry e broker local](../adr/ADR-005-registro-multiprovedor-e-broker-local.md)
 - [ADR-006 — Qwen como único executor](../adr/ADR-006-qwen-como-unico-executor.md)
 - [ADR-007 — streaming dividido](../adr/ADR-007-streaming-dividido-por-provedor.md)
+- [ADR-008 — aliases Codex com modelo fixo](../adr/ADR-008-aliases-codex-com-modelo-fixo.md)
 
 ## Regra de sincronização
 

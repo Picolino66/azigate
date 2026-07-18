@@ -4,7 +4,7 @@ import { canonicalPrompt } from '../src/broker/prompt.js'
 import { isBrokerExecuteRequest } from '../src/broker/protocol-validation.js'
 import { normalizeCliRequest, validateCliDecision } from '../src/providers/cli-request.js'
 import { InvalidCliOutputError } from '../src/providers/errors.js'
-import { resolveProvider } from '../src/providers/registry.js'
+import { enabledCliAliases, resolveProvider } from '../src/providers/registry.js'
 
 function request(overrides: Record<string, unknown> = {}) {
   return normalizeCliRequest(
@@ -24,18 +24,37 @@ function request(overrides: Record<string, unknown> = {}) {
     },
     'request-1',
     'codex',
+    'gpt-5.4',
   )
 }
 
 describe('providers CLI', () => {
-  it('reserva aliases mesmo quando desabilitados e não faz fallback DeepSeek', () => {
-    expect(resolveProvider('codex-cli', createTestConfig())).toEqual({
+  it('reserva aliases Codex, fixa o modelo interno e não faz fallback DeepSeek', () => {
+    expect(resolveProvider('codex-cli-luna', createTestConfig())).toEqual({
       kind: 'cli',
-      alias: 'codex-cli',
+      alias: 'codex-cli-luna',
       provider: 'codex',
+      model: 'gpt-5.6-luna',
+      enabled: false,
+    })
+    expect(resolveProvider('codex-cli', createTestConfig())).toMatchObject({
+      kind: 'cli',
+      provider: 'codex',
+      model: 'gpt-5.4',
       enabled: false,
     })
     expect(resolveProvider('deepseek-chat', createTestConfig())).toEqual({ kind: 'deepseek' })
+  })
+
+  it('publica todos os aliases Codex quando o provider está habilitado', () => {
+    expect(enabledCliAliases(createTestConfig({ enableCodexCli: true }))).toEqual([
+      { alias: 'codex-cli-sol', provider: 'codex' },
+      { alias: 'codex-cli-terra', provider: 'codex' },
+      { alias: 'codex-cli-luna', provider: 'codex' },
+      { alias: 'codex-cli-5.5', provider: 'codex' },
+      { alias: 'codex-cli-5.4', provider: 'codex' },
+      { alias: 'codex-cli', provider: 'codex' },
+    ])
   })
 
   it('normaliza apenas mensagens textuais e function tools', () => {
@@ -66,6 +85,9 @@ describe('providers CLI', () => {
     { version: 2 },
     { ...request(), requestId: '' },
     { ...request(), provider: 'outro' },
+    { ...request(), model: 'modelo-fora-da-allowlist' },
+    { ...request(), model: undefined },
+    { ...request(), provider: 'claude', model: 'gpt-5.4' },
     { ...request(), messages: [{ role: 'root', content: 'x' }] },
     { ...request(), messages: [{ role: 'user', content: null }] },
     { ...request(), messages: [{ role: 'tool', content: 'x' }] },

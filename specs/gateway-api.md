@@ -15,7 +15,12 @@ Qualquer outro caminho recebe `404`. Nenhum parâmetro público representa URL, 
 
 | `model` | Provider | Comportamento |
 |---|---|---|
-| `codex-cli` | broker/Codex | alias reservado; modelo padrão do login |
+| `codex-cli-sol` | broker/Codex | `gpt-5.6-sol` |
+| `codex-cli-terra` | broker/Codex | `gpt-5.6-terra` |
+| `codex-cli-luna` | broker/Codex | `gpt-5.6-luna` |
+| `codex-cli-5.5` | broker/Codex | `gpt-5.5` |
+| `codex-cli-5.4` | broker/Codex | `gpt-5.4` |
+| `codex-cli` | broker/Codex | sinônimo legado de `gpt-5.4` |
 | `claude-cli` | broker/Claude | alias reservado; segunda fase |
 | qualquer outro ID permitido | DeepSeek | passthrough atual |
 
@@ -45,6 +50,7 @@ Alias desabilitado retorna `503 cli_unavailable`; nunca há fallback automático
 - `parallel_tool_calls` deve ser boolean.
 - Conteúdo multimodal recebe `400 invalid_cli_request`.
 - O gateway ignora parâmetros de sampling não aplicáveis e nunca os converte em argv.
+- Cada alias Codex é traduzido pelo gateway para um único modelo interno permitido; o cliente não escolhe `--model` nem qualquer outro argumento CLI.
 - A saída contém texto ou tool calls, nunca ambos. Nome/argumentos são validados e os IDs são gerados localmente.
 
 ## Streaming CLI

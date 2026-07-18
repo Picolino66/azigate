@@ -216,7 +216,7 @@ export class BrokerExecutor {
         '{"hooks":{},"permissions":{"allow":[],"deny":["*"]}}',
         { mode: 0o600 },
       )
-      const cliArgs = request.provider === 'codex' ? this.codexArgs() : this.claudeArgs()
+      const cliArgs = request.provider === 'codex' ? this.codexArgs(request.model) : this.claudeArgs()
       const isolated = buildIsolationCommand(
         this.config,
         request.provider,
@@ -259,7 +259,8 @@ export class BrokerExecutor {
     }
   }
 
-  private codexArgs(): string[] {
+  private codexArgs(model: BrokerExecuteRequest['model']): string[] {
+    if (model === undefined) throw new CliUnavailableError()
     return [
       'exec',
       '--ephemeral',
@@ -269,6 +270,7 @@ export class BrokerExecutor {
       '--strict-config',
       '--skip-git-repo-check',
       '--sandbox', 'read-only',
+      '--model', model,
       '-C', '/work',
       '--output-schema', '/work/decision.schema.json',
       '--output-last-message', '/work/final.json',

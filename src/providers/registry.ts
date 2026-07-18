@@ -1,34 +1,40 @@
 import type { AppConfig } from '../config.js'
-import type { CliProviderName } from '../broker/protocol.js'
+import type { CliProviderName, CodexCliModel } from '../broker/protocol.js'
 import { ClientAbortedError } from '../upstream/errors.js'
 import type { CliBrokerClientLike } from './broker-client.js'
 
 export const CLI_ALIASES = {
-  'codex-cli': 'codex',
-  'claude-cli': 'claude',
-} as const satisfies Record<string, CliProviderName>
+  'codex-cli-sol': { provider: 'codex', model: 'gpt-5.6-sol' },
+  'codex-cli-terra': { provider: 'codex', model: 'gpt-5.6-terra' },
+  'codex-cli-luna': { provider: 'codex', model: 'gpt-5.6-luna' },
+  'codex-cli-5.5': { provider: 'codex', model: 'gpt-5.5' },
+  'codex-cli-5.4': { provider: 'codex', model: 'gpt-5.4' },
+  'codex-cli': { provider: 'codex', model: 'gpt-5.4' },
+  'claude-cli': { provider: 'claude' },
+} as const satisfies Record<string, { provider: CliProviderName; model?: CodexCliModel }>
 
 export type CliAlias = keyof typeof CLI_ALIASES
 
 export type ProviderSelection =
   | { kind: 'deepseek' }
-  | { kind: 'cli'; alias: CliAlias; provider: CliProviderName; enabled: boolean }
+  | { kind: 'cli'; alias: CliAlias; provider: CliProviderName; model?: CodexCliModel; enabled: boolean }
 
 export function resolveProvider(model: string, config: AppConfig): ProviderSelection {
-  if (model === 'codex-cli') {
-    return { kind: 'cli', alias: model, provider: 'codex', enabled: config.enableCodexCli }
-  }
-  if (model === 'claude-cli') {
-    return { kind: 'cli', alias: model, provider: 'claude', enabled: config.enableClaudeCli }
+  const alias = CLI_ALIASES[model as CliAlias]
+  if (alias) return {
+    kind: 'cli',
+    alias: model as CliAlias,
+    provider: alias.provider,
+    ...('model' in alias ? { model: alias.model } : {}),
+    enabled: alias.provider === 'codex' ? config.enableCodexCli : config.enableClaudeCli,
   }
   return { kind: 'deepseek' }
 }
 
 export function enabledCliAliases(config: AppConfig): { alias: CliAlias; provider: CliProviderName }[] {
-  return [
-    ...(config.enableCodexCli ? [{ alias: 'codex-cli' as const, provider: 'codex' as const }] : []),
-    ...(config.enableClaudeCli ? [{ alias: 'claude-cli' as const, provider: 'claude' as const }] : []),
-  ]
+  return (Object.entries(CLI_ALIASES) as [CliAlias, typeof CLI_ALIASES[CliAlias]][])
+    .filter(([, alias]) => alias.provider === 'codex' ? config.enableCodexCli : config.enableClaudeCli)
+    .map(([alias, value]) => ({ alias, provider: value.provider }))
 }
 
 export async function healthyCliAliases(

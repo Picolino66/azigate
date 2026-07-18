@@ -14,7 +14,7 @@ O serviço não é proxy aberto. A superfície continua limitada a `GET /health`
 ## Propriedades principais
 
 - DeepSeek preserva campos futuros, tool calls, reasoning, SSE, usage e `[DONE]`.
-- `codex-cli`/`claude-cli` são aliases reservados e nunca caem automaticamente na DeepSeek.
+- `codex-cli-sol`, `codex-cli-terra`, `codex-cli-luna`, `codex-cli-5.5` e `codex-cli-5.4` selecionam modelos Codex fixos; `codex-cli` continua como sinônimo de GPT-5.4. Todos são reservados e nunca caem automaticamente na DeepSeek.
 - O container não recebe os logins dos CLIs; o broker não recebe as chaves DeepSeek/gateway.
 - Codex/Claude não recebem repositório, cwd ou ferramentas locais.
 - Tool calls são aceitas somente se oferecidas pelo Qwen e com argumentos JSON válidos.
@@ -53,7 +53,7 @@ Variáveis novas:
 
 | Variável | Padrão | Uso |
 |---|---:|---|
-| `ENABLE_CODEX_CLI` | `false` | publica `codex-cli` se o broker o marcar saudável |
+| `ENABLE_CODEX_CLI` | `false` | publica os aliases Codex se o broker o marcar saudável |
 | `ENABLE_CLAUDE_CLI` | `false` | publica `claude-cli` após o gate da segunda fase |
 | `CLI_BROKER_SOCKET_PATH` | `/run/gateway-ai/broker.sock` | socket visto pelo container |
 | `CLI_REQUEST_TIMEOUT_MS` | `600000` | timeout gateway -> broker |

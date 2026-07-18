@@ -91,7 +91,11 @@ O health retorna somente disponibilidade e código sanitizado. `not_authenticate
 O gate real usa 10 cenários sintéticos duas vezes e nunca aponta para um repositório:
 
 ```bash
-npm run gate:codex
+GATE_CODEX_MODEL=gpt-5.6-sol npm run gate:codex
+GATE_CODEX_MODEL=gpt-5.6-terra npm run gate:codex
+GATE_CODEX_MODEL=gpt-5.6-luna npm run gate:codex
+GATE_CODEX_MODEL=gpt-5.5 npm run gate:codex
+GATE_CODEX_MODEL=gpt-5.4 npm run gate:codex
 # somente na segunda fase
 npm run gate:claude
 ```
@@ -113,7 +117,7 @@ BROKER_UID=1000
 BROKER_GID=1000
 ```
 
-`BROKER_UID` e `BROKER_GID` devem corresponder ao usuário da unidade. Se `ALLOWED_MODELS` estiver preenchida, inclua `codex-cli`/`claude-cli` explicitamente.
+`BROKER_UID` e `BROKER_GID` devem corresponder ao usuário da unidade. Se `ALLOWED_MODELS` estiver preenchida, inclua todos os aliases Codex desejados: `codex-cli-sol`, `codex-cli-terra`, `codex-cli-luna`, `codex-cli-5.5`, `codex-cli-5.4` e, se necessário, o legado `codex-cli`.
 
 ```bash
 docker compose config

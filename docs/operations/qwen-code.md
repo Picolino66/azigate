@@ -45,9 +45,53 @@ Em `~/.qwen/settings.json`, mescle sem remover outras configurações:
           }
         },
         {
-          "id": "codex-cli",
-          "name": "Codex CLI via gateway-ai",
-          "description": "Decisão remota; execução local pelo Qwen",
+          "id": "codex-cli-sol",
+          "name": "Codex Sol via gateway-ai",
+          "description": "GPT-5.6 Sol remoto; execução local pelo Qwen",
+          "envKey": "GATEWAY_AI_API_KEY",
+          "baseUrl": "https://ia.meudominio.com/v1",
+          "generationConfig": {
+            "timeout": 610000,
+            "maxRetries": 0
+          }
+        },
+        {
+          "id": "codex-cli-terra",
+          "name": "Codex Terra via gateway-ai",
+          "description": "GPT-5.6 Terra remoto; execução local pelo Qwen",
+          "envKey": "GATEWAY_AI_API_KEY",
+          "baseUrl": "https://ia.meudominio.com/v1",
+          "generationConfig": {
+            "timeout": 610000,
+            "maxRetries": 0
+          }
+        },
+        {
+          "id": "codex-cli-luna",
+          "name": "Codex Luna via gateway-ai",
+          "description": "GPT-5.6 Luna remoto; execução local pelo Qwen",
+          "envKey": "GATEWAY_AI_API_KEY",
+          "baseUrl": "https://ia.meudominio.com/v1",
+          "generationConfig": {
+            "timeout": 610000,
+            "maxRetries": 0
+          }
+        },
+        {
+          "id": "codex-cli-5.5",
+          "name": "Codex GPT-5.5 via gateway-ai",
+          "description": "GPT-5.5 remoto; execução local pelo Qwen",
+          "envKey": "GATEWAY_AI_API_KEY",
+          "baseUrl": "https://ia.meudominio.com/v1",
+          "generationConfig": {
+            "timeout": 610000,
+            "maxRetries": 0
+          }
+        },
+        {
+          "id": "codex-cli-5.4",
+          "name": "Codex GPT-5.4 via gateway-ai",
+          "description": "GPT-5.4 remoto; execução local pelo Qwen",
           "envKey": "GATEWAY_AI_API_KEY",
           "baseUrl": "https://ia.meudominio.com/v1",
           "generationConfig": {
@@ -68,7 +112,7 @@ export GATEWAY_AI_API_KEY='CHAVE_DO_GATEWAY'
 qwen
 ```
 
-Dentro do Qwen, use `/model`: selecione `deepseek-v4-pro` ou `deepseek-v4-flash` para a DeepSeek e `codex-cli` para a sessão Codex do servidor. Todos usam a mesma `baseUrl` e a mesma chave do gateway; somente o ID do modelo muda. Mantenha o approval mode interativo e não use YOLO/auto-approval para este fluxo.
+Dentro do Qwen, use `/model`: selecione `deepseek-v4-pro` ou `deepseek-v4-flash` para a DeepSeek; para Codex, selecione `codex-cli-sol`, `codex-cli-terra`, `codex-cli-luna`, `codex-cli-5.5` ou `codex-cli-5.4`. Todos usam a mesma `baseUrl` e a mesma chave do gateway; somente o ID do modelo muda. `codex-cli` continua compatível e seleciona GPT-5.4. Mantenha o approval mode interativo e não use YOLO/auto-approval para este fluxo.
 
 ## Fallback para versão antiga
 
@@ -77,11 +121,11 @@ Se `modelProviders` não existir na versão instalada, use o mapeamento OpenAI-c
 ```bash
 export OPENAI_BASE_URL='https://ia.meudominio.com/v1'
 export OPENAI_API_KEY='CHAVE_DO_GATEWAY'
-export OPENAI_MODEL='codex-cli'
+export OPENAI_MODEL='codex-cli-luna'
 qwen
 ```
 
-Esse fallback seleciona um modelo por processo. Use `OPENAI_MODEL=deepseek-v4-pro` ou `OPENAI_MODEL=deepseek-v4-flash` para DeepSeek e `OPENAI_MODEL=codex-cli` para Codex. Não é preciso atualizar o Qwen apenas para esta integração.
+Esse fallback seleciona um modelo por processo. Use `OPENAI_MODEL=deepseek-v4-pro` ou `OPENAI_MODEL=deepseek-v4-flash` para DeepSeek e um dos aliases `codex-cli-*` para Codex. Não é preciso atualizar o Qwen apenas para esta integração.
 
 ## Smoke manual em repositório descartável
 
@@ -93,7 +137,7 @@ Depois de ativar o alias:
 4. peça um comando simples e confirme;
 5. valide o retorno de uma tool e a continuação da conversa;
 6. cancele uma execução pendente;
-7. alterne entre `codex-cli` e um modelo DeepSeek;
+7. alterne entre dois aliases Codex e um modelo DeepSeek;
 8. confirme no servidor que nenhum arquivo do repositório apareceu no broker.
 
 O resultado correto é alteração somente no computador da VPN. Logs do gateway/broker devem conter metadados, nunca prompt, código, resposta ou argumentos.

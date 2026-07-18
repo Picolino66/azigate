@@ -2,7 +2,7 @@
 
 ## Descrição
 
-Alias experimental `codex-cli` que usa o modelo padrão da sessão Codex autenticada. O Codex só produz texto ou uma decisão estruturada de tool calls para o Qwen.
+Aliases experimentais Codex que escolhem um modelo fixo da sessão autenticada. O Codex só produz texto ou uma decisão estruturada de tool calls para o Qwen.
 
 ## Localização no código
 
@@ -10,7 +10,7 @@ Alias experimental `codex-cli` que usa o modelo padrão da sessão Codex autenti
 
 ## Entrada
 
-Mensagens textuais, function tools, `tool_choice` e `parallel_tool_calls`. O modelo público é sempre `codex-cli`; nenhum modelo interno é escolhido pelo cliente.
+Mensagens textuais, function tools, `tool_choice` e `parallel_tool_calls`. Os modelos públicos são `codex-cli-sol`, `codex-cli-terra`, `codex-cli-luna`, `codex-cli-5.5` e `codex-cli-5.4`, mapeados para `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5` e `gpt-5.4`. `codex-cli` continua como sinônimo de `gpt-5.4`.
 
 ## Saída
 
@@ -23,6 +23,7 @@ Codex CLI autenticado, Bubblewrap, `~/.codex` privado, broker ativo e `ENABLE_CO
 ## Regras de negócio
 
 - Execução `--ephemeral`, JSONL e output schema.
+- O modelo chega ao broker somente pela allowlist interna e é passado como `--model` no argv fixo.
 - Configuração e rules do usuário ignoradas.
 - Sandbox `read-only`, approval `never` e shell/apps/browser/computer/hooks/multi-agent desabilitados.
 - Qualquer evento de ferramenta local invalida a execução.
@@ -30,7 +31,7 @@ Codex CLI autenticado, Bubblewrap, `~/.codex` privado, broker ativo e `ENABLE_CO
 
 ## Evidência de viabilidade
 
-Em 16/07/2026, a versão instalada `codex-cli 0.133.0` passou 20/20 saídas estruturais, 20/20 categorias e produziu zero evento de ferramenta local. Isso aprova a versão testada, mas o alias permanece opt-in e o gate deve ser repetido após upgrades.
+Em 16/07/2026, a versão instalada `codex-cli 0.133.0` passou 20/20 saídas estruturais, 20/20 categorias e produziu zero evento de ferramenta local. O gate deve ser repetido para cada modelo publicado e após upgrades.
 
 ## Fluxo resumido
 
