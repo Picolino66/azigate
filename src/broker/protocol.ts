@@ -1,4 +1,4 @@
-export const BROKER_PROTOCOL_VERSION = 2 as const
+export const BROKER_PROTOCOL_VERSION = 3 as const
 
 export type CliProviderName = 'codex' | 'claude'
 
@@ -11,6 +11,16 @@ export const CODEX_CLI_MODELS = [
 ] as const
 
 export type CodexCliModel = typeof CODEX_CLI_MODELS[number]
+
+export const CLAUDE_EFFORT_LEVELS = [
+  'low',
+  'medium',
+  'high',
+  'xhigh',
+  'max',
+] as const
+
+export type ClaudeEffortLevel = typeof CLAUDE_EFFORT_LEVELS[number]
 
 export interface BrokerHistoricalToolCall {
   id: string
@@ -38,6 +48,7 @@ export interface BrokerExecuteRequest {
   requestId: string
   provider: CliProviderName
   model?: CodexCliModel
+  effort?: ClaudeEffortLevel
   messages: BrokerMessage[]
   tools: BrokerTool[]
   toolChoice: BrokerToolChoice

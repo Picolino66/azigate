@@ -129,6 +129,24 @@
 				"streaming": true,
 				"maxInputTokens": 616000,
 				"maxOutputTokens": 384000
+			},
+			{
+				"id": "claude-cli",
+				"name": "Claude CLI (modelo padrão)",
+				"url": "http://192.168.2.6:3000/v1/chat/completions",
+				"toolCalling": true,
+				"thinking": true,
+				"supportsReasoningEffort": [
+					"low",
+					"medium",
+					"high",
+					"xhigh",
+					"max"
+				],
+				"vision": false,
+				"streaming": true,
+				"maxInputTokens": 200000,
+				"maxOutputTokens": 64000
 			}
 		],
 		"settings": {
@@ -151,6 +169,9 @@
 				"reasoningEffort": "high"
 			},
 			"codex-cli-5.4": {
+				"reasoningEffort": "high"
+			},
+			"claude-cli": {
 				"reasoningEffort": "high"
 			}
 		}

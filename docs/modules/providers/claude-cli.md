@@ -2,7 +2,7 @@
 
 ## Descrição
 
-Segunda fase experimental, exposta como `claude-cli` somente depois do gate. Usa o modelo padrão e o login existente; nunca migra silenciosamente para API key.
+Provider experimental exposto como alias único `claude-cli` depois dos gates da versão instalada. Usa o modelo padrão e o login existente; nunca migra silenciosamente para API key.
 
 ## Localização no código
 
@@ -10,7 +10,7 @@ Segunda fase experimental, exposta como `claude-cli` somente depois do gate. Usa
 
 ## Entrada
 
-O mesmo subconjunto textual/function tool do Codex. Conteúdo multimodal é rejeitado.
+O mesmo subconjunto textual/function tool do Codex. Conteúdo multimodal é rejeitado. `reasoning_effort` é opcional e aceita `low`, `medium`, `high`, `xhigh` ou `max`.
 
 ## Saída
 
@@ -25,16 +25,19 @@ Claude CLI autenticado, Bubblewrap, `~/.claude` privado, broker ativo e dois fla
 - Print mode, JSON schema, tools vazias e MCP estrito vazio.
 - Slash commands, Chrome, persistência e fontes de settings são desabilitados.
 - `dontAsk` não concede ferramentas; a lista de tools continua vazia.
+- O alias não usa `--model`: o modelo é resolvido pela conta. Effort validado é o único argumento variável e entra como `--effort <nível>`.
+- Omissão de `reasoning_effort` preserva o padrão da conta; modelos podem reduzir níveis não suportados.
+- Thinking permanece privado ao CLI e não é publicado em Chat Completions ou SSE.
 - A versão instalada deve oferecer todos os flags.
 - Bloqueio de autenticação/política mantém o alias indisponível; nenhuma API key é introduzida.
 
 ## Evidência de viabilidade
 
-Em 16/07/2026, a versão instalada `Claude Code 2.1.150` passou 20/20 saídas estruturais, 20/20 categorias e produziu zero evento de ferramenta local. O resultado habilita a continuidade da segunda fase; não publica o alias automaticamente.
+Em 18/07/2026, `Claude Code 2.1.214` passou o gate completo com effort `high`: 20/20 saídas estruturais, 20/20 categorias e zero ferramenta local. Os smokes `low`, `medium`, `xhigh` e `max` passaram 4/4 com zero ferramenta local. A evidência autoriza a publicação opt-in desta versão; um novo upgrade exige repetir ambos os gates.
 
 ## Fluxo resumido
 
-Gateway normaliza -> broker cria settings/MCP vazios -> Claude roda isolado -> structured output é validado -> Qwen recebe a decisão.
+Gateway normaliza e valida effort -> protocolo v3 -> broker cria settings/MCP vazios -> Claude roda isolado com argv fixo -> structured output é validado -> Qwen recebe somente a decisão.
 
 ## Possíveis erros
 

@@ -96,13 +96,13 @@ GATE_CODEX_MODEL=gpt-5.6-terra npm run gate:codex
 GATE_CODEX_MODEL=gpt-5.6-luna npm run gate:codex
 GATE_CODEX_MODEL=gpt-5.5 npm run gate:codex
 GATE_CODEX_MODEL=gpt-5.4 npm run gate:codex
-# somente na segunda fase
-npm run gate:claude
+GATE_CLAUDE_EFFORT=high npm run gate:claude
+npm run gate:claude-efforts
 ```
 
-Aprovação exige 20/20 decisões estruturalmente válidas, zero evento de ferramenta local e pelo menos 18/20 categorias corretas. O relatório imprime apenas contagens. Se falhar, mantenha o respectivo `ENABLE_*_CLI=false`.
+Aprovação exige 20/20 decisões estruturalmente válidas, zero evento de ferramenta local e pelo menos 18/20 categorias corretas. Para Claude, o segundo comando exige 4/4 respostas estruturais e zero ferramenta local nos níveis `low`, `medium`, `xhigh` e `max`; `high` é coberto pelo gate completo. O relatório imprime apenas contagens. Se falhar, mantenha o respectivo `ENABLE_*_CLI=false`.
 
-Na validação de 16/07/2026, Codex `0.133.0` e Claude `2.1.150` passaram com 20/20 estruturas, zero ferramentas locais e 20/20 categorias. O primeiro smoke Codex revelou que `/etc/resolv.conf` apontava para `/run/systemd/resolve`; o isolamento foi corrigido fazendo bind read-only do arquivo resolvido, sem montar `/etc` inteiro. Se o host usar outro resolvedor, o smoke real deve falhar fechado e o alias não deve ser publicado.
+Em 18/07/2026, Claude `2.1.214` passou o gate `high` com 20/20 estruturas, zero ferramentas locais e 20/20 categorias; os outros efforts passaram 4/4 com zero ferramenta local. A versão atual usa `--json-schema` como mecanismo interno: `permissions.deny=["*"]` também o bloquearia, portanto o settings efêmero mantém allow/deny vazios enquanto `--tools ""`, MCP estrito vazio e `dontAsk` desabilitam ferramentas locais. Um upgrade do CLI invalida essa evidência. O primeiro smoke Codex revelou que `/etc/resolv.conf` apontava para `/run/systemd/resolve`; o isolamento foi corrigido fazendo bind read-only do arquivo resolvido, sem montar `/etc` inteiro.
 
 ## Ativação no gateway
 
@@ -110,19 +110,19 @@ Depois do gate aprovado, ajuste o `.env` usado pelo Compose:
 
 ```dotenv
 ENABLE_CODEX_CLI=true
-ENABLE_CLAUDE_CLI=false
+ENABLE_CLAUDE_CLI=true
 CLI_BROKER_SOCKET_PATH=/run/gateway-ai/broker.sock
 BROKER_RUNTIME_DIR=/run/gateway-ai
 BROKER_UID=1000
 BROKER_GID=1000
 ```
 
-`BROKER_UID` e `BROKER_GID` devem corresponder ao usuário da unidade. Se `ALLOWED_MODELS` estiver preenchida, inclua todos os aliases Codex desejados: `codex-cli-sol`, `codex-cli-terra`, `codex-cli-luna`, `codex-cli-5.5`, `codex-cli-5.4` e, se necessário, o legado `codex-cli`.
+No ambiente privado do broker, defina também `BROKER_ENABLE_CLAUDE_CLI=true`. `BROKER_UID` e `BROKER_GID` devem corresponder ao usuário da unidade. Se `ALLOWED_MODELS` estiver preenchida, inclua os aliases Codex desejados e `claude-cli`.
 
 ```bash
 docker compose config
 docker compose up -d --build
-curl --fail http://127.0.0.1:3000/ready
+curl --fail http://192.168.2.6:3000/ready
 ```
 
 O container monta somente `/run/gateway-ai` como read-only. Nunca monte `~/.codex`, `~/.claude`, `/home`, o repositório ou o socket Docker.

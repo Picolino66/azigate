@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { request as httpRequest } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -15,7 +15,11 @@ import {
   UnexpectedCliToolEventError,
 } from '../src/broker/executor.js'
 import { ProcessRunner, type ProcessRunResult, type ProcessRunnerLike, type ProcessRunSpec } from '../src/broker/process-runner.js'
-import { BROKER_PROTOCOL_VERSION, type BrokerExecuteRequest } from '../src/broker/protocol.js'
+import {
+  BROKER_PROTOCOL_VERSION,
+  type BrokerExecuteRequest,
+  type ClaudeEffortLevel,
+} from '../src/broker/protocol.js'
 import { createBrokerServer, listenBroker } from '../src/broker/server.js'
 import { CliBrokerClient } from '../src/providers/broker-client.js'
 import {
@@ -75,6 +79,16 @@ function brokerRequest(): BrokerExecuteRequest {
     toolChoice: 'none',
     parallelToolCalls: false,
   }
+}
+
+function claudeBrokerRequest(effort?: ClaudeEffortLevel): BrokerExecuteRequest {
+  const request: BrokerExecuteRequest = {
+    ...brokerRequest(),
+    provider: 'claude',
+    ...(effort === undefined ? {} : { effort }),
+  }
+  delete request.model
+  return request
 }
 
 function completed(stdout = ''): ProcessRunResult {
@@ -161,9 +175,11 @@ describe('broker local', () => {
     const root = directory()
     const cfg = { ...config(root), enableClaude: true }
     const calls: ProcessRunSpec[] = []
+    let settings: unknown
     const runner: ProcessRunnerLike = {
       async run(spec) {
         calls.push(spec)
+        settings = JSON.parse(readFileSync(join(spec.cwd, 'claude-settings.json'), 'utf8'))
         return completed(JSON.stringify({
           is_error: false,
           structured_output: { content: 'ok claude', tool_calls: [] },
@@ -176,15 +192,39 @@ describe('broker local', () => {
       codex: { available: false, code: 'disabled' },
       claude: { available: true, binaryPath: process.execPath, authDir: join(root, 'auth') },
     })
-    const result = await executor.execute({ ...brokerRequest(), provider: 'claude' })
+    const result = await executor.execute(claudeBrokerRequest('xhigh'))
     const args = calls[0]?.args ?? []
     expect(result.decision.content).toBe('ok claude')
     expect(args).toContain('--print')
     expect(args).toContain('--strict-mcp-config')
     expect(args).toContain('--disable-slash-commands')
     expect(args).toContain('--no-session-persistence')
+    expect(args[args.indexOf('--effort') + 1]).toBe('xhigh')
     expect(args[args.indexOf('--tools') + 1]).toBe('')
     expect(args[args.indexOf('--setting-sources') + 1]).toBe('')
+    const settingsPath = calls[0]?.args[args.indexOf('--settings') + 1]
+    expect(settingsPath).toBe('/work/claude-settings.json')
+    expect(settings).toEqual({
+      hooks: {},
+      permissions: { allow: [], deny: [] },
+    })
+  })
+
+  it('preserva o esforço padrão do Claude quando reasoning_effort é omitido', async () => {
+    const root = directory()
+    const calls: ProcessRunSpec[] = []
+    const runner: ProcessRunnerLike = {
+      async run(spec) {
+        calls.push(spec)
+        return completed(JSON.stringify({ content: 'ok', tool_calls: [] }))
+      },
+    }
+    const executor = new BrokerExecutor({ ...config(root), enableClaude: true }, runner, {
+      codex: { available: false, code: 'disabled' },
+      claude: { available: true, binaryPath: process.execPath, authDir: join(root, 'auth') },
+    })
+    await executor.execute(claudeBrokerRequest())
+    expect(calls[0]?.args).not.toContain('--effort')
   })
 
   it('falha imediatamente quando a capacidade do provider está indisponível', async () => {
@@ -301,11 +341,11 @@ describe('broker local', () => {
       codex: { available: false, code: 'disabled' },
       claude: { available: true, binaryPath: process.execPath, authDir: join(root, 'auth') },
     })
-    await expect(executor.execute({ ...brokerRequest(), provider: 'claude' })).resolves.toMatchObject({
+    await expect(executor.execute(claudeBrokerRequest())).resolves.toMatchObject({
       decision: { content: 'via result' },
       usage: { promptTokens: 2 },
     })
-    await expect(executor.execute({ ...brokerRequest(), requestId: 'request-2', provider: 'claude' })).resolves.toMatchObject({
+    await expect(executor.execute({ ...claudeBrokerRequest(), requestId: 'request-2' })).resolves.toMatchObject({
       decision: { content: 'direto' },
       usage: { completionTokens: 1 },
     })
@@ -323,7 +363,7 @@ describe('broker local', () => {
       codex: { available: false, code: 'disabled' },
       claude: { available: true, binaryPath: process.execPath, authDir: join(root, 'auth') },
     })
-    await expect(executor.execute({ ...brokerRequest(), provider: 'claude' })).rejects.toBeInstanceOf(ErrorType)
+    await expect(executor.execute(claudeBrokerRequest())).rejects.toBeInstanceOf(ErrorType)
   })
 
   it('ProcessRunner limita saída, aplica timeout e propaga cancelamento sem shell', async () => {

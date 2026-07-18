@@ -41,10 +41,15 @@ const CODEX_HELP = [
 
 const CLAUDE_HELP = [
   '--print',
+  '--effort',
+  '--input-format',
   '--output-format',
   '--json-schema',
   '--tools',
+  '--mcp-config',
   '--strict-mcp-config',
+  '--agents',
+  '--system-prompt',
   '--disable-slash-commands',
   '--no-chrome',
   '--no-session-persistence',
@@ -56,7 +61,9 @@ const CLAUDE_HELP = [
 class CapabilityRunner implements ProcessRunnerLike {
   readonly calls: ProcessRunSpec[] = []
 
-  constructor(private readonly failure: 'none' | 'bwrap' | 'codex_help' | 'features' | 'codex_auth' = 'none') {}
+  constructor(
+    private readonly failure: 'none' | 'bwrap' | 'codex_help' | 'features' | 'codex_auth' | 'claude_help' = 'none',
+  ) {}
 
   run(spec: ProcessRunSpec): Promise<ProcessRunResult> {
     this.calls.push(spec)
@@ -66,7 +73,9 @@ class CapabilityRunner implements ProcessRunnerLike {
       return Promise.resolve(result(this.failure === 'features' ? '' : CODEX_DISABLED_FEATURES.join('\n')))
     }
     if (spec.args[0] === 'login') return Promise.resolve(result('', this.failure === 'codex_auth' ? 1 : 0))
-    if (spec.args[0] === '--help') return Promise.resolve(result(CLAUDE_HELP))
+    if (spec.args[0] === '--help') {
+      return Promise.resolve(result(this.failure === 'claude_help' ? '' : CLAUDE_HELP))
+    }
     if (spec.args[0] === 'auth') return Promise.resolve(result(''))
     return Promise.resolve(result('', 1))
   }
@@ -129,6 +138,13 @@ describe('configuração e capacidades do broker', () => {
     config.enableClaude = false
     const capabilities = await inspectCapabilities(config, new CapabilityRunner(failure))
     expect(capabilities.codex).toMatchObject({ available: false, code })
+  })
+
+  it('não publica Claude quando uma flag obrigatória está ausente', async () => {
+    const config = brokerConfig(root())
+    config.enableCodex = false
+    const capabilities = await inspectCapabilities(config, new CapabilityRunner('claude_help'))
+    expect(capabilities.claude).toMatchObject({ available: false, code: 'required_flag_missing' })
   })
 
   it('marca providers desabilitados sem executar seus diagnósticos', async () => {

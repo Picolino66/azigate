@@ -213,10 +213,12 @@ export class BrokerExecutor {
       await writeFile(join(workspace, 'empty-mcp.json'), '{"mcpServers":{}}', { mode: 0o600 })
       await writeFile(
         join(workspace, 'claude-settings.json'),
-        '{"hooks":{},"permissions":{"allow":[],"deny":["*"]}}',
+        '{"hooks":{},"permissions":{"allow":[],"deny":[]}}',
         { mode: 0o600 },
       )
-      const cliArgs = request.provider === 'codex' ? this.codexArgs(request.model) : this.claudeArgs()
+      const cliArgs = request.provider === 'codex'
+        ? this.codexArgs(request.model)
+        : this.claudeArgs(request.effort)
       const isolated = buildIsolationCommand(
         this.config,
         request.provider,
@@ -283,9 +285,10 @@ export class BrokerExecutor {
     ]
   }
 
-  private claudeArgs(): string[] {
+  private claudeArgs(effort: BrokerExecuteRequest['effort']): string[] {
     return [
       '--print',
+      ...(effort === undefined ? [] : ['--effort', effort]),
       '--input-format', 'text',
       '--output-format', 'json',
       '--json-schema', JSON.stringify(DECISION_JSON_SCHEMA),

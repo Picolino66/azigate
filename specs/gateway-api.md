@@ -21,7 +21,7 @@ Qualquer outro caminho recebe `404`. Nenhum parâmetro público representa URL, 
 | `codex-cli-5.5` | broker/Codex | `gpt-5.5` |
 | `codex-cli-5.4` | broker/Codex | `gpt-5.4` |
 | `codex-cli` | broker/Codex | sinônimo legado de `gpt-5.4` |
-| `claude-cli` | broker/Claude | alias reservado; segunda fase |
+| `claude-cli` | broker/Claude | modelo padrão da conta autenticada |
 | qualquer outro ID permitido | DeepSeek | passthrough atual |
 
 Alias desabilitado retorna `503 cli_unavailable`; nunca há fallback automático. `ALLOWED_MODELS`, quando preenchida, também precisa incluir os aliases desejados.
@@ -48,9 +48,11 @@ Alias desabilitado retorna `503 cli_unavailable`; nunca há fallback automático
 - Tools devem ser `type: function`, ter nomes únicos válidos e parameters em objeto.
 - `tool_choice` aceita `auto`, `none`, `required` ou uma função oferecida.
 - `parallel_tool_calls` deve ser boolean.
+- Para `claude-cli`, `reasoning_effort` aceita somente `low`, `medium`, `high`, `xhigh` ou `max`. Quando omitido, o CLI usa o padrão da conta; um modelo pode reduzir um nível que não suporte.
 - Conteúdo multimodal recebe `400 invalid_cli_request`.
 - O gateway ignora parâmetros de sampling não aplicáveis e nunca os converte em argv.
 - Cada alias Codex é traduzido pelo gateway para um único modelo interno permitido; o cliente não escolhe `--model` nem qualquer outro argumento CLI.
+- `claude-cli` não seleciona Opus/Sonnet nem expõe thinking; apenas o esforço validado é encaminhado por argv fixo.
 - A saída contém texto ou tool calls, nunca ambos. Nome/argumentos são validados e os IDs são gerados localmente.
 
 ## Streaming CLI

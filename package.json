@@ -19,7 +19,8 @@
     "test:coverage": "vitest run --coverage",
     "check": "npm run lint && npm run typecheck && npm run test && npm run build",
     "gate:codex": "tsx src/broker/viability-gate.ts codex",
-    "gate:claude": "tsx src/broker/viability-gate.ts claude"
+    "gate:claude": "tsx src/broker/viability-gate.ts claude",
+    "gate:claude-efforts": "tsx src/broker/viability-gate.ts claude-efforts"
   },
   "dependencies": {
     "dotenv": "17.4.2",

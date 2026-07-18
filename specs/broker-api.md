@@ -1,4 +1,4 @@
-# Protocolo interno do broker v2
+# Protocolo interno do broker v3
 
 O broker atende somente Unix socket. Não deve ser publicado por TCP, Nginx ou pelas rotas Fastify.
 
@@ -8,7 +8,7 @@ Resposta `200`:
 
 ```json
 {
-  "version": 2,
+  "version": 3,
   "status": "ready",
   "providers": {
     "codex": { "available": true },
@@ -21,11 +21,11 @@ Os códigos de indisponibilidade são sanitizados e não contêm paths, login ou
 
 ## `POST /execute`
 
-Exige `Content-Type: application/json` e `X-Broker-Protocol-Version: 2`.
+Exige `Content-Type: application/json` e `X-Broker-Protocol-Version: 3`.
 
 ```json
 {
-  "version": 2,
+  "version": 3,
   "requestId": "uuid",
   "provider": "codex",
   "model": "gpt-5.6-luna",
@@ -40,13 +40,28 @@ Exige `Content-Type: application/json` e `X-Broker-Protocol-Version: 2`.
 }
 ```
 
-Campos extras são rejeitados. Para Codex, `model` é obrigatório e só aceita `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5` ou `gpt-5.4`; para Claude ele não existe. Não existem `cwd`, `command`, `args`, `env`, `url`, `host` ou `path` operacional.
+Campos extras são rejeitados. Para Codex, `model` é obrigatório e só aceita `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5` ou `gpt-5.4`; `effort` é proibido. Para Claude, `model` não existe e `effort` é opcional, aceitando somente `low`, `medium`, `high`, `xhigh` ou `max`. Não existem `cwd`, `command`, `args`, `env`, `url`, `host` ou `path` operacional.
+
+Exemplo Claude:
+
+```json
+{
+  "version": 3,
+  "requestId": "uuid",
+  "provider": "claude",
+  "effort": "high",
+  "messages": [{ "role": "user", "content": "texto" }],
+  "tools": [],
+  "toolChoice": "none",
+  "parallelToolCalls": false
+}
+```
 
 Resposta `200`:
 
 ```json
 {
-  "version": 2,
+  "version": 3,
   "requestId": "uuid",
   "decision": {
     "content": null,

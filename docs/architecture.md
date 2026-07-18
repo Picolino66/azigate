@@ -53,7 +53,7 @@ Não há banco, fila, frontend, proxy genérico ou estado de conversa. Rate limi
 
 ## Broker e isolamento
 
-O protocolo v2 oferece somente `GET /health` e `POST /execute` em Unix socket. Sua entrada é reconstruída pelo gateway e contém request ID, provedor, modelo Codex validado, mensagens textuais, function tools, `tool_choice` e `parallel_tool_calls`. Cwd, path de host, URL, comando, argv e ambiente não pertencem ao contrato.
+O protocolo v3 oferece somente `GET /health` e `POST /execute` em Unix socket. Sua entrada é reconstruída pelo gateway e contém request ID, provedor, modelo Codex validado, esforço Claude opcional em enum fechada, mensagens textuais, function tools, `tool_choice` e `parallel_tool_calls`. Cwd, path de host, URL, comando, argv e ambiente não pertencem ao contrato.
 
 Cada execução:
 
@@ -87,6 +87,7 @@ Somente o diretório de autenticação do CLI selecionado entra na sandbox. Nenh
 - [ADR-006](../adr/ADR-006-qwen-como-unico-executor.md): Qwen como único executor.
 - [ADR-007](../adr/ADR-007-streaming-dividido-por-provedor.md): streaming por tipo de provedor.
 - [ADR-008](../adr/ADR-008-aliases-codex-com-modelo-fixo.md): seleção Codex por aliases fechados.
+- [ADR-009](../adr/ADR-009-claude-cli-esforco-configuravel.md): Claude no modelo padrão com esforço fechado.
 
 ## Referências de integração
 

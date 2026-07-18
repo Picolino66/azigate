@@ -4,10 +4,11 @@ import type {
   BrokerMessage,
   BrokerTool,
   BrokerToolChoice,
+  ClaudeEffortLevel,
   CliProviderName,
   CodexCliModel,
 } from '../broker/protocol.js'
-import { BROKER_PROTOCOL_VERSION } from '../broker/protocol.js'
+import { BROKER_PROTOCOL_VERSION, CLAUDE_EFFORT_LEVELS } from '../broker/protocol.js'
 import type { ChatBody } from '../types.js'
 import { InvalidCliOutputError } from './errors.js'
 
@@ -111,6 +112,19 @@ function normalizeMessages(value: unknown, offeredNames: ReadonlySet<string>): B
   })
 }
 
+function normalizeReasoningEffort(value: unknown, provider: CliProviderName): ClaudeEffortLevel | undefined {
+  if (provider !== 'claude' || value === undefined) return undefined
+  if (
+    typeof value !== 'string' ||
+    !CLAUDE_EFFORT_LEVELS.includes(value as ClaudeEffortLevel)
+  ) {
+    throw new CliRequestValidationError(
+      `reasoning_effort para claude-cli deve ser: ${CLAUDE_EFFORT_LEVELS.join(', ')}`,
+    )
+  }
+  return value as ClaudeEffortLevel
+}
+
 export class CliRequestValidationError extends Error {
   constructor(public readonly publicMessage: string) {
     super(publicMessage)
@@ -125,6 +139,7 @@ export function normalizeCliRequest(
   model?: CodexCliModel,
 ): BrokerExecuteRequest {
   const tools = normalizeTools(body.tools)
+  const effort = normalizeReasoningEffort(body.reasoning_effort, provider)
   const offeredNames = new Set(tools.map((tool) => tool.name))
   const toolChoice = normalizeToolChoice(body.tool_choice, offeredNames)
   if (toolChoice !== 'none' && tools.length === 0 && body.tool_choice !== undefined) {
@@ -138,6 +153,7 @@ export function normalizeCliRequest(
     requestId,
     provider,
     ...(model === undefined ? {} : { model }),
+    ...(effort === undefined ? {} : { effort }),
     messages: normalizeMessages(body.messages, offeredNames),
     tools,
     toolChoice,

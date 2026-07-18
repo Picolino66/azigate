@@ -1,6 +1,6 @@
 # Modelo de ameaças
 
-Data da revisão: 16/07/2026. Escopo: gateway, adaptador DeepSeek, broker host, subprocessos Codex/Claude, container, Compose, systemd e Nginx. Produção e o PC remoto da VPN não foram alterados nem testados.
+Data da revisão: 18/07/2026. Escopo: gateway, adaptador DeepSeek, broker host, subprocessos Codex/Claude, container, Compose, systemd e Nginx. O PC remoto da VPN não foi alterado nem testado neste ciclo.
 
 ## Ativos
 
@@ -14,7 +14,7 @@ Data da revisão: 16/07/2026. Escopo: gateway, adaptador DeepSeek, broker host, 
 
 1. Qwen -> Nginx/gateway: rede não confiável, protegida por TLS, Bearer, allowlists e limites.
 2. Gateway -> DeepSeek: HTTPS para base e paths fixos, com credencial reconstruída.
-3. Container -> broker: HTTP v1 sobre Unix socket privado; o mount é read-only.
+3. Container -> broker: protocolo HTTP v3 sobre Unix socket privado; o mount é read-only.
 4. Broker -> CLI: processo e saída não confiáveis, contidos por argv fixo, ambiente limpo, Bubblewrap e schema.
 5. Qwen -> repositório: única fronteira com capacidade de leitura, shell e edição, sujeita à confirmação do usuário.
 
@@ -28,6 +28,7 @@ Data da revisão: 16/07/2026. Escopo: gateway, adaptador DeepSeek, broker host, 
 | Vazamento do login CLI | controle da conta Codex/Claude | auth dirs `0700`, home oculto por systemd, somente auth/binário necessários reexpostos e auth do provider na sandbox | check de capacidade, systemd e permissões |
 | Prompt injection solicitando host/shell | leitura ou alteração do servidor | CLI sem ferramentas, sem repositório/home, `/work` descartável, eventos de execução rejeitados | cenários de gate, testes de argv e output |
 | Injeção de comando no broker | execução arbitrária | protocolo não possui comando/cwd/argv/env; `spawn` com `shell: false` e argv fixo | testes de protocolo e fake runner |
+| Abuso de effort/modelo Claude | custo ou argumento inesperado | alias único sem `--model`; enum fechada traduzida exclusivamente para `--effort` | testes do protocolo v3, normalização e argv |
 | Escape de filesystem | acesso ao host/repositório | Bubblewrap com filesystem mínimo, work/tmp efêmeros e nenhum home completo | smoke Bubblewrap e inspeção de argv |
 | Socket acessado por outro usuário | inferência não autorizada | diretório `0700`, socket `0600`, mesmo UID e bind read-only | teste Unix e unidade systemd |
 | Saída maliciosa/alucinação de tool | Qwen executa ação não oferecida | schema fechado, allowlist de nomes, argumentos JSON, IDs locais e sem heurística de patch | testes de decisão e CLI output |

@@ -98,6 +98,18 @@ Em `~/.qwen/settings.json`, mescle sem remover outras configurações:
             "timeout": 610000,
             "maxRetries": 0
           }
+        },
+        {
+          "id": "claude-cli",
+          "name": "Claude CLI via gateway-ai",
+          "description": "Modelo padrão da conta; execução local pelo Qwen",
+          "envKey": "GATEWAY_AI_API_KEY",
+          "baseUrl": "https://ia.meudominio.com/v1",
+          "generationConfig": {
+            "timeout": 610000,
+            "maxRetries": 0,
+            "reasoningEffort": "high"
+          }
         }
       ]
     }
@@ -105,14 +117,14 @@ Em `~/.qwen/settings.json`, mescle sem remover outras configurações:
 }
 ```
 
-Quando `claude-cli` passar o gate, adicione uma segunda entrada com o mesmo `envKey` e `baseUrl`. Não grave o valor da chave no JSON:
+Não grave o valor da chave no JSON:
 
 ```bash
 export GATEWAY_AI_API_KEY='CHAVE_DO_GATEWAY'
 qwen
 ```
 
-Dentro do Qwen, use `/model`: selecione `deepseek-v4-pro` ou `deepseek-v4-flash` para a DeepSeek; para Codex, selecione `codex-cli-sol`, `codex-cli-terra`, `codex-cli-luna`, `codex-cli-5.5` ou `codex-cli-5.4`. Todos usam a mesma `baseUrl` e a mesma chave do gateway; somente o ID do modelo muda. `codex-cli` continua compatível e seleciona GPT-5.4. Mantenha o approval mode interativo e não use YOLO/auto-approval para este fluxo.
+Dentro do Qwen, use `/model`: selecione `deepseek-v4-pro` ou `deepseek-v4-flash` para a DeepSeek; um alias `codex-cli-*` para Codex; ou `claude-cli` para o modelo padrão da conta Claude. Em Claude, os valores de `reasoningEffort` `low`, `medium`, `high`, `xhigh` e `max` são encaminhados de verdade; omitir usa o padrão da conta. Todos usam a mesma `baseUrl` e a mesma chave do gateway. `codex-cli` continua compatível e seleciona GPT-5.4. Mantenha o approval mode interativo e não use YOLO/auto-approval para este fluxo.
 
 ## Fallback para versão antiga
 
@@ -125,7 +137,7 @@ export OPENAI_MODEL='codex-cli-luna'
 qwen
 ```
 
-Esse fallback seleciona um modelo por processo. Use `OPENAI_MODEL=deepseek-v4-pro` ou `OPENAI_MODEL=deepseek-v4-flash` para DeepSeek e um dos aliases `codex-cli-*` para Codex. Não é preciso atualizar o Qwen apenas para esta integração.
+Esse fallback seleciona um modelo por processo. Use `OPENAI_MODEL=deepseek-v4-pro` ou `OPENAI_MODEL=deepseek-v4-flash` para DeepSeek, um dos aliases `codex-cli-*` para Codex ou `OPENAI_MODEL=claude-cli` para Claude. Não é preciso atualizar o Qwen apenas para esta integração.
 
 ## Smoke manual em repositório descartável
 
@@ -137,7 +149,7 @@ Depois de ativar o alias:
 4. peça um comando simples e confirme;
 5. valide o retorno de uma tool e a continuação da conversa;
 6. cancele uma execução pendente;
-7. alterne entre dois aliases Codex e um modelo DeepSeek;
+7. alterne entre Codex, Claude (`low`, `high` e `max`) e um modelo DeepSeek;
 8. confirme no servidor que nenhum arquivo do repositório apareceu no broker.
 
 O resultado correto é alteração somente no computador da VPN. Logs do gateway/broker devem conter metadados, nunca prompt, código, resposta ou argumentos.

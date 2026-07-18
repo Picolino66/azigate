@@ -41,6 +41,7 @@
 - [ADR-006 — Qwen como único executor](../adr/ADR-006-qwen-como-unico-executor.md)
 - [ADR-007 — streaming dividido](../adr/ADR-007-streaming-dividido-por-provedor.md)
 - [ADR-008 — aliases Codex com modelo fixo](../adr/ADR-008-aliases-codex-com-modelo-fixo.md)
+- [ADR-009 — Claude CLI com esforço configurável](../adr/ADR-009-claude-cli-esforco-configuravel.md)
 
 ## Regra de sincronização
 

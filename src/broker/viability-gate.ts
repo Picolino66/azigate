@@ -4,8 +4,14 @@ import { loadBrokerConfig } from './config.js'
 import { BrokerExecutor } from './executor.js'
 import { UnexpectedCliToolEventError } from './executor.js'
 import { ProcessRunner } from './process-runner.js'
-import type { BrokerExecuteRequest, BrokerTool, CliProviderName, CodexCliModel } from './protocol.js'
-import { BROKER_PROTOCOL_VERSION, CODEX_CLI_MODELS } from './protocol.js'
+import type {
+  BrokerExecuteRequest,
+  BrokerTool,
+  ClaudeEffortLevel,
+  CliProviderName,
+  CodexCliModel,
+} from './protocol.js'
+import { BROKER_PROTOCOL_VERSION, CLAUDE_EFFORT_LEVELS, CODEX_CLI_MODELS } from './protocol.js'
 import { GatewayError } from '../upstream/errors.js'
 
 interface GateScenario {
@@ -119,6 +125,14 @@ function selectedCodexModel(env: NodeJS.ProcessEnv): CodexCliModel {
   return model as CodexCliModel
 }
 
+function selectedClaudeEffort(env: NodeJS.ProcessEnv): ClaudeEffortLevel {
+  const effort = env.GATE_CLAUDE_EFFORT?.trim() || 'high'
+  if (!CLAUDE_EFFORT_LEVELS.includes(effort as ClaudeEffortLevel)) {
+    throw new Error(`GATE_CLAUDE_EFFORT deve ser um destes valores: ${CLAUDE_EFFORT_LEVELS.join(', ')}`)
+  }
+  return effort as ClaudeEffortLevel
+}
+
 export async function runViabilityGate(provider: CliProviderName): Promise<boolean> {
   const env: NodeJS.ProcessEnv = {
     ...process.env,
@@ -127,6 +141,7 @@ export async function runViabilityGate(provider: CliProviderName): Promise<boole
   }
   const config = loadBrokerConfig(env)
   const codexModel = provider === 'codex' ? selectedCodexModel(env) : undefined
+  const claudeEffort = provider === 'claude' ? selectedClaudeEffort(env) : undefined
   const runner = new ProcessRunner()
   const capabilities = await inspectCapabilities(config, runner)
   if (!capabilities[provider].available) {
@@ -153,6 +168,7 @@ export async function runViabilityGate(provider: CliProviderName): Promise<boole
           requestId: `gate-${provider}-${round}-${index}`,
           provider,
           ...(codexModel === undefined ? {} : { model: codexModel }),
+          ...(claudeEffort === undefined ? {} : { effort: claudeEffort }),
           ...item.request,
         })
         structurallyValid += 1
@@ -185,12 +201,69 @@ export async function runViabilityGate(provider: CliProviderName): Promise<boole
   return passed
 }
 
+export async function runClaudeEffortGate(): Promise<boolean> {
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    BROKER_ENABLE_CODEX_CLI: 'false',
+    BROKER_ENABLE_CLAUDE_CLI: 'true',
+  }
+  const config = loadBrokerConfig(env)
+  const runner = new ProcessRunner()
+  const capabilities = await inspectCapabilities(config, runner)
+  if (!capabilities.claude.available) {
+    process.stdout.write(`${JSON.stringify({
+      provider: 'claude',
+      gate: 'efforts',
+      passed: false,
+      reason: capabilities.claude.code,
+    })}\n`)
+    return false
+  }
+  const executor = new BrokerExecutor(config, runner, capabilities)
+  const scenario = scenarios.find((item) => item.name === 'texto')
+  if (!scenario) throw new Error('Cenário textual do gate não existe')
+  const efforts = CLAUDE_EFFORT_LEVELS.filter((effort) => effort !== 'high')
+  let structurallyValid = 0
+  let localToolExecutions = 0
+  const failureReasons: Record<string, number> = {}
+  for (const effort of efforts) {
+    try {
+      const response = await executor.execute({
+        version: BROKER_PROTOCOL_VERSION,
+        requestId: `gate-claude-effort-${effort}`,
+        provider: 'claude',
+        effort,
+        ...scenario.request,
+      })
+      if (response.decision.content !== null) structurallyValid += 1
+    } catch (error) {
+      if (error instanceof UnexpectedCliToolEventError) localToolExecutions += 1
+      const reason = error instanceof GatewayError ? error.name : error instanceof Error ? error.name : 'UnknownError'
+      failureReasons[reason] = (failureReasons[reason] ?? 0) + 1
+    }
+  }
+  const passed = structurallyValid === efforts.length && localToolExecutions === 0
+  process.stdout.write(`${JSON.stringify({
+    provider: 'claude',
+    gate: 'efforts',
+    efforts: efforts.length,
+    structurallyValid,
+    localToolExecutions,
+    failureReasons,
+    passed,
+  })}\n`)
+  return passed
+}
+
 const entrypoint = process.argv[1]
 if (entrypoint && import.meta.url === pathToFileURL(entrypoint).href) {
   const provider = process.argv[2]
-  if (provider !== 'codex' && provider !== 'claude') {
-    process.stderr.write('Uso: viability-gate <codex|claude>\n')
+  if (provider !== 'codex' && provider !== 'claude' && provider !== 'claude-efforts') {
+    process.stderr.write('Uso: viability-gate <codex|claude|claude-efforts>\n')
     process.exit(2)
   }
-  void runViabilityGate(provider).then((passed) => process.exit(passed ? 0 : 1)).catch(() => process.exit(1))
+  const gate = provider === 'claude-efforts'
+    ? runClaudeEffortGate()
+    : runViabilityGate(provider)
+  void gate.then((passed) => process.exit(passed ? 0 : 1)).catch(() => process.exit(1))
 }

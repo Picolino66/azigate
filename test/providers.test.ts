@@ -2,7 +2,11 @@ import { describe, expect, it } from 'vitest'
 import { createTestConfig } from '../src/config.js'
 import { canonicalPrompt } from '../src/broker/prompt.js'
 import { isBrokerExecuteRequest } from '../src/broker/protocol-validation.js'
-import { normalizeCliRequest, validateCliDecision } from '../src/providers/cli-request.js'
+import {
+  CliRequestValidationError,
+  normalizeCliRequest,
+  validateCliDecision,
+} from '../src/providers/cli-request.js'
 import { InvalidCliOutputError } from '../src/providers/errors.js'
 import { enabledCliAliases, resolveProvider } from '../src/providers/registry.js'
 
@@ -67,6 +71,42 @@ describe('providers CLI', () => {
     expect(normalized.tools[0]?.name).toBe('read_file')
   })
 
+  it('normaliza reasoning_effort somente para Claude e preserva o default quando omitido', () => {
+    const claude = normalizeCliRequest(
+      {
+        model: 'claude-cli',
+        messages: [{ role: 'user', content: 'Responda' }],
+        reasoning_effort: 'xhigh',
+      },
+      'request-claude',
+      'claude',
+    )
+    expect(claude).toMatchObject({ provider: 'claude', effort: 'xhigh' })
+    expect(claude).not.toHaveProperty('model')
+
+    const automatic = normalizeCliRequest(
+      { model: 'claude-cli', messages: [] },
+      'request-automatic',
+      'claude',
+    )
+    expect(automatic).not.toHaveProperty('effort')
+
+    const codex = request({ reasoning_effort: 'max' })
+    expect(codex).not.toHaveProperty('effort')
+  })
+
+  it.each(['none', '', 42, null])('rejeita reasoning_effort Claude inválido: %j', (effort) => {
+    expect(() => normalizeCliRequest(
+      {
+        model: 'claude-cli',
+        messages: [],
+        reasoning_effort: effort,
+      },
+      'request-invalid-effort',
+      'claude',
+    )).toThrow(CliRequestValidationError)
+  })
+
   it('rejeita conteúdo multimodal sem descartá-lo silenciosamente', () => {
     expect(() => request({
       messages: [{ role: 'user', content: [{ type: 'image_url', image_url: { url: 'https://example.invalid' } }] }],
@@ -88,6 +128,8 @@ describe('providers CLI', () => {
     { ...request(), model: 'modelo-fora-da-allowlist' },
     { ...request(), model: undefined },
     { ...request(), provider: 'claude', model: 'gpt-5.4' },
+    { ...request(), effort: 'low' },
+    { ...request(), provider: 'claude', model: undefined, effort: 'extreme' },
     { ...request(), messages: [{ role: 'root', content: 'x' }] },
     { ...request(), messages: [{ role: 'user', content: null }] },
     { ...request(), messages: [{ role: 'tool', content: 'x' }] },
@@ -97,6 +139,13 @@ describe('providers CLI', () => {
     { ...request(), parallelToolCalls: 'sim' },
   ])('protocolo interno rejeita variante inválida %#', (value) => {
     expect(isBrokerExecuteRequest(value)).toBe(false)
+  })
+
+  it('protocolo v3 aceita esforço Claude fechado e opcional', () => {
+    const claude = { ...request(), provider: 'claude' as const }
+    delete claude.model
+    expect(isBrokerExecuteRequest({ ...claude, provider: 'claude', effort: 'max' })).toBe(true)
+    expect(isBrokerExecuteRequest({ ...claude, provider: 'claude' })).toBe(true)
   })
 
   it('valida allowlist, argumentos JSON e tool_choice da decisão', () => {

@@ -4,16 +4,16 @@
 
 Evoluir o monólito Fastify existente sem alterar suas quatro rotas públicas. A DeepSeek permanece transparente; Codex e Claude são adaptadores experimentais, sem ferramentas, acionados por broker host. O Qwen Code no computador da VPN continua responsável por ler, executar e alterar o repositório.
 
-## Estado em 16/07/2026
+## Estado em 18/07/2026
 
 | Tarefa | Estado | Evidência principal |
 |---|---|---|
 | 1. ADRs | concluída | ADR-005, ADR-006 e ADR-007 |
-| 2. Contrato/prompt | concluída | protocolo v2, schema final e testes fail-closed |
+| 2. Contrato/prompt | evoluída | protocolo v3, schema final, effort Claude fechado e testes fail-closed |
 | 3. Núcleo multiprovedor | concluída | registry, catálogo/readiness e rename `gateway-ai` |
 | 4. Cliente/respostas CLI | concluída | Unix socket, JSON/SSE, erros e cancelamento |
 | 5. Broker isolado | concluída | Bubblewrap, systemd, socket privado e limites |
-| 6. Codex/Claude | concluída localmente | gates 20/20, zero ferramenta local em ambos |
+| 6. Codex/Claude | concluída localmente | Claude 2.1.214: 20/20 no high e 4/4 nos demais efforts, zero ferramenta local |
 | 7. Deploy | concluída como artefato | Compose, systemd, imagem e smoke local aprovados |
 | 8. Qwen remoto | documentada, smoke pendente | runbook completo; requer PC da VPN |
 | 9. Qualidade/segurança | concluída localmente | 95 testes, cobertura, audit e revisão de segurança |
@@ -31,7 +31,7 @@ O5 continua sendo o último snapshot estável até o smoke Qwen e o deploy LAN/T
 
 2. **Definir contrato interno e prompt canônico**
    - Objetivo: limitar a tradução OpenAI para CLI a dados estritamente necessários.
-   - Escopo: protocolo v2, mensagens textuais, modelo Codex fechado, function tools, schema de decisão, erros e validação de transcript.
+   - Escopo: protocolo v3, mensagens textuais, modelo Codex fechado, effort Claude fechado, function tools, schema de decisão, erros e validação de transcript.
    - Aceite: entrada rejeita cwd/comando/URL/path; saída aceita somente texto ou tool calls permitidas com JSON válido.
    - Dependências: tarefa 1.
 
@@ -101,4 +101,5 @@ O5 continua sendo o último snapshot estável até o smoke Qwen e o deploy LAN/T
 | MP-05 | catálogo/readiness | spec API | models/health/providers | degradação parcial e `503` |
 | MP-06 | operação host/container | threat model | systemd/Compose | verificações de artefatos |
 | MP-07 | Qwen remoto | runbook | documentação | smoke manual no PC da VPN |
-| MP-08 | seleção Codex por alias | ADR-008 / protocolo v2 | registry + broker | roteamento, argv e catálogo |
+| MP-08 | seleção Codex por alias | ADR-008 / protocolo v3 | registry + broker | roteamento, argv e catálogo |
+| MP-09 | Claude padrão com effort configurável | ADR-009 / protocolo v3 | normalização + executor Claude | enum, argv, capacidades, gates e smoke Qwen |

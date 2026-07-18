@@ -38,16 +38,21 @@ export const CODEX_DISABLED_FEATURES = [
 
 const CLAUDE_FLAGS = [
   '--print',
+  '--effort',
+  '--input-format',
   '--output-format',
   '--json-schema',
   '--tools',
   '--strict-mcp-config',
+  '--mcp-config',
   '--disable-slash-commands',
   '--no-chrome',
   '--no-session-persistence',
   '--setting-sources',
   '--settings',
   '--permission-mode',
+  '--agents',
+  '--system-prompt',
 ] as const
 
 export interface ProviderCapability extends BrokerProviderHealth {

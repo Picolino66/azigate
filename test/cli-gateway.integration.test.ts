@@ -102,6 +102,54 @@ describe('gateway multiprovedor CLI', () => {
     expect(broker.executeCalls).toHaveLength(0)
   })
 
+  it('mantém Claude desabilitado sem fallback para a DeepSeek', async () => {
+    const response = await appFor({ enableClaudeCli: false }).inject({
+      method: 'POST',
+      url: '/v1/chat/completions',
+      headers: CHAT_HEADERS,
+      payload: { model: 'claude-cli', messages: [{ role: 'user', content: 'olá' }] },
+    })
+    expect(response.statusCode).toBe(503)
+    expect(response.json()).toMatchObject({ error: { code: 'cli_unavailable' } })
+    expect(upstream.requests).toHaveLength(0)
+    expect(broker.executeCalls).toHaveLength(0)
+  })
+
+  it('encaminha reasoning_effort fechado ao Claude sem selecionar modelo', async () => {
+    broker.healthResult = health(true, true)
+    const response = await appFor({ enableClaudeCli: true }).inject({
+      method: 'POST',
+      url: '/v1/chat/completions',
+      headers: CHAT_HEADERS,
+      payload: {
+        model: 'claude-cli',
+        messages: [{ role: 'user', content: 'olá' }],
+        reasoning_effort: 'max',
+      },
+    })
+    expect(response.statusCode).toBe(200)
+    expect(broker.executeCalls[0]).toMatchObject({ provider: 'claude', effort: 'max' })
+    expect(broker.executeCalls[0]).not.toHaveProperty('model')
+  })
+
+  it('rejeita reasoning_effort Claude inválido antes de chamar o broker', async () => {
+    broker.healthResult = health(true, true)
+    const response = await appFor({ enableClaudeCli: true }).inject({
+      method: 'POST',
+      url: '/v1/chat/completions',
+      headers: CHAT_HEADERS,
+      payload: {
+        model: 'claude-cli',
+        messages: [],
+        reasoning_effort: 'extreme',
+      },
+    })
+    expect(response.statusCode).toBe(400)
+    expect(response.json()).toMatchObject({ error: { code: 'invalid_cli_request' } })
+    expect(broker.executeCalls).toHaveLength(0)
+    expect(upstream.requests).toHaveLength(0)
+  })
+
   it('normaliza tool call e usage do Codex para Chat Completions', async () => {
     broker.executeHandler = async (input) => ({
       version: BROKER_PROTOCOL_VERSION,
@@ -228,6 +276,21 @@ describe('gateway multiprovedor CLI', () => {
       'codex-cli-5.4',
       'codex-cli',
     ])
+  })
+
+  it('publica claude-cli no catálogo apenas quando habilitado e saudável', async () => {
+    upstream.setHandler((_request, response) => jsonResponse(response, 200, {
+      object: 'list',
+      data: [{ id: 'deepseek-chat', object: 'model', owned_by: 'deepseek' }],
+    }))
+    broker.healthResult = health(true, true)
+    const response = await appFor({ enableClaudeCli: true }).inject({
+      method: 'GET',
+      url: '/v1/models',
+      headers: AUTHORIZATION,
+    })
+    expect(response.statusCode).toBe(200)
+    expect(response.json<{ data: { id: string }[] }>().data.map((model) => model.id)).toContain('claude-cli')
   })
 
   it('mantém alias local quando a DeepSeek falha e retorna 503 quando todos falham', async () => {
