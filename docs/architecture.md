@@ -36,8 +36,8 @@ O gateway continua um monólito modular e stateless. O broker é um serviço hos
 - `providers/openai-response`: Chat Completions e SSE sintéticos dos CLIs;
 - `broker`: capacidade, protocolo, prompt, isolamento, subprocessos e servidor host;
 - `models`: catálogo DeepSeek cacheado combinado com aliases CLI saudáveis;
-- `observability`: métricas e logs somente de metadados, com destaque ANSI do campo `model` para
-  `deepseek-v4-flash`, `deepseek-v4-pro` e aliases `codex-cli-*` no stdout padrão.
+- `observability`: métricas e logs somente de metadados; cada alias conhecido recebe uma cor ANSI
+  própria no campo `model`, e o `effort` registrado para Claude é o valor normalizado efetivamente usado.
 
 Não há banco, fila, frontend, proxy genérico ou estado de conversa. Rate limit e cache continuam locais a cada processo.
 

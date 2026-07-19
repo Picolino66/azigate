@@ -6,7 +6,7 @@ import pino from 'pino'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createApp } from '../src/app.js'
 import { createTestConfig, type AppConfig } from '../src/config.js'
-import { colorizeModelLogLine } from '../src/observability/log-colors.js'
+import { colorizeModelLogLine, MODEL_LOG_COLORS } from '../src/observability/log-colors.js'
 import { GatewayMetrics } from '../src/observability/metrics.js'
 import { MockUpstream, jsonResponse } from './mock-upstream.js'
 
@@ -404,17 +404,19 @@ describe('gateway DeepSeek', () => {
       payload: {
         model: 'modelo-teste',
         messages: [{ role: 'user', content: 'PROMPT_ULTRASSECRETO' }],
+        reasoning_effort: 'high',
         tools: [{ type: 'function', function: { arguments: 'ARGUMENTO_SECRETO' } }],
       },
     })
     expect(logs).toContain('modelo-teste')
+    expect(logs).toContain('"effort":"high"')
     expect(logs).not.toContain('PROMPT_ULTRASSECRETO')
     expect(logs).not.toContain('ARGUMENTO_SECRETO')
     expect(logs).not.toContain('gateway-test-secret')
     expect(logs).not.toContain('deepseek-test-secret')
   })
 
-  it('colore modelos conhecidos nos logs de terminal', () => {
+  it('atribui uma cor distinta a cada alias conhecido nos logs de terminal', () => {
     expect(colorizeModelLogLine('{"model":"deepseek-v4-flash"}\n')).toBe(
       '{"model":"\x1b[32mdeepseek-v4-flash\x1b[0m"}\n',
     )
@@ -423,6 +425,11 @@ describe('gateway DeepSeek', () => {
     )
     expect(colorizeModelLogLine('{"model":"codex-cli"}\n')).toBe('{"model":"\x1b[31mcodex-cli\x1b[0m"}\n')
     expect(colorizeModelLogLine('{"model":"modelo-teste"}\n')).toBe('{"model":"modelo-teste"}\n')
+    const colors = Object.values(MODEL_LOG_COLORS)
+    expect(new Set(colors).size).toBe(colors.length)
+    for (const model of Object.keys(MODEL_LOG_COLORS)) {
+      expect(colorizeModelLogLine(`{"model":"${model}"}\n`)).toContain(`\x1b[`)
+    }
   })
 
   it('mantém métricas internas sem endpoint público', async () => {

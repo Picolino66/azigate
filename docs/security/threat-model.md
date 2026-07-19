@@ -33,7 +33,7 @@ Data da revisão: 18/07/2026. Escopo: gateway, adaptador DeepSeek, broker host, 
 | Socket acessado por outro usuário | inferência não autorizada | diretório `0700`, socket `0600`, mesmo UID e bind read-only | teste Unix e unidade systemd |
 | Saída maliciosa/alucinação de tool | Qwen executa ação não oferecida | schema fechado, allowlist de nomes, argumentos JSON, IDs locais e sem heurística de patch | testes de decisão e CLI output |
 | DoS/fork/processo órfão | exaustão de CPU/memória/processos | concorrência global 1 sem fila, timeout 10 min, 4 MiB, grupo SIGTERM/SIGKILL e limites systemd | testes de busy, timeout, output e cancelamento |
-| Vazamento em logs/erros | exposição de secrets e código | sem bodies/stdout/stderr/prompts; erros e health sanitizados | testes e revisão de observabilidade |
+| Vazamento em logs/erros | exposição de secrets e código | sem bodies/stdout/stderr/prompts; modelo e effort usam allowlists/normalização; erros e health sanitizados | testes e revisão de observabilidade |
 | Buffering/SSE inconsistente | cliente travado ou resposta inválida | DeepSeek byte a byte; CLI heartbeat e decisão atômica validada | testes dos dois regimes SSE |
 | Mudança de flags/versionamento CLI | perda silenciosa de isolamento | checks de startup e gate por versão; alias omitido quando incapaz | gate real e testes de capacidades |
 | Supply chain/container | execução vulnerável | lockfile, `npm ci`, imagem pinada, processo não root e audit | build, audit e smoke local |

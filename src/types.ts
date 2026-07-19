@@ -8,6 +8,7 @@ export interface RequestTelemetry extends TokenUsage {
   startedAt: number
   stream?: boolean
   model?: string
+  effort?: string
   upstreamStatus?: number
   error?: string
   credentialId?: string

@@ -1,7 +1,9 @@
 import type { AddressInfo } from 'node:net'
+import { Writable } from 'node:stream'
 import type { ReadableStream } from 'node:stream/web'
+import pino from 'pino'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createApp } from '../src/app.js'
+import { createApp, type AppDependencies } from '../src/app.js'
 import type {
   BrokerExecuteRequest,
   BrokerExecuteResponse,
@@ -80,10 +82,10 @@ describe('gateway multiprovedor CLI', () => {
     await upstream.close()
   })
 
-  function appFor(overrides: Partial<AppConfig> = {}): ReturnType<typeof createApp> {
+  function appFor(overrides: Partial<AppConfig> = {}, dependencies: AppDependencies = {}): ReturnType<typeof createApp> {
     const app = createApp(
       createTestConfig({ deepseekBaseUrl: upstreamUrl, enableCodexCli: true, ...overrides }),
-      { brokerClient: broker },
+      { brokerClient: broker, ...dependencies },
     )
     apps.push(app)
     return app
@@ -153,6 +155,31 @@ describe('gateway multiprovedor CLI', () => {
     expect(broker.executeCalls[0]).toMatchObject({ provider: 'claude', model })
     if (expected === undefined) expect(broker.executeCalls[0]).not.toHaveProperty('effort')
     else expect(broker.executeCalls[0]?.effort).toBe(expected)
+  })
+
+  it('registra o effort Claude já normalizado sem conteúdo da conversa', async () => {
+    let logs = ''
+    const logger = pino({ level: 'info', base: null }, new Writable({
+      write(chunk: Buffer, _encoding, callback) {
+        logs += chunk.toString()
+        callback()
+      },
+    }))
+    broker.healthResult = health(true, true)
+    const response = await appFor({ enableClaudeCli: true }, { logger }).inject({
+      method: 'POST',
+      url: '/v1/chat/completions',
+      headers: CHAT_HEADERS,
+      payload: {
+        model: 'claude-cli-opus-4.6',
+        messages: [{ role: 'user', content: 'PROMPT_ULTRASSECRETO' }],
+        reasoning_effort: 'xhigh',
+      },
+    })
+    expect(response.statusCode).toBe(200)
+    expect(logs).toContain('"model":"claude-cli-opus-4.6"')
+    expect(logs).toContain('"effort":"high"')
+    expect(logs).not.toContain('PROMPT_ULTRASSECRETO')
   })
 
   it('rejeita reasoning_effort Claude inválido antes de chamar o broker', async () => {

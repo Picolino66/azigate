@@ -1,7 +1,7 @@
 {
   "orchestration_id": "c16a8ea6-06e8-4ec2-bb2c-7ac4cd272dc5",
   "created_at": "2026-07-14T13:35:00Z",
-  "updated_at": "2026-07-18T18:30:00-03:00",
+  "updated_at": "2026-07-19T11:21:00-03:00",
   "mode": "feature-evolution",
   "current_phase": "F6",
   "snapshot_version": "O5",
@@ -142,7 +142,7 @@
       "broker": ["protocol", "capabilities", "prompt", "isolation", "process-runner", "executor", "server"],
       "operations": ["Docker", "Compose", "Nginx", "systemd"]
     },
-    "backlog": ["GW-01..GW-10", "MP-01..MP-10"],
+    "backlog": ["GW-01..GW-10", "MP-01..MP-11"],
     "test_coverage_thresholds": {
       "statements": 80,
       "branches": 70,
@@ -188,7 +188,8 @@
       "F5-claude-opus-4.7-efforts-4-de-4",
       "F5-claude-opus-4.6-gate-e-efforts",
       "F5-claude-sonnet-4.6-efforts-3-de-3",
-      "F5-claude-sonnet-4.5-gate"
+      "F5-claude-sonnet-4.5-gate",
+      "F7-observabilidade-cores-unicas-effort-126-testes"
     ],
     "gates_failed": [
       "F5-claude-opus-4.7-estrutura-19-de-20",
@@ -196,19 +197,19 @@
       "F5-claude-haiku-4.5-estrutura-19-de-20-categoria-11-de-20"
     ],
     "gates_pending": ["F6-deploy-conjunto-broker-gateway-v4", "F6-smoke-qwen-modelos-claude-aprovados-no-pc-da-vpn", "F6-deploy-tls-lan-real"],
-    "test_results": { "files": 6, "tests_passed": 125, "tests_failed": 0 },
-    "coverage_report": { "statements": 80.92, "branches": 75.35, "functions": 86.13, "lines": 86.35 },
+    "test_results": { "files": 6, "tests_passed": 126, "tests_failed": 0 },
+    "coverage_report": { "statements": 80.96, "branches": 75.6, "functions": 86.25, "lines": 86.39 },
     "security_report": "docs/security/2026-07-16-security-review.md"
   },
   "operations": {
-    "deployment_record": "broker host e gateway ativos no protocolo v3 em 192.168.2.6:3000; artefato v4 e .env do gateway preparados, mas os aliases Claude versionados ainda não foram publicados porque o restart conjunto exige sudo",
+    "deployment_record": "gateway foi recriado com o artefato v4 e observabilidade atualizada em 192.168.2.6:3000; o broker host ainda está no protocolo v3 e exige atualização coordenada com sudo antes de usar aliases CLI",
     "smoke_test_results": "Claude 2.1.214: cinco modelos aprovados e três reprovados individualmente; socket/catálogo/ready v4 e Qwen remoto pendentes após deploy conjunto",
-    "observability_config": "stdout padrão colore o campo model: deepseek-v4-flash em verde, deepseek-v4-pro em azul e aliases codex-cli em vermelho; logs continuam restritos a metadados",
+    "observability_config": "stdout padrão dá uma cor ANSI estável e distinta a cada alias conhecido; logs incluem somente o effort seguro efetivamente usado (normalizado para Claude) e permanecem restritos a metadados",
     "local_activation": {
       "gateway_env": "ENABLE_CLAUDE_CLI e BROKER_ENABLE_CLAUDE_CLI preparados como true no .env local; secrets preservados e não lidos",
       "allowed_models": "DeepSeek, aliases Codex e somente Claude aprovados: Fable 5, Sonnet 5, Opus 4.8, Opus 4.6 e Sonnet 4.5",
-      "broker": "serviço em execução está no protocolo v3 com Codex e Claude disponíveis; dist v4 pronto para instalação coordenada",
-      "gateway_restart": "container não foi recriado para evitar incompatibilidade v4/v3; requer primeiro atualizar o broker com sudo e depois recriar gateway"
+      "broker": "serviço em execução está no protocolo v3; dist v4 está pronto para instalação com sudo",
+      "gateway_restart": "container já usa v4; para restaurar compatibilidade dos aliases CLI, atualize e reinicie o broker imediatamente"
     },
     "runbooks": ["docs/operations/broker.md", "docs/operations/qwen-code.md"],
     "rollback": "desabilitar aliases e recriar o gateway preserva DeepSeek",
@@ -261,10 +262,10 @@
       {
         "skill_name": "autonomous-software-orchestrator",
         "source": "~/.agents/skills/autonomous-software-orchestrator",
-        "reason": "coordenar a evolução Claude, protocolo v4, gates por modelo, documentação e deploy fail-closed",
+        "reason": "coordenar a evolução Claude, protocolo v4, observabilidade por modelo/effort, documentação e deploy fail-closed",
         "mode": "coordenadora-principal",
         "phase": "F3-F6",
-        "timestamp": "2026-07-18T18:30:00-03:00"
+        "timestamp": "2026-07-19T11:21:00-03:00"
       }
     ]
   }

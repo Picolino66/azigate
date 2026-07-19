@@ -17,6 +17,8 @@
   - [DeepSeek](./modules/providers/deepseek.md)
   - [Codex CLI](./modules/providers/codex-cli.md)
   - [Claude CLI](./modules/providers/claude-cli.md)
+- [Observabilidade](./modules/observability/index.md)
+  - [Logs de requisição](./modules/observability/logs.md)
 
 ## Operação
 

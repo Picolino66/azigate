@@ -19,7 +19,7 @@ O serviço não é proxy aberto. A superfície continua limitada a `GET /health`
 - O container não recebe os logins dos CLIs; o broker não recebe as chaves DeepSeek/gateway.
 - Codex/Claude não recebem repositório, cwd ou ferramentas locais.
 - Tool calls são aceitas somente se oferecidas pelo Qwen e com argumentos JSON válidos.
-- Logs não contêm prompts, código, bodies, respostas, tool arguments ou secrets.
+- Logs não contêm prompts, código, bodies, respostas, tool arguments ou secrets. O stdout diferencia cada alias conhecido com uma cor e registra somente o effort seguro efetivamente usado.
 
 ## Requisitos
 

@@ -87,6 +87,7 @@ export function createApp(config: AppConfig, dependencies: AppDependencies = {})
       durationMs,
       ...(request.telemetry.stream === undefined ? {} : { stream: request.telemetry.stream }),
       ...(request.telemetry.model === undefined ? {} : { model: request.telemetry.model }),
+      ...(request.telemetry.effort === undefined ? {} : { effort: request.telemetry.effort }),
       ...(request.telemetry.upstreamStatus === undefined
         ? {}
         : { upstreamStatus: request.telemetry.upstreamStatus }),

@@ -16,7 +16,7 @@ Evoluir o monólito Fastify existente sem alterar suas quatro rotas públicas. A
 | 6. Codex/Claude | concluída localmente | cinco modelos Claude aprovados; três reprovados individualmente no gate real 2.1.214 |
 | 7. Deploy | concluída como artefato | Compose, systemd, imagem e smoke local aprovados |
 | 8. Qwen remoto | documentada, smoke pendente | runbook completo; requer PC da VPN |
-| 9. Qualidade/segurança | concluída localmente | 125 testes antes da sincronização final, cobertura, audit e revisão de segurança |
+| 9. Qualidade/segurança | concluída localmente | logs com cor única por alias e effort seguro; cobertura, audit e revisão de segurança |
 | 10. Fonte de verdade | concluída | docs/specs/ADRs/contexto sincronizados |
 
 O5 continua sendo o último snapshot estável até o smoke Qwen e o deploy LAN/TLS reais. Os aliases permanecem desligados por padrão; a aprovação dos gates não os publica automaticamente.
@@ -104,3 +104,4 @@ O5 continua sendo o último snapshot estável até o smoke Qwen e o deploy LAN/T
 | MP-08 | seleção Codex por alias | ADR-008 / protocolo v3 | registry + broker | roteamento, argv e catálogo |
 | MP-09 | Claude com effort configurável | ADR-009 | normalização + executor Claude | enum, argv, capacidades, gates e smoke Qwen |
 | MP-10 | seleção Claude por alias | ADR-010 / protocolo v4 | catálogo central + registry + broker | modelos, matrizes de effort, argv e gates por modelo |
+| MP-11 | logs por modelo e effort | docs de observabilidade | telemetria + destino Pino | cores únicas, effort normalizado e sanitização |

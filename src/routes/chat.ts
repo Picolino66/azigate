@@ -12,12 +12,20 @@ import type { ChatBody } from '../types.js'
 import type { DeepSeekClient } from '../upstream/client.js'
 import { forwardBufferedResponse, forwardStreamingResponse } from '../upstream/response.js'
 
+const LOGGABLE_DEEPSEEK_EFFORTS = new Set(['none', 'low', 'medium', 'high', 'xhigh', 'max'])
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
 function contentTypeIsJson(value: string | undefined): boolean {
   return /^application\/(?:[\w!#$&^_.+-]+\+)?json(?:\s*;|$)/iu.test(value ?? '')
+}
+
+function deepseekEffortForLog(value: unknown): string {
+  return typeof value === 'string' && LOGGABLE_DEEPSEEK_EFFORTS.has(value)
+    ? value
+    : 'não_informado'
 }
 
 export function registerChatRoute(
@@ -68,6 +76,7 @@ export function registerChatRoute(
 
       try {
         if (selection.kind === 'deepseek') {
+          request.telemetry.effort = deepseekEffortForLog(chatBody.reasoning_effort)
           const exchange = await client.request({
             path: 'chat/completions',
             method: 'POST',
@@ -94,6 +103,7 @@ export function registerChatRoute(
           request.telemetry.error = error.name
           return reply.code(400).send(publicError(error.publicMessage, 'invalid_cli_request'))
         }
+        request.telemetry.effort = brokerRequest.effort ?? 'não_aplicável'
         const execute = async () => {
           const result = await broker.execute(brokerRequest, cancellation.signal)
           return { decision: validateCliDecision(result.decision, brokerRequest), ...(result.usage ? { usage: result.usage } : {}) }
