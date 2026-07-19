@@ -6,7 +6,7 @@ import { CODEX_DISABLED_FEATURES } from './capabilities.js'
 import { buildIsolationCommand } from './isolation.js'
 import type { ProcessRunResult, ProcessRunnerLike } from './process-runner.js'
 import type { BrokerDecision, BrokerExecuteRequest, BrokerExecuteResponse, BrokerUsage } from './protocol.js'
-import { BROKER_PROTOCOL_VERSION } from './protocol.js'
+import { BROKER_PROTOCOL_VERSION, isClaudeCliModel, isCodexCliModel } from './protocol.js'
 import { canonicalPrompt, DECISION_JSON_SCHEMA } from './prompt.js'
 import { validateCliDecision } from '../providers/cli-request.js'
 import {
@@ -218,7 +218,7 @@ export class BrokerExecutor {
       )
       const cliArgs = request.provider === 'codex'
         ? this.codexArgs(request.model)
-        : this.claudeArgs(request.effort)
+        : this.claudeArgs(request.model, request.effort)
       const isolated = buildIsolationCommand(
         this.config,
         request.provider,
@@ -262,7 +262,7 @@ export class BrokerExecutor {
   }
 
   private codexArgs(model: BrokerExecuteRequest['model']): string[] {
-    if (model === undefined) throw new CliUnavailableError()
+    if (!isCodexCliModel(model)) throw new CliUnavailableError()
     return [
       'exec',
       '--ephemeral',
@@ -285,9 +285,11 @@ export class BrokerExecutor {
     ]
   }
 
-  private claudeArgs(effort: BrokerExecuteRequest['effort']): string[] {
+  private claudeArgs(model: BrokerExecuteRequest['model'], effort: BrokerExecuteRequest['effort']): string[] {
+    if (!isClaudeCliModel(model)) throw new CliUnavailableError()
     return [
       '--print',
+      '--model', model,
       ...(effort === undefined ? [] : ['--effort', effort]),
       '--input-format', 'text',
       '--output-format', 'json',

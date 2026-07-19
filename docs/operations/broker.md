@@ -96,13 +96,15 @@ GATE_CODEX_MODEL=gpt-5.6-terra npm run gate:codex
 GATE_CODEX_MODEL=gpt-5.6-luna npm run gate:codex
 GATE_CODEX_MODEL=gpt-5.5 npm run gate:codex
 GATE_CODEX_MODEL=gpt-5.4 npm run gate:codex
-GATE_CLAUDE_EFFORT=high npm run gate:claude
-npm run gate:claude-efforts
+GATE_CLAUDE_MODEL=claude-fable-5 npm run gate:claude
+GATE_CLAUDE_MODEL=claude-fable-5 npm run gate:claude-efforts
+# repita os dois comandos para sonnet-5, opus-4-8, opus-4-7, opus-4-6,
+# sonnet-4-6, sonnet-4-5 e haiku-4-5 usando os nomes completos
 ```
 
-Aprovação exige 20/20 decisões estruturalmente válidas, zero evento de ferramenta local e pelo menos 18/20 categorias corretas. Para Claude, o segundo comando exige 4/4 respostas estruturais e zero ferramenta local nos níveis `low`, `medium`, `xhigh` e `max`; `high` é coberto pelo gate completo. O relatório imprime apenas contagens. Se falhar, mantenha o respectivo `ENABLE_*_CLI=false`.
+Aprovação exige, por modelo, 20/20 decisões estruturalmente válidas, zero evento de ferramenta local e pelo menos 18/20 categorias corretas. O segundo comando percorre todos os efforts suportados diferentes do default; Sonnet 4.5 e Haiku 4.5 já são cobertos pelo gate completo sem `--effort`. O relatório imprime somente modelo e contagens. Falha individual remove apenas os aliases correspondentes de `ALLOWED_MODELS`.
 
-Em 18/07/2026, Claude `2.1.214` passou o gate `high` com 20/20 estruturas, zero ferramentas locais e 20/20 categorias; os outros efforts passaram 4/4 com zero ferramenta local. A versão atual usa `--json-schema` como mecanismo interno: `permissions.deny=["*"]` também o bloquearia, portanto o settings efêmero mantém allow/deny vazios enquanto `--tools ""`, MCP estrito vazio e `dontAsk` desabilitam ferramentas locais. Um upgrade do CLI invalida essa evidência. O primeiro smoke Codex revelou que `/etc/resolv.conf` apontava para `/run/systemd/resolve`; o isolamento foi corrigido fazendo bind read-only do arquivo resolvido, sem montar `/etc` inteiro.
+O protocolo v4 invalida a evidência v3 para publicação dos modelos versionados. Em 18/07/2026, Fable 5, Sonnet 5, Opus 4.8, Opus 4.6 e Sonnet 4.5 passaram; Opus 4.7, Sonnet 4.6 e Haiku 4.5 falharam e permanecem fora da allowlist. Como `claude-cli` é sinônimo de Sonnet 4.6, também permanece indisponível. A versão atual usa `--json-schema` como mecanismo interno: `permissions.deny=["*"]` também o bloquearia, portanto o settings efêmero mantém allow/deny vazios enquanto `--tools ""`, MCP estrito vazio e `dontAsk` desabilitam ferramentas locais. Um upgrade do CLI invalida toda evidência.
 
 ## Ativação no gateway
 
@@ -117,7 +119,13 @@ BROKER_UID=1000
 BROKER_GID=1000
 ```
 
-No ambiente privado do broker, defina também `BROKER_ENABLE_CLAUDE_CLI=true`. `BROKER_UID` e `BROKER_GID` devem corresponder ao usuário da unidade. Se `ALLOWED_MODELS` estiver preenchida, inclua os aliases Codex desejados e `claude-cli`.
+No ambiente privado do broker, defina também `BROKER_ENABLE_CLAUDE_CLI=true`. `BROKER_UID` e `BROKER_GID` devem corresponder ao usuário da unidade. Em `ALLOWED_MODELS`, inclua somente aliases Claude aprovados; `claude-cli` e `claude-cli-sonnet-4.6` compartilham o mesmo gate.
+
+Para a evidência atual, o trecho Claude aprovado é:
+
+```dotenv
+ALLOWED_MODELS=claude-cli-fable-5,claude-cli-sonnet-5,claude-cli-opus-4.8,claude-cli-opus-4.6,claude-cli-sonnet-4.5
+```
 
 ```bash
 docker compose config

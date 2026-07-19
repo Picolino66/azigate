@@ -8,15 +8,15 @@ Evoluir o monólito Fastify existente sem alterar suas quatro rotas públicas. A
 
 | Tarefa | Estado | Evidência principal |
 |---|---|---|
-| 1. ADRs | concluída | ADR-005, ADR-006 e ADR-007 |
-| 2. Contrato/prompt | evoluída | protocolo v3, schema final, effort Claude fechado e testes fail-closed |
+| 1. ADRs | concluída | ADR-005 a ADR-010 |
+| 2. Contrato/prompt | evoluída | protocolo v4, modelos/efforts fechados e testes fail-closed |
 | 3. Núcleo multiprovedor | concluída | registry, catálogo/readiness e rename `gateway-ai` |
 | 4. Cliente/respostas CLI | concluída | Unix socket, JSON/SSE, erros e cancelamento |
 | 5. Broker isolado | concluída | Bubblewrap, systemd, socket privado e limites |
-| 6. Codex/Claude | concluída localmente | Claude 2.1.214: 20/20 no high e 4/4 nos demais efforts, zero ferramenta local |
+| 6. Codex/Claude | concluída localmente | cinco modelos Claude aprovados; três reprovados individualmente no gate real 2.1.214 |
 | 7. Deploy | concluída como artefato | Compose, systemd, imagem e smoke local aprovados |
 | 8. Qwen remoto | documentada, smoke pendente | runbook completo; requer PC da VPN |
-| 9. Qualidade/segurança | concluída localmente | 95 testes, cobertura, audit e revisão de segurança |
+| 9. Qualidade/segurança | concluída localmente | 125 testes antes da sincronização final, cobertura, audit e revisão de segurança |
 | 10. Fonte de verdade | concluída | docs/specs/ADRs/contexto sincronizados |
 
 O5 continua sendo o último snapshot estável até o smoke Qwen e o deploy LAN/TLS reais. Os aliases permanecem desligados por padrão; a aprovação dos gates não os publica automaticamente.
@@ -31,7 +31,7 @@ O5 continua sendo o último snapshot estável até o smoke Qwen e o deploy LAN/T
 
 2. **Definir contrato interno e prompt canônico**
    - Objetivo: limitar a tradução OpenAI para CLI a dados estritamente necessários.
-   - Escopo: protocolo v3, mensagens textuais, modelo Codex fechado, effort Claude fechado, function tools, schema de decisão, erros e validação de transcript.
+   - Escopo: protocolo v4, mensagens textuais, modelos Codex/Claude fechados, effort Claude por modelo, function tools, schema de decisão, erros e validação de transcript.
    - Aceite: entrada rejeita cwd/comando/URL/path; saída aceita somente texto ou tool calls permitidas com JSON válido.
    - Dependências: tarefa 1.
 
@@ -56,8 +56,8 @@ O5 continua sendo o último snapshot estável até o smoke Qwen e o deploy LAN/T
    - Dependências: tarefa 2.
 
 6. **Adicionar adaptadores Codex e Claude**
-   - Objetivo: usar os logins existentes e modelos Codex explicitamente fixados por alias.
-   - Escopo: argv fixo, schema final, controles documentados, gate de 10 cenários executado duas vezes.
+   - Objetivo: usar os logins existentes e modelos Codex/Claude explicitamente fixados por alias.
+   - Escopo: argv fixo, schema final, controles documentados, gate de 10 cenários executado duas vezes por modelo.
    - Aceite: alias só fica saudável com 100% de estrutura válida, zero ferramenta local e ao menos 90% de categoria correta; nenhuma API key nova.
    - Dependências: tarefa 5.
 
@@ -102,4 +102,5 @@ O5 continua sendo o último snapshot estável até o smoke Qwen e o deploy LAN/T
 | MP-06 | operação host/container | threat model | systemd/Compose | verificações de artefatos |
 | MP-07 | Qwen remoto | runbook | documentação | smoke manual no PC da VPN |
 | MP-08 | seleção Codex por alias | ADR-008 / protocolo v3 | registry + broker | roteamento, argv e catálogo |
-| MP-09 | Claude padrão com effort configurável | ADR-009 / protocolo v3 | normalização + executor Claude | enum, argv, capacidades, gates e smoke Qwen |
+| MP-09 | Claude com effort configurável | ADR-009 | normalização + executor Claude | enum, argv, capacidades, gates e smoke Qwen |
+| MP-10 | seleção Claude por alias | ADR-010 / protocolo v4 | catálogo central + registry + broker | modelos, matrizes de effort, argv e gates por modelo |

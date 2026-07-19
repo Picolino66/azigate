@@ -43,8 +43,9 @@ Não há banco, fila, frontend, proxy genérico ou estado de conversa. Rate limi
 
 ## Registry e disponibilidade
 
-- `codex-cli-sol`, `codex-cli-terra`, `codex-cli-luna`, `codex-cli-5.5`, `codex-cli-5.4`, o legado `codex-cli` e `claude-cli` são reservados mesmo quando desabilitados; nunca caem na DeepSeek.
+- Os aliases Codex e Claude definidos no catálogo central são reservados mesmo quando desabilitados; nunca caem na DeepSeek.
 - Os aliases Codex escolhem modelos internos fixos por allowlist; `codex-cli` permanece sinônimo de `gpt-5.4`.
+- Os aliases Claude escolhem oito modelos completos; `claude-cli` permanece sinônimo de `claude-sonnet-4-6`. A `ALLOWED_MODELS` publica somente modelos aprovados nos gates reais.
 - Qualquer outro ID permitido é encaminhado ao adaptador DeepSeek.
 - Não existe fallback automático entre provedores.
 - `/v1/models` combina o catálogo DeepSeek com aliases habilitados e saudáveis.
@@ -53,7 +54,7 @@ Não há banco, fila, frontend, proxy genérico ou estado de conversa. Rate limi
 
 ## Broker e isolamento
 
-O protocolo v3 oferece somente `GET /health` e `POST /execute` em Unix socket. Sua entrada é reconstruída pelo gateway e contém request ID, provedor, modelo Codex validado, esforço Claude opcional em enum fechada, mensagens textuais, function tools, `tool_choice` e `parallel_tool_calls`. Cwd, path de host, URL, comando, argv e ambiente não pertencem ao contrato.
+O protocolo v4 oferece somente `GET /health` e `POST /execute` em Unix socket. Sua entrada é reconstruída pelo gateway e contém request ID, provedor, modelo CLI validado, esforço Claude normalizado, mensagens textuais, function tools, `tool_choice` e `parallel_tool_calls`. Cwd, path de host, URL, comando, argv e ambiente não pertencem ao contrato.
 
 Cada execução:
 
@@ -88,6 +89,7 @@ Somente o diretório de autenticação do CLI selecionado entra na sandbox. Nenh
 - [ADR-007](../adr/ADR-007-streaming-dividido-por-provedor.md): streaming por tipo de provedor.
 - [ADR-008](../adr/ADR-008-aliases-codex-com-modelo-fixo.md): seleção Codex por aliases fechados.
 - [ADR-009](../adr/ADR-009-claude-cli-esforco-configuravel.md): Claude no modelo padrão com esforço fechado.
+- [ADR-010](../adr/ADR-010-aliases-claude-com-modelo-fixo.md): aliases Claude com modelo e effort fixados.
 
 ## Referências de integração
 

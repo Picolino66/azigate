@@ -45,6 +45,7 @@ const CLAUDE_FLAGS = [
   '--tools',
   '--strict-mcp-config',
   '--mcp-config',
+  '--model',
   '--disable-slash-commands',
   '--no-chrome',
   '--no-session-persistence',

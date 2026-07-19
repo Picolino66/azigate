@@ -115,7 +115,7 @@ describe('gateway multiprovedor CLI', () => {
     expect(broker.executeCalls).toHaveLength(0)
   })
 
-  it('encaminha reasoning_effort fechado ao Claude sem selecionar modelo', async () => {
+  it('encaminha modelo fixo e reasoning_effort normalizado ao Claude', async () => {
     broker.healthResult = health(true, true)
     const response = await appFor({ enableClaudeCli: true }).inject({
       method: 'POST',
@@ -128,8 +128,31 @@ describe('gateway multiprovedor CLI', () => {
       },
     })
     expect(response.statusCode).toBe(200)
-    expect(broker.executeCalls[0]).toMatchObject({ provider: 'claude', effort: 'max' })
-    expect(broker.executeCalls[0]).not.toHaveProperty('model')
+    expect(broker.executeCalls[0]).toMatchObject({
+      provider: 'claude',
+      model: 'claude-sonnet-4-6',
+      effort: 'max',
+    })
+  })
+
+  it.each([
+    ['claude-cli-opus-4.6', 'xhigh', 'claude-opus-4-6', 'high'],
+    ['claude-cli-opus-4.7', undefined, 'claude-opus-4-7', 'xhigh'],
+    ['claude-cli-haiku-4.5', 'max', 'claude-haiku-4-5', undefined],
+  ] as const)('aplica matriz de effort de %s', async (alias, requested, model, expected) => {
+    broker.healthResult = health(true, true)
+    const payload: Record<string, unknown> = { model: alias, messages: [] }
+    if (requested !== undefined) payload.reasoning_effort = requested
+    const response = await appFor({ enableClaudeCli: true }).inject({
+      method: 'POST',
+      url: '/v1/chat/completions',
+      headers: CHAT_HEADERS,
+      payload,
+    })
+    expect(response.statusCode).toBe(200)
+    expect(broker.executeCalls[0]).toMatchObject({ provider: 'claude', model })
+    if (expected === undefined) expect(broker.executeCalls[0]).not.toHaveProperty('effort')
+    else expect(broker.executeCalls[0]?.effort).toBe(expected)
   })
 
   it('rejeita reasoning_effort Claude inválido antes de chamar o broker', async () => {
@@ -146,6 +169,23 @@ describe('gateway multiprovedor CLI', () => {
     })
     expect(response.statusCode).toBe(400)
     expect(response.json()).toMatchObject({ error: { code: 'invalid_cli_request' } })
+    expect(broker.executeCalls).toHaveLength(0)
+    expect(upstream.requests).toHaveLength(0)
+  })
+
+  it('modelo Claude fora da ALLOWED_MODELS recebe 403 sem chamar provider', async () => {
+    broker.healthResult = health(true, true)
+    const response = await appFor({
+      enableClaudeCli: true,
+      allowedModels: new Set(['claude-cli-sonnet-4.6']),
+    }).inject({
+      method: 'POST',
+      url: '/v1/chat/completions',
+      headers: CHAT_HEADERS,
+      payload: { model: 'claude-cli-fable-5', messages: [] },
+    })
+    expect(response.statusCode).toBe(403)
+    expect(response.json()).toMatchObject({ error: { code: 'model_not_allowed' } })
     expect(broker.executeCalls).toHaveLength(0)
     expect(upstream.requests).toHaveLength(0)
   })
@@ -278,19 +318,26 @@ describe('gateway multiprovedor CLI', () => {
     ])
   })
 
-  it('publica claude-cli no catálogo apenas quando habilitado e saudável', async () => {
+  it('publica aliases Claude saudáveis filtrados pela allowlist', async () => {
     upstream.setHandler((_request, response) => jsonResponse(response, 200, {
       object: 'list',
       data: [{ id: 'deepseek-chat', object: 'model', owned_by: 'deepseek' }],
     }))
     broker.healthResult = health(true, true)
-    const response = await appFor({ enableClaudeCli: true }).inject({
+    const response = await appFor({
+      enableClaudeCli: true,
+      allowedModels: new Set(['deepseek-chat', 'claude-cli-opus-4.8', 'claude-cli']),
+    }).inject({
       method: 'GET',
       url: '/v1/models',
       headers: AUTHORIZATION,
     })
     expect(response.statusCode).toBe(200)
-    expect(response.json<{ data: { id: string }[] }>().data.map((model) => model.id)).toContain('claude-cli')
+    expect(response.json<{ data: { id: string }[] }>().data.map((model) => model.id)).toEqual([
+      'deepseek-chat',
+      'claude-cli-opus-4.8',
+      'claude-cli',
+    ])
   })
 
   it('mantém alias local quando a DeepSeek falha e retorna 503 quando todos falham', async () => {

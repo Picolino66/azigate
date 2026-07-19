@@ -1,14 +1,14 @@
 {
   "orchestration_id": "c16a8ea6-06e8-4ec2-bb2c-7ac4cd272dc5",
   "created_at": "2026-07-14T13:35:00Z",
-  "updated_at": "2026-07-18T14:49:00-03:00",
+  "updated_at": "2026-07-18T18:30:00-03:00",
   "mode": "feature-evolution",
   "current_phase": "F6",
   "snapshot_version": "O5",
   "last_stable_snapshot": "O5",
   "evolution_cycle": {
     "name": "multiprovider-cli-broker",
-    "status": "claude-2.1.214-gates-passed-protocol-v3-deploy-pending",
+    "status": "claude-model-gates-complete-protocol-v4-deploy-pending",
     "reassessed_phases": ["F2", "F3", "F5", "F6"],
     "next_snapshot": "pending-remote-qwen-smoke"
   },
@@ -35,7 +35,7 @@
       "catálogo combinado com degradação parcial",
       "DeepSeek JSON/SSE transparente",
       "Codex e Claude JSON/SSE sintéticos",
-      "protocolo Unix v3 health/execute com modelo Codex fixado e effort Claude fechado"
+      "protocolo Unix v4 health/execute com modelos Codex/Claude fixados e effort Claude fechado por modelo"
     ],
     "non_functional": [
       "Qwen como único executor",
@@ -49,7 +49,7 @@
       "uso pessoal single-user em LAN/IP allowlist",
       "sem novas API keys Codex/Claude",
       "aliases Codex dependem do login existente e de modelos internos fixados por allowlist",
-      "Claude é opt-in e usa somente o modelo padrão da conta",
+      "Claude é opt-in e usa somente modelos fixados pelo catálogo e pela allowlist",
       "reasoning_effort Claude aceita low, medium, high, xhigh ou max",
       "sem repositório/home completo no servidor ou sandbox"
     ]
@@ -84,12 +84,11 @@
     },
     "claude_gate": {
       "version": "2.1.214",
-      "structurally_valid": "20/20",
+      "passed_models": ["claude-fable-5", "claude-sonnet-5", "claude-opus-4-8", "claude-opus-4-6", "claude-sonnet-4-5"],
+      "failed_models": ["claude-opus-4-7", "claude-sonnet-4-6", "claude-haiku-4-5"],
       "local_tool_executions": 0,
-      "category_correct": "20/20",
-      "passed": true,
-      "effort_smokes": "4/4 para low, medium, xhigh e max; zero ferramenta local",
-      "publication": "opt-in autorizado; deploy v3 conjunto pendente"
+      "effort_smokes": "Fable 4/4, Sonnet 5 4/4, Opus 4.8 4/4, Opus 4.7 4/4, Opus 4.6 3/3 e Sonnet 4.6 3/3; Sonnet 4.5 e Haiku 4.5 não possuem effort",
+      "publication": "somente cinco modelos aprovados; deploy v4 conjunto pendente"
     },
     "risks": [
       "mudança de flags/semântica das CLIs",
@@ -111,9 +110,9 @@
     "integration_contracts": [
       "Qwen Code OpenAI Compatible /v1",
       "DeepSeek /models e /chat/completions",
-      "broker Unix protocol v3 /health e /execute",
+      "broker Unix protocol v4 /health e /execute",
       "Codex exec --model fixado, --json, --output-schema e --ephemeral",
-      "Claude print mode com JSON schema, effort fechado e tools/MCP vazios"
+      "Claude print mode com --model/--effort fixados, JSON schema e tools/MCP vazios"
     ],
     "security_model": {
       "authentication": "Bearer gateway e logins CLI existentes no host",
@@ -122,7 +121,7 @@
       "ssrf": "DeepSeek e paths fixos; protocolo broker sem URL/path",
       "execution": "Qwen único executor; CLIs sem ferramentas locais"
     },
-    "adrs": ["ADR-001", "ADR-002", "ADR-003", "ADR-004", "ADR-005", "ADR-006", "ADR-007", "ADR-008", "ADR-009"]
+    "adrs": ["ADR-001", "ADR-002", "ADR-003", "ADR-004", "ADR-005", "ADR-006", "ADR-007", "ADR-008", "ADR-009", "ADR-010"]
   },
   "contracts": {
     "api_version": "v1",
@@ -143,7 +142,7 @@
       "broker": ["protocol", "capabilities", "prompt", "isolation", "process-runner", "executor", "server"],
       "operations": ["Docker", "Compose", "Nginx", "systemd"]
     },
-    "backlog": ["GW-01..GW-10", "MP-01..MP-09"],
+    "backlog": ["GW-01..GW-10", "MP-01..MP-10"],
     "test_coverage_thresholds": {
       "statements": 80,
       "branches": 70,
@@ -181,23 +180,35 @@
       "F6-colored-model-logs-check",
       "F5-protocolo-v3-claude-effort-check-115-testes",
       "F5-claude-2.1.214-high-gate-20-de-20",
-      "F5-claude-efforts-gate-4-de-4"
+      "F5-claude-efforts-gate-4-de-4",
+      "F5-protocolo-v4-modelos-claude-check-125-testes",
+      "F5-claude-fable-5-gate-e-efforts",
+      "F5-claude-sonnet-5-gate-e-efforts",
+      "F5-claude-opus-4.8-gate-e-efforts",
+      "F5-claude-opus-4.7-efforts-4-de-4",
+      "F5-claude-opus-4.6-gate-e-efforts",
+      "F5-claude-sonnet-4.6-efforts-3-de-3",
+      "F5-claude-sonnet-4.5-gate"
     ],
-    "gates_failed": [],
-    "gates_pending": ["F6-deploy-conjunto-broker-gateway-v3", "F6-smoke-qwen-claude-low-high-max-no-pc-da-vpn", "F6-deploy-tls-lan-real"],
-    "test_results": { "files": 6, "tests_passed": 115, "tests_failed": 0 },
-    "coverage_report": { "statements": 80.9, "branches": 75.35, "functions": 85.95, "lines": 86.18 },
+    "gates_failed": [
+      "F5-claude-opus-4.7-estrutura-19-de-20",
+      "F5-claude-sonnet-4.6-estrutura-18-de-20",
+      "F5-claude-haiku-4.5-estrutura-19-de-20-categoria-11-de-20"
+    ],
+    "gates_pending": ["F6-deploy-conjunto-broker-gateway-v4", "F6-smoke-qwen-modelos-claude-aprovados-no-pc-da-vpn", "F6-deploy-tls-lan-real"],
+    "test_results": { "files": 6, "tests_passed": 125, "tests_failed": 0 },
+    "coverage_report": { "statements": 80.92, "branches": 75.35, "functions": 86.13, "lines": 86.35 },
     "security_report": "docs/security/2026-07-16-security-review.md"
   },
   "operations": {
-    "deployment_record": "broker host e gateway ativos no protocolo v2 em 192.168.2.6:3000; artefato v3 e .env do gateway preparados, mas Claude ainda não foi publicado porque o restart conjunto exige sudo",
-    "smoke_test_results": "Claude 2.1.214 passou gate high 20/20 e efforts restantes 4/4 sem ferramenta local; socket/catálogo/ready v3 e Qwen remoto pendentes após deploy conjunto",
+    "deployment_record": "broker host e gateway ativos no protocolo v3 em 192.168.2.6:3000; artefato v4 e .env do gateway preparados, mas os aliases Claude versionados ainda não foram publicados porque o restart conjunto exige sudo",
+    "smoke_test_results": "Claude 2.1.214: cinco modelos aprovados e três reprovados individualmente; socket/catálogo/ready v4 e Qwen remoto pendentes após deploy conjunto",
     "observability_config": "stdout padrão colore o campo model: deepseek-v4-flash em verde, deepseek-v4-pro em azul e aliases codex-cli em vermelho; logs continuam restritos a metadados",
     "local_activation": {
       "gateway_env": "ENABLE_CLAUDE_CLI e BROKER_ENABLE_CLAUDE_CLI preparados como true no .env local; secrets preservados e não lidos",
-      "allowed_models": "DeepSeek, aliases Codex e claude-cli presentes na allowlist local",
-      "broker": "serviço em execução ainda está no protocolo v2 com Claude desabilitado; dist v3 pronto para instalação coordenada",
-      "gateway_restart": "container não foi recriado para evitar incompatibilidade v3/v2; requer primeiro atualizar o broker com sudo e depois recriar gateway"
+      "allowed_models": "DeepSeek, aliases Codex e somente Claude aprovados: Fable 5, Sonnet 5, Opus 4.8, Opus 4.6 e Sonnet 4.5",
+      "broker": "serviço em execução está no protocolo v3 com Codex e Claude disponíveis; dist v4 pronto para instalação coordenada",
+      "gateway_restart": "container não foi recriado para evitar incompatibilidade v4/v3; requer primeiro atualizar o broker com sudo e depois recriar gateway"
     },
     "runbooks": ["docs/operations/broker.md", "docs/operations/qwen-code.md"],
     "rollback": "desabilitar aliases e recriar o gateway preserva DeepSeek",
@@ -250,10 +261,10 @@
       {
         "skill_name": "autonomous-software-orchestrator",
         "source": "~/.agents/skills/autonomous-software-orchestrator",
-        "reason": "coordenar a evolução Claude, protocolo v3, gates, documentação e deploy fail-closed",
+        "reason": "coordenar a evolução Claude, protocolo v4, gates por modelo, documentação e deploy fail-closed",
         "mode": "coordenadora-principal",
         "phase": "F3-F6",
-        "timestamp": "2026-07-18T14:49:00-03:00"
+        "timestamp": "2026-07-18T18:30:00-03:00"
       }
     ]
   }

@@ -15,7 +15,7 @@ O serviço não é proxy aberto. A superfície continua limitada a `GET /health`
 
 - DeepSeek preserva campos futuros, tool calls, reasoning, SSE, usage e `[DONE]`.
 - `codex-cli-sol`, `codex-cli-terra`, `codex-cli-luna`, `codex-cli-5.5` e `codex-cli-5.4` selecionam modelos Codex fixos; `codex-cli` continua como sinônimo de GPT-5.4. Todos são reservados e nunca caem automaticamente na DeepSeek.
-- `claude-cli` usa o modelo padrão da conta e aceita `reasoning_effort` de `low` a `max`, sem expor reasoning.
+- Aliases `claude-cli-*` selecionam oito modelos Claude fixos; `claude-cli` é sinônimo de Sonnet 4.6. Effort é normalizado por modelo sem expor reasoning, e `ALLOWED_MODELS` publica somente modelos aprovados no gate real.
 - O container não recebe os logins dos CLIs; o broker não recebe as chaves DeepSeek/gateway.
 - Codex/Claude não recebem repositório, cwd ou ferramentas locais.
 - Tool calls são aceitas somente se oferecidas pelo Qwen e com argumentos JSON válidos.
@@ -55,7 +55,7 @@ Variáveis novas:
 | Variável | Padrão | Uso |
 |---|---:|---|
 | `ENABLE_CODEX_CLI` | `false` | publica os aliases Codex se o broker o marcar saudável |
-| `ENABLE_CLAUDE_CLI` | `false` | publica `claude-cli` quando broker e gates da versão instalada estiverem saudáveis |
+| `ENABLE_CLAUDE_CLI` | `false` | habilita aliases Claude saudáveis; `ALLOWED_MODELS` decide quais foram aprovados e publicados |
 | `CLI_BROKER_SOCKET_PATH` | `/run/gateway-ai/broker.sock` | socket visto pelo container |
 | `CLI_REQUEST_TIMEOUT_MS` | `600000` | timeout gateway -> broker |
 | `CLI_HEARTBEAT_INTERVAL_MS` | `15000` | heartbeat SSE enquanto o CLI decide |
@@ -72,7 +72,7 @@ Siga [instalação e operação do broker](docs/operations/broker.md). Em resumo
 2. valide login, flags, Bubblewrap, socket e permissões;
 3. execute `npm run gate:codex`;
 4. somente se aprovado, defina `ENABLE_CODEX_CLI=true` e recrie o gateway;
-5. execute `GATE_CLAUDE_EFFORT=high npm run gate:claude` e `npm run gate:claude-efforts` antes de habilitá-lo.
+5. para cada modelo Claude, execute `GATE_CLAUDE_MODEL=<modelo> npm run gate:claude` e `GATE_CLAUDE_MODEL=<modelo> npm run gate:claude-efforts` antes de incluí-lo na allowlist.
 
 Nenhuma API key Codex/Claude é criada. Se o login ou a política bloquear automação, o alias permanece indisponível.
 

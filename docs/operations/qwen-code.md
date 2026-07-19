@@ -100,9 +100,9 @@ Em `~/.qwen/settings.json`, mescle sem remover outras configurações:
           }
         },
         {
-          "id": "claude-cli",
-          "name": "Claude CLI via gateway-ai",
-          "description": "Modelo padrão da conta; execução local pelo Qwen",
+          "id": "claude-cli-opus-4.8",
+          "name": "Claude Opus 4.8 via gateway-ai",
+          "description": "Modelo Claude aprovado no gate real; execução local pelo Qwen",
           "envKey": "GATEWAY_AI_API_KEY",
           "baseUrl": "https://ia.meudominio.com/v1",
           "generationConfig": {
@@ -117,6 +117,19 @@ Em `~/.qwen/settings.json`, mescle sem remover outras configurações:
 }
 ```
 
+Repita a entrada Claude trocando `id`, nome e `reasoningEffort` conforme a tabela. Inclua somente modelos aprovados no gate e presentes em `/v1/models`:
+
+| ID Qwen | Modelo | Efforts expostos | Default | Gate 18/07/2026 |
+|---|---|---|---|---|
+| `claude-cli-fable-5` | Fable 5 | low, medium, high, xhigh, max | high | aprovado |
+| `claude-cli-sonnet-5` | Sonnet 5 | low, medium, high, xhigh, max | high | aprovado |
+| `claude-cli-opus-4.8` | Opus 4.8 | low, medium, high, xhigh, max | high | aprovado |
+| `claude-cli-opus-4.7` | Opus 4.7 | low, medium, high, xhigh, max | xhigh | reprovado; não configurar |
+| `claude-cli-opus-4.6` | Opus 4.6 | low, medium, high, max | high | aprovado |
+| `claude-cli-sonnet-4.6` / `claude-cli` | Sonnet 4.6 | low, medium, high, max | high | reprovado; não configurar |
+| `claude-cli-sonnet-4.5` | Sonnet 4.5 | nenhum | omitir | aprovado |
+| `claude-cli-haiku-4.5` | Haiku 4.5 | nenhum | omitir | reprovado; não configurar |
+
 Não grave o valor da chave no JSON:
 
 ```bash
@@ -124,7 +137,7 @@ export GATEWAY_AI_API_KEY='CHAVE_DO_GATEWAY'
 qwen
 ```
 
-Dentro do Qwen, use `/model`: selecione `deepseek-v4-pro` ou `deepseek-v4-flash` para a DeepSeek; um alias `codex-cli-*` para Codex; ou `claude-cli` para o modelo padrão da conta Claude. Em Claude, os valores de `reasoningEffort` `low`, `medium`, `high`, `xhigh` e `max` são encaminhados de verdade; omitir usa o padrão da conta. Todos usam a mesma `baseUrl` e a mesma chave do gateway. `codex-cli` continua compatível e seleciona GPT-5.4. Mantenha o approval mode interativo e não use YOLO/auto-approval para este fluxo.
+Dentro do Qwen, use `/model` para selecionar DeepSeek, um alias `codex-cli-*` ou um alias Claude aprovado. Effort omitido ou incompatível usa o default da tabela; Sonnet 4.5 e Haiku 4.5 ignoram qualquer effort. Todos usam a mesma `baseUrl` e chave. `codex-cli` continua selecionando GPT-5.4. O alias `claude-cli` representa Sonnet 4.6, mas permanece fora da publicação atual porque seu gate falhou. Mantenha approval interativo e não use YOLO/auto-approval.
 
 ## Fallback para versão antiga
 
@@ -137,7 +150,7 @@ export OPENAI_MODEL='codex-cli-luna'
 qwen
 ```
 
-Esse fallback seleciona um modelo por processo. Use `OPENAI_MODEL=deepseek-v4-pro` ou `OPENAI_MODEL=deepseek-v4-flash` para DeepSeek, um dos aliases `codex-cli-*` para Codex ou `OPENAI_MODEL=claude-cli` para Claude. Não é preciso atualizar o Qwen apenas para esta integração.
+Esse fallback seleciona um modelo por processo. Use um ID DeepSeek, Codex ou Claude aprovado, por exemplo `OPENAI_MODEL=claude-cli-opus-4.8`. Não é preciso atualizar o Qwen apenas para esta integração.
 
 ## Smoke manual em repositório descartável
 

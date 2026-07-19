@@ -42,6 +42,7 @@
 - [ADR-007 — streaming dividido](../adr/ADR-007-streaming-dividido-por-provedor.md)
 - [ADR-008 — aliases Codex com modelo fixo](../adr/ADR-008-aliases-codex-com-modelo-fixo.md)
 - [ADR-009 — Claude CLI com esforço configurável](../adr/ADR-009-claude-cli-esforco-configuravel.md)
+- [ADR-010 — aliases Claude com modelo fixo](../adr/ADR-010-aliases-claude-com-modelo-fixo.md)
 
 ## Regra de sincronização
 

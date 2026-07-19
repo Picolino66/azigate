@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createTestConfig } from '../src/config.js'
+import { CLAUDE_MODEL_CATALOG } from '../src/cli-catalog.js'
 import { canonicalPrompt } from '../src/broker/prompt.js'
 import { isBrokerExecuteRequest } from '../src/broker/protocol-validation.js'
 import {
@@ -8,7 +9,7 @@ import {
   validateCliDecision,
 } from '../src/providers/cli-request.js'
 import { InvalidCliOutputError } from '../src/providers/errors.js'
-import { enabledCliAliases, resolveProvider } from '../src/providers/registry.js'
+import { CLI_ALIASES, enabledCliAliases, resolveProvider } from '../src/providers/registry.js'
 
 function request(overrides: Record<string, unknown> = {}) {
   return normalizeCliRequest(
@@ -61,6 +62,49 @@ describe('providers CLI', () => {
     ])
   })
 
+  it('reserva e publica os aliases Claude com modelos versionados', () => {
+    expect(resolveProvider('claude-cli-opus-4.8', createTestConfig())).toMatchObject({
+      kind: 'cli',
+      provider: 'claude',
+      model: 'claude-opus-4-8',
+      enabled: false,
+    })
+    expect(resolveProvider('claude-cli', createTestConfig())).toMatchObject({
+      kind: 'cli',
+      provider: 'claude',
+      model: 'claude-sonnet-4-6',
+    })
+    expect(enabledCliAliases(createTestConfig({ enableClaudeCli: true }))).toEqual([
+      { alias: 'claude-cli-fable-5', provider: 'claude' },
+      { alias: 'claude-cli-sonnet-5', provider: 'claude' },
+      { alias: 'claude-cli-opus-4.8', provider: 'claude' },
+      { alias: 'claude-cli-opus-4.7', provider: 'claude' },
+      { alias: 'claude-cli-opus-4.6', provider: 'claude' },
+      { alias: 'claude-cli-sonnet-4.6', provider: 'claude' },
+      { alias: 'claude-cli-sonnet-4.5', provider: 'claude' },
+      { alias: 'claude-cli-haiku-4.5', provider: 'claude' },
+      { alias: 'claude-cli', provider: 'claude' },
+    ])
+  })
+
+  it('mapeia os nove aliases Claude para modelos internos fixos', () => {
+    expect(Object.fromEntries(
+      Object.entries(CLI_ALIASES)
+        .filter(([, configuration]) => configuration.provider === 'claude')
+        .map(([alias, configuration]) => [alias, configuration.model]),
+    )).toEqual({
+      'claude-cli-fable-5': 'claude-fable-5',
+      'claude-cli-sonnet-5': 'claude-sonnet-5',
+      'claude-cli-opus-4.8': 'claude-opus-4-8',
+      'claude-cli-opus-4.7': 'claude-opus-4-7',
+      'claude-cli-opus-4.6': 'claude-opus-4-6',
+      'claude-cli-sonnet-4.6': 'claude-sonnet-4-6',
+      'claude-cli-sonnet-4.5': 'claude-sonnet-4-5',
+      'claude-cli-haiku-4.5': 'claude-haiku-4-5',
+      'claude-cli': 'claude-sonnet-4-6',
+    })
+  })
+
   it('normaliza apenas mensagens textuais e function tools', () => {
     const normalized = request({
       messages: [{ role: 'user', content: [{ type: 'text', text: 'texto' }] }],
@@ -71,7 +115,7 @@ describe('providers CLI', () => {
     expect(normalized.tools[0]?.name).toBe('read_file')
   })
 
-  it('normaliza reasoning_effort somente para Claude e preserva o default quando omitido', () => {
+  it('normaliza effort Claude por modelo e aplica os defaults da tabela', () => {
     const claude = normalizeCliRequest(
       {
         model: 'claude-cli',
@@ -80,19 +124,41 @@ describe('providers CLI', () => {
       },
       'request-claude',
       'claude',
+      'claude-sonnet-4-6',
     )
-    expect(claude).toMatchObject({ provider: 'claude', effort: 'xhigh' })
-    expect(claude).not.toHaveProperty('model')
+    expect(claude).toMatchObject({ provider: 'claude', model: 'claude-sonnet-4-6', effort: 'high' })
 
     const automatic = normalizeCliRequest(
       { model: 'claude-cli', messages: [] },
       'request-automatic',
       'claude',
+      'claude-opus-4-7',
     )
-    expect(automatic).not.toHaveProperty('effort')
+    expect(automatic.effort).toBe('xhigh')
+
+    const noAdaptiveEffort = normalizeCliRequest(
+      { model: 'claude-cli-haiku-4.5', messages: [], reasoning_effort: 'max' },
+      'request-haiku',
+      'claude',
+      'claude-haiku-4-5',
+    )
+    expect(noAdaptiveEffort).not.toHaveProperty('effort')
 
     const codex = request({ reasoning_effort: 'max' })
     expect(codex).not.toHaveProperty('effort')
+  })
+
+  it('catálogo Claude define a matriz de effort esperada', () => {
+    expect(CLAUDE_MODEL_CATALOG).toEqual({
+      'claude-fable-5': { efforts: ['low', 'medium', 'high', 'xhigh', 'max'], defaultEffort: 'high' },
+      'claude-sonnet-5': { efforts: ['low', 'medium', 'high', 'xhigh', 'max'], defaultEffort: 'high' },
+      'claude-opus-4-8': { efforts: ['low', 'medium', 'high', 'xhigh', 'max'], defaultEffort: 'high' },
+      'claude-opus-4-7': { efforts: ['low', 'medium', 'high', 'xhigh', 'max'], defaultEffort: 'xhigh' },
+      'claude-opus-4-6': { efforts: ['low', 'medium', 'high', 'max'], defaultEffort: 'high' },
+      'claude-sonnet-4-6': { efforts: ['low', 'medium', 'high', 'max'], defaultEffort: 'high' },
+      'claude-sonnet-4-5': { efforts: [] },
+      'claude-haiku-4-5': { efforts: [] },
+    })
   })
 
   it.each(['none', '', 42, null])('rejeita reasoning_effort Claude inválido: %j', (effort) => {
@@ -104,6 +170,7 @@ describe('providers CLI', () => {
       },
       'request-invalid-effort',
       'claude',
+      'claude-sonnet-4-6',
     )).toThrow(CliRequestValidationError)
   })
 
@@ -123,13 +190,16 @@ describe('providers CLI', () => {
     null,
     {},
     { version: 2 },
+    { ...request(), version: 3 },
     { ...request(), requestId: '' },
     { ...request(), provider: 'outro' },
     { ...request(), model: 'modelo-fora-da-allowlist' },
     { ...request(), model: undefined },
     { ...request(), provider: 'claude', model: 'gpt-5.4' },
+    { ...request(), model: 'claude-opus-4-8' },
     { ...request(), effort: 'low' },
-    { ...request(), provider: 'claude', model: undefined, effort: 'extreme' },
+    { ...request(), provider: 'claude', model: 'claude-opus-4-8', effort: 'extreme' },
+    { ...request(), provider: 'claude', model: 'claude-opus-4-6', effort: 'xhigh' },
     { ...request(), messages: [{ role: 'root', content: 'x' }] },
     { ...request(), messages: [{ role: 'user', content: null }] },
     { ...request(), messages: [{ role: 'tool', content: 'x' }] },
@@ -141,11 +211,10 @@ describe('providers CLI', () => {
     expect(isBrokerExecuteRequest(value)).toBe(false)
   })
 
-  it('protocolo v3 aceita esforço Claude fechado e opcional', () => {
-    const claude = { ...request(), provider: 'claude' as const }
-    delete claude.model
-    expect(isBrokerExecuteRequest({ ...claude, provider: 'claude', effort: 'max' })).toBe(true)
-    expect(isBrokerExecuteRequest({ ...claude, provider: 'claude' })).toBe(true)
+  it('protocolo v4 aceita somente combinações Claude modelo/effort permitidas', () => {
+    const claude = { ...request(), provider: 'claude' as const, model: 'claude-opus-4-8' }
+    expect(isBrokerExecuteRequest({ ...claude, effort: 'max' })).toBe(true)
+    expect(isBrokerExecuteRequest(claude)).toBe(true)
   })
 
   it('valida allowlist, argumentos JSON e tool_choice da decisão', () => {

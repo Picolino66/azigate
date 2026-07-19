@@ -5,10 +5,15 @@ import type {
   BrokerTool,
   BrokerToolChoice,
   ClaudeEffortLevel,
+  CliModel,
   CliProviderName,
-  CodexCliModel,
 } from '../broker/protocol.js'
-import { BROKER_PROTOCOL_VERSION, CLAUDE_EFFORT_LEVELS } from '../broker/protocol.js'
+import {
+  BROKER_PROTOCOL_VERSION,
+  CLAUDE_EFFORT_LEVELS,
+  CLAUDE_MODEL_CATALOG,
+  isClaudeCliModel,
+} from '../broker/protocol.js'
 import type { ChatBody } from '../types.js'
 import { InvalidCliOutputError } from './errors.js'
 
@@ -112,7 +117,11 @@ function normalizeMessages(value: unknown, offeredNames: ReadonlySet<string>): B
   })
 }
 
-function normalizeReasoningEffort(value: unknown, provider: CliProviderName): ClaudeEffortLevel | undefined {
+function normalizeReasoningEffort(
+  value: unknown,
+  provider: CliProviderName,
+  model: CliModel,
+): ClaudeEffortLevel | undefined {
   if (provider !== 'claude' || value === undefined) return undefined
   if (
     typeof value !== 'string' ||
@@ -122,7 +131,17 @@ function normalizeReasoningEffort(value: unknown, provider: CliProviderName): Cl
       `reasoning_effort para claude-cli deve ser: ${CLAUDE_EFFORT_LEVELS.join(', ')}`,
     )
   }
-  return value as ClaudeEffortLevel
+  if (!isClaudeCliModel(model)) throw new CliRequestValidationError('Modelo Claude interno inválido')
+  const configuration = CLAUDE_MODEL_CATALOG[model]
+  return configuration.efforts.includes(value as ClaudeEffortLevel)
+    ? value as ClaudeEffortLevel
+    : configuration.defaultEffort
+}
+
+function defaultClaudeEffort(provider: CliProviderName, model: CliModel): ClaudeEffortLevel | undefined {
+  if (provider !== 'claude') return undefined
+  if (!isClaudeCliModel(model)) throw new CliRequestValidationError('Modelo Claude interno inválido')
+  return CLAUDE_MODEL_CATALOG[model].defaultEffort
 }
 
 export class CliRequestValidationError extends Error {
@@ -136,10 +155,12 @@ export function normalizeCliRequest(
   body: ChatBody,
   requestId: string,
   provider: CliProviderName,
-  model?: CodexCliModel,
+  model: CliModel,
 ): BrokerExecuteRequest {
   const tools = normalizeTools(body.tools)
-  const effort = normalizeReasoningEffort(body.reasoning_effort, provider)
+  const effort = body.reasoning_effort === undefined
+    ? defaultClaudeEffort(provider, model)
+    : normalizeReasoningEffort(body.reasoning_effort, provider, model)
   const offeredNames = new Set(tools.map((tool) => tool.name))
   const toolChoice = normalizeToolChoice(body.tool_choice, offeredNames)
   if (toolChoice !== 'none' && tools.length === 0 && body.tool_choice !== undefined) {
@@ -152,7 +173,7 @@ export function normalizeCliRequest(
     version: BROKER_PROTOCOL_VERSION,
     requestId,
     provider,
-    ...(model === undefined ? {} : { model }),
+    model,
     ...(effort === undefined ? {} : { effort }),
     messages: normalizeMessages(body.messages, offeredNames),
     tools,

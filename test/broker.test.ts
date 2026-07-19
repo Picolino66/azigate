@@ -18,6 +18,7 @@ import { ProcessRunner, type ProcessRunResult, type ProcessRunnerLike, type Proc
 import {
   BROKER_PROTOCOL_VERSION,
   type BrokerExecuteRequest,
+  type ClaudeCliModel,
   type ClaudeEffortLevel,
 } from '../src/broker/protocol.js'
 import { createBrokerServer, listenBroker } from '../src/broker/server.js'
@@ -81,14 +82,16 @@ function brokerRequest(): BrokerExecuteRequest {
   }
 }
 
-function claudeBrokerRequest(effort?: ClaudeEffortLevel): BrokerExecuteRequest {
-  const request: BrokerExecuteRequest = {
+function claudeBrokerRequest(
+  effort?: ClaudeEffortLevel,
+  model: ClaudeCliModel = 'claude-sonnet-4-6',
+): BrokerExecuteRequest {
+  return {
     ...brokerRequest(),
     provider: 'claude',
+    model,
     ...(effort === undefined ? {} : { effort }),
   }
-  delete request.model
-  return request
 }
 
 function completed(stdout = ''): ProcessRunResult {
@@ -192,13 +195,14 @@ describe('broker local', () => {
       codex: { available: false, code: 'disabled' },
       claude: { available: true, binaryPath: process.execPath, authDir: join(root, 'auth') },
     })
-    const result = await executor.execute(claudeBrokerRequest('xhigh'))
+    const result = await executor.execute(claudeBrokerRequest('xhigh', 'claude-opus-4-8'))
     const args = calls[0]?.args ?? []
     expect(result.decision.content).toBe('ok claude')
     expect(args).toContain('--print')
     expect(args).toContain('--strict-mcp-config')
     expect(args).toContain('--disable-slash-commands')
     expect(args).toContain('--no-session-persistence')
+    expect(args[args.indexOf('--model') + 1]).toBe('claude-opus-4-8')
     expect(args[args.indexOf('--effort') + 1]).toBe('xhigh')
     expect(args[args.indexOf('--tools') + 1]).toBe('')
     expect(args[args.indexOf('--setting-sources') + 1]).toBe('')
@@ -210,7 +214,7 @@ describe('broker local', () => {
     })
   })
 
-  it('preserva o esforço padrão do Claude quando reasoning_effort é omitido', async () => {
+  it('não adiciona --effort quando o pedido normalizado não possui effort', async () => {
     const root = directory()
     const calls: ProcessRunSpec[] = []
     const runner: ProcessRunnerLike = {
@@ -223,8 +227,10 @@ describe('broker local', () => {
       codex: { available: false, code: 'disabled' },
       claude: { available: true, binaryPath: process.execPath, authDir: join(root, 'auth') },
     })
-    await executor.execute(claudeBrokerRequest())
-    expect(calls[0]?.args).not.toContain('--effort')
+    await executor.execute(claudeBrokerRequest(undefined, 'claude-haiku-4-5'))
+    const args = calls[0]?.args ?? []
+    expect(args).not.toContain('--effort')
+    expect(args[args.indexOf('--model') + 1]).toBe('claude-haiku-4-5')
   })
 
   it('falha imediatamente quando a capacidade do provider está indisponível', async () => {

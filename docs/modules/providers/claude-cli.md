@@ -2,7 +2,7 @@
 
 ## Descrição
 
-Provider experimental exposto como alias único `claude-cli` depois dos gates da versão instalada. Usa o modelo padrão e o login existente; nunca migra silenciosamente para API key.
+Provider experimental com oito aliases versionados e o sinônimo legado `claude-cli`. Usa o login existente e nunca migra silenciosamente para API key.
 
 ## Localização no código
 
@@ -10,7 +10,7 @@ Provider experimental exposto como alias único `claude-cli` depois dos gates da
 
 ## Entrada
 
-O mesmo subconjunto textual/function tool do Codex. Conteúdo multimodal é rejeitado. `reasoning_effort` é opcional e aceita `low`, `medium`, `high`, `xhigh` ou `max`.
+O mesmo subconjunto textual/function tool do Codex. Conteúdo multimodal é rejeitado. O campo público `model` seleciona apenas um alias fechado; `reasoning_effort` aceita `low`, `medium`, `high`, `xhigh` ou `max`.
 
 ## Saída
 
@@ -25,19 +25,35 @@ Claude CLI autenticado, Bubblewrap, `~/.claude` privado, broker ativo e dois fla
 - Print mode, JSON schema, tools vazias e MCP estrito vazio.
 - Slash commands, Chrome, persistência e fontes de settings são desabilitados.
 - `dontAsk` não concede ferramentas; a lista de tools continua vazia.
-- O alias não usa `--model`: o modelo é resolvido pela conta. Effort validado é o único argumento variável e entra como `--effort <nível>`.
-- Omissão de `reasoning_effort` preserva o padrão da conta; modelos podem reduzir níveis não suportados.
+- Cada alias mapeia para um único nome completo enviado por `--model`; `claude-cli` equivale a Sonnet 4.6.
+- Omissão ou effort incompatível aplica o padrão do catálogo. Sonnet 4.5 e Haiku 4.5 não recebem `--effort`.
+- O protocolo v4 e o broker validam novamente provider, modelo e matriz de effort.
 - Thinking permanece privado ao CLI e não é publicado em Chat Completions ou SSE.
 - A versão instalada deve oferecer todos os flags.
 - Bloqueio de autenticação/política mantém o alias indisponível; nenhuma API key é introduzida.
 
 ## Evidência de viabilidade
 
-Em 18/07/2026, `Claude Code 2.1.214` passou o gate completo com effort `high`: 20/20 saídas estruturais, 20/20 categorias e zero ferramenta local. Os smokes `low`, `medium`, `xhigh` e `max` passaram 4/4 com zero ferramenta local. A evidência autoriza a publicação opt-in desta versão; um novo upgrade exige repetir ambos os gates.
+A evidência anterior do modelo padrão no protocolo v3 não certifica os oito modelos versionados. Cada modelo do protocolo v4 precisa passar 20/20 estruturas, zero ferramenta local, ao menos 18/20 categorias e seus smokes de effort. Falha individual omite somente o alias correspondente da allowlist.
+
+Gate real executado com Claude Code `2.1.214` em 18/07/2026:
+
+| Modelo | Estrutura | Categoria | Ferramenta local | Efforts | Publicação |
+|---|---:|---:|---:|---:|---|
+| Fable 5 | 20/20 | 20/20 | 0 | 4/4 | aprovada |
+| Sonnet 5 | 20/20 | 20/20 | 0 | 4/4 | aprovada |
+| Opus 4.8 | 20/20 | 20/20 | 0 | 4/4 | aprovada |
+| Opus 4.7 | 19/20 | 19/20 | 0 | 4/4 | reprovada |
+| Opus 4.6 | 20/20 | 20/20 | 0 | 3/3 | aprovada |
+| Sonnet 4.6 | 18/20 | 18/20 | 0 | 3/3 | reprovada; inclui `claude-cli` |
+| Sonnet 4.5 | 20/20 | 20/20 | 0 | não aplicável | aprovada |
+| Haiku 4.5 | 19/20 | 11/20 | 0 | não aplicável | reprovada |
+
+Assim, a allowlist local publica somente `claude-cli-fable-5`, `claude-cli-sonnet-5`, `claude-cli-opus-4.8`, `claude-cli-opus-4.6` e `claude-cli-sonnet-4.5`. Os demais aliases continuam reservados e recebem `403 model_not_allowed`.
 
 ## Fluxo resumido
 
-Gateway normaliza e valida effort -> protocolo v3 -> broker cria settings/MCP vazios -> Claude roda isolado com argv fixo -> structured output é validado -> Qwen recebe somente a decisão.
+Gateway resolve alias/modelo/default -> protocolo v4 -> broker revalida -> Claude roda isolado com `--model`/`--effort` fixos -> structured output é validado -> Qwen recebe somente a decisão.
 
 ## Possíveis erros
 

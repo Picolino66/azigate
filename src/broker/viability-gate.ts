@@ -7,16 +7,24 @@ import { ProcessRunner } from './process-runner.js'
 import type {
   BrokerExecuteRequest,
   BrokerTool,
+  ClaudeCliModel,
   ClaudeEffortLevel,
+  CliModel,
   CliProviderName,
   CodexCliModel,
 } from './protocol.js'
-import { BROKER_PROTOCOL_VERSION, CLAUDE_EFFORT_LEVELS, CODEX_CLI_MODELS } from './protocol.js'
+import {
+  BROKER_PROTOCOL_VERSION,
+  CLAUDE_EFFORT_LEVELS,
+  CLAUDE_MODEL_CATALOG,
+  CODEX_CLI_MODELS,
+  isClaudeCliModel,
+} from './protocol.js'
 import { GatewayError } from '../upstream/errors.js'
 
 interface GateScenario {
   name: string
-  request: Omit<BrokerExecuteRequest, 'version' | 'requestId' | 'provider'>
+  request: Pick<BrokerExecuteRequest, 'messages' | 'tools' | 'toolChoice' | 'parallelToolCalls'>
   correct(toolNames: string[], hasText: boolean): boolean
 }
 
@@ -125,10 +133,26 @@ function selectedCodexModel(env: NodeJS.ProcessEnv): CodexCliModel {
   return model as CodexCliModel
 }
 
-function selectedClaudeEffort(env: NodeJS.ProcessEnv): ClaudeEffortLevel {
-  const effort = env.GATE_CLAUDE_EFFORT?.trim() || 'high'
+function selectedClaudeModel(env: NodeJS.ProcessEnv): ClaudeCliModel {
+  const model = env.GATE_CLAUDE_MODEL?.trim() || 'claude-sonnet-4-6'
+  if (!isClaudeCliModel(model)) {
+    throw new Error(`GATE_CLAUDE_MODEL deve ser um destes valores: ${Object.keys(CLAUDE_MODEL_CATALOG).join(', ')}`)
+  }
+  return model
+}
+
+function selectedClaudeEffort(
+  env: NodeJS.ProcessEnv,
+  model: ClaudeCliModel,
+): ClaudeEffortLevel | undefined {
+  const configured = env.GATE_CLAUDE_EFFORT?.trim()
+  if (configured === undefined || configured === '') return CLAUDE_MODEL_CATALOG[model].defaultEffort
+  const effort = configured
   if (!CLAUDE_EFFORT_LEVELS.includes(effort as ClaudeEffortLevel)) {
     throw new Error(`GATE_CLAUDE_EFFORT deve ser um destes valores: ${CLAUDE_EFFORT_LEVELS.join(', ')}`)
+  }
+  if (!CLAUDE_MODEL_CATALOG[model].efforts.some((supported) => supported === effort)) {
+    throw new Error(`GATE_CLAUDE_EFFORT não é suportado por ${model}`)
   }
   return effort as ClaudeEffortLevel
 }
@@ -141,7 +165,9 @@ export async function runViabilityGate(provider: CliProviderName): Promise<boole
   }
   const config = loadBrokerConfig(env)
   const codexModel = provider === 'codex' ? selectedCodexModel(env) : undefined
-  const claudeEffort = provider === 'claude' ? selectedClaudeEffort(env) : undefined
+  const claudeModel = provider === 'claude' ? selectedClaudeModel(env) : undefined
+  const model: CliModel = codexModel ?? claudeModel ?? 'gpt-5.4'
+  const claudeEffort = claudeModel === undefined ? undefined : selectedClaudeEffort(env, claudeModel)
   const runner = new ProcessRunner()
   const capabilities = await inspectCapabilities(config, runner)
   if (!capabilities[provider].available) {
@@ -167,7 +193,7 @@ export async function runViabilityGate(provider: CliProviderName): Promise<boole
           version: BROKER_PROTOCOL_VERSION,
           requestId: `gate-${provider}-${round}-${index}`,
           provider,
-          ...(codexModel === undefined ? {} : { model: codexModel }),
+          model,
           ...(claudeEffort === undefined ? {} : { effort: claudeEffort }),
           ...item.request,
         })
@@ -187,6 +213,7 @@ export async function runViabilityGate(provider: CliProviderName): Promise<boole
   const passed = !diagnostic && structurallyValid === total && localToolExecutions === 0 && categoryRate >= 0.9
   process.stdout.write(`${JSON.stringify({
     provider,
+    model,
     scenarios: selectedScenarios.length,
     repetitions: repeat,
     diagnostic,
@@ -208,6 +235,7 @@ export async function runClaudeEffortGate(): Promise<boolean> {
     BROKER_ENABLE_CLAUDE_CLI: 'true',
   }
   const config = loadBrokerConfig(env)
+  const model = selectedClaudeModel(env)
   const runner = new ProcessRunner()
   const capabilities = await inspectCapabilities(config, runner)
   if (!capabilities.claude.available) {
@@ -222,7 +250,8 @@ export async function runClaudeEffortGate(): Promise<boolean> {
   const executor = new BrokerExecutor(config, runner, capabilities)
   const scenario = scenarios.find((item) => item.name === 'texto')
   if (!scenario) throw new Error('Cenário textual do gate não existe')
-  const efforts = CLAUDE_EFFORT_LEVELS.filter((effort) => effort !== 'high')
+  const defaultEffort = CLAUDE_MODEL_CATALOG[model].defaultEffort
+  const efforts = CLAUDE_MODEL_CATALOG[model].efforts.filter((effort) => effort !== defaultEffort)
   let structurallyValid = 0
   let localToolExecutions = 0
   const failureReasons: Record<string, number> = {}
@@ -232,6 +261,7 @@ export async function runClaudeEffortGate(): Promise<boolean> {
         version: BROKER_PROTOCOL_VERSION,
         requestId: `gate-claude-effort-${effort}`,
         provider: 'claude',
+        model,
         effort,
         ...scenario.request,
       })
@@ -246,6 +276,7 @@ export async function runClaudeEffortGate(): Promise<boolean> {
   process.stdout.write(`${JSON.stringify({
     provider: 'claude',
     gate: 'efforts',
+    model,
     efforts: efforts.length,
     structurallyValid,
     localToolExecutions,

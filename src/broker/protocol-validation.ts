@@ -1,5 +1,10 @@
 import type { BrokerExecuteRequest, BrokerMessage, BrokerTool, BrokerToolChoice } from './protocol.js'
-import { BROKER_PROTOCOL_VERSION, CLAUDE_EFFORT_LEVELS, CODEX_CLI_MODELS } from './protocol.js'
+import {
+  BROKER_PROTOCOL_VERSION,
+  CLAUDE_MODEL_CATALOG,
+  isClaudeCliModel,
+  isCodexCliModel,
+} from './protocol.js'
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -68,13 +73,12 @@ export function isBrokerExecuteRequest(value: unknown): value is BrokerExecuteRe
     value.requestId.length > 0 &&
     (value.provider === 'codex' || value.provider === 'claude') &&
     (value.provider === 'codex'
-      ? typeof value.model === 'string' &&
-        CODEX_CLI_MODELS.includes(value.model as typeof CODEX_CLI_MODELS[number]) &&
+      ? isCodexCliModel(value.model) &&
         value.effort === undefined
-      : value.model === undefined && (
+      : isClaudeCliModel(value.model) && (
         value.effort === undefined ||
         typeof value.effort === 'string' &&
-        CLAUDE_EFFORT_LEVELS.includes(value.effort as typeof CLAUDE_EFFORT_LEVELS[number])
+        CLAUDE_MODEL_CATALOG[value.model].efforts.some((effort) => effort === value.effort)
       )) &&
     Array.isArray(value.messages) &&
     value.messages.every(isMessage) &&

@@ -2,7 +2,7 @@
 
 ## Status
 
-Aceita em 18/07/2026. Complementa ADR-005, ADR-006 e ADR-007.
+Parcialmente superseded pelo ADR-010 em 18/07/2026 nos pontos relativos ao alias único, modelo padrão da conta e tratamento de effort incompatível. Os controles de isolamento e saída estruturada permanecem vigentes.
 
 ## Contexto
 

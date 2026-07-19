@@ -20,7 +20,7 @@ Não é TCP nem pública. Existe somente no Unix socket `0600`, sob diretório `
 | Método | Rota | Controle | Entrada | Saída | Status |
 |---|---|---|---|---|---|
 | GET | `/health` | filesystem/UID + protocolo local | nenhuma | versão e capacidade sanitizada | OK |
-| POST | `/execute` | filesystem/UID + header v3 + JSON | request ID, provider, modelo Codex permitido ou effort Claude fechado, mensagens e function tools | decisão estruturada ou erro sanitizado | OK |
+| POST | `/execute` | filesystem/UID + header v4 + JSON | request ID, provider, modelo CLI permitido, effort Claude normalizado, mensagens e function tools | decisão estruturada ou erro sanitizado | OK |
 
 `/execute` rejeita campos extras, inclusive `cwd`, comando, argv, ambiente, URL e path. O gateway reconstrói a entrada; nenhum campo HTTP do Qwen escolhe binário ou filesystem.
 
@@ -36,5 +36,5 @@ Não é TCP nem pública. Existe somente no Unix socket `0600`, sob diretório `
 ## Mass assignment e exposição
 
 - DeepSeek aceita campos extras intencionalmente para preservar o contrato opaco, mas o destino continua fixo.
-- CLI usa reconstrução allowlist: somente mensagens textuais, function tools, `tool_choice`, `parallel_tool_calls`, modelo Codex interno e effort Claude fechado entram no broker.
+- CLI usa reconstrução allowlist: somente mensagens textuais, function tools, `tool_choice`, `parallel_tool_calls`, modelo interno fixo e effort Claude normalizado entram no broker.
 - Catálogo, health e erros não expõem paths de binário/auth, argv, stderr, account ID ou secrets.

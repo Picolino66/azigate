@@ -47,6 +47,7 @@ const CLAUDE_HELP = [
   '--json-schema',
   '--tools',
   '--mcp-config',
+  '--model',
   '--strict-mcp-config',
   '--agents',
   '--system-prompt',

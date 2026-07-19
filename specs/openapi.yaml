@@ -69,7 +69,7 @@ paths:
                 parallel_tool_calls: { type: boolean }
                 reasoning_effort:
                   type: string
-                  description: Para claude-cli, aceita low, medium, high, xhigh ou max; omitido usa o padrão da conta. Outros providers preservam seu contrato próprio.
+                  description: Para aliases claude-cli, aceita low, medium, high, xhigh ou max; omitido ou incompatível usa o padrão do modelo. Outros providers preservam seu contrato próprio.
               additionalProperties: true
       responses:
         '200':

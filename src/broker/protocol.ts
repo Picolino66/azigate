@@ -1,26 +1,27 @@
-export const BROKER_PROTOCOL_VERSION = 3 as const
+import type {
+  ClaudeEffortLevel,
+  CliModel,
+  CliProviderName,
+} from '../cli-catalog.js'
 
-export type CliProviderName = 'codex' | 'claude'
+export {
+  CLAUDE_EFFORT_LEVELS,
+  CLAUDE_MODEL_CATALOG,
+  CLI_ALIAS_CATALOG,
+  CODEX_CLI_MODELS,
+  isClaudeCliModel,
+  isCodexCliModel,
+} from '../cli-catalog.js'
+export type {
+  ClaudeCliModel,
+  ClaudeEffortLevel,
+  CliAlias,
+  CliModel,
+  CliProviderName,
+  CodexCliModel,
+} from '../cli-catalog.js'
 
-export const CODEX_CLI_MODELS = [
-  'gpt-5.6-sol',
-  'gpt-5.6-terra',
-  'gpt-5.6-luna',
-  'gpt-5.5',
-  'gpt-5.4',
-] as const
-
-export type CodexCliModel = typeof CODEX_CLI_MODELS[number]
-
-export const CLAUDE_EFFORT_LEVELS = [
-  'low',
-  'medium',
-  'high',
-  'xhigh',
-  'max',
-] as const
-
-export type ClaudeEffortLevel = typeof CLAUDE_EFFORT_LEVELS[number]
+export const BROKER_PROTOCOL_VERSION = 4 as const
 
 export interface BrokerHistoricalToolCall {
   id: string
@@ -47,7 +48,7 @@ export interface BrokerExecuteRequest {
   version: typeof BROKER_PROTOCOL_VERSION
   requestId: string
   provider: CliProviderName
-  model?: CodexCliModel
+  model: CliModel
   effort?: ClaudeEffortLevel
   messages: BrokerMessage[]
   tools: BrokerTool[]
