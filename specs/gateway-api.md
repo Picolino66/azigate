@@ -56,10 +56,11 @@ Alias desabilitado retorna `503 cli_unavailable`; nunca há fallback automático
 - Tools devem ser `type: function`, ter nomes únicos válidos e parameters em objeto.
 - `tool_choice` aceita `auto`, `none`, `required` ou uma função oferecida.
 - `parallel_tool_calls` deve ser boolean.
-- Para aliases Claude, `reasoning_effort` aceita somente `low`, `medium`, `high`, `xhigh` ou `max`. Valor omitido ou incompatível é substituído pelo padrão do modelo. Sonnet 4.5 e Haiku 4.5 nunca recebem effort.
+- Para aliases Codex e Claude, o effort pode vir como `reasoning_effort` ou `reasoning.effort`; o campo plano tem precedência. A enum pública é `low`, `medium`, `high`, `xhigh` ou `max`. Estrutura ou valor desconhecido recebe `400 invalid_cli_request`.
+- Ausência, `reasoning: false` ou objeto `reasoning` sem `effort` aplica o default do modelo. Codex usa `medium`; `max` vira `xhigh`. A matriz Claude permanece por modelo, e Sonnet 4.5/Haiku 4.5 nunca recebem effort.
 - Conteúdo multimodal recebe `400 invalid_cli_request`.
 - O gateway ignora parâmetros de sampling não aplicáveis e nunca os converte em argv.
-- Cada alias Codex é traduzido pelo gateway para um único modelo interno permitido; o cliente não escolhe `--model` nem qualquer outro argumento CLI.
+- Cada alias Codex é traduzido pelo gateway para um único modelo interno permitido; modelo e effort são revalidados pelo broker e viram `--model`/`model_reasoning_effort` reconstruídos. O cliente não escolhe argv.
 - Cada alias Claude seleciona um único modelo completo por `--model`; modelo e effort são validados novamente pelo broker. Thinking não é publicado.
 - A saída contém texto ou tool calls, nunca ambos. Nome/argumentos são validados e os IDs são gerados localmente.
 

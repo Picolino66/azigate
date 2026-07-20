@@ -52,7 +52,7 @@ ou local via Ollama/LM Studio/vLLM) que exponha `models` e `chat/completions`.
 ## Registry e disponibilidade
 
 - Os aliases Codex e Claude definidos no catálogo central são reservados mesmo quando desabilitados; nunca caem no upstream.
-- Os aliases Codex escolhem modelos internos fixos por allowlist; `codex-cli` permanece sinônimo de `gpt-5.4`.
+- Os aliases Codex escolhem modelos internos fixos por allowlist; `codex-cli` permanece sinônimo de `gpt-5.4`. Effort público é normalizado para uma configuração fechada do subprocesso.
 - Os aliases Claude escolhem oito modelos completos; `claude-cli` permanece sinônimo de `claude-sonnet-4-6`. A `ALLOWED_MODELS` publica somente modelos aprovados nos gates reais.
 - Qualquer outro ID permitido é encaminhado ao adaptador de upstream.
 - Não existe fallback automático entre provedores.
@@ -62,19 +62,24 @@ ou local via Ollama/LM Studio/vLLM) que exponha `models` e `chat/completions`.
 
 ## Broker e isolamento
 
-O protocolo v4 oferece somente `GET /health` e `POST /execute` em Unix socket. Sua entrada é reconstruída pelo gateway e contém request ID, provedor, modelo CLI validado, esforço Claude normalizado, mensagens textuais, function tools, `tool_choice` e `parallel_tool_calls`. Cwd, path de host, URL, comando, argv e ambiente não pertencem ao contrato.
+O protocolo v5 oferece somente `GET /health` e `POST /execute` em Unix socket. Sua entrada é reconstruída pelo gateway e contém request ID, provedor, modelo CLI validado, effort efetivo, mensagens textuais, function tools, `tool_choice` e `parallel_tool_calls`. Cwd, path de host, URL, comando, argv e ambiente não pertencem ao contrato.
 
 Cada execução:
 
 1. verifica se o provedor passou os checks de binário, autenticação, flags e Bubblewrap;
 2. adquire a única vaga global ou retorna `cli_busy` sem fila;
-3. cria `/work` descartável, schema, settings e MCP vazio;
+3. cria `/work` descartável, schema, settings e MCP vazio; para Claude, cria também
+   um home efêmero e copia nele o `~/.claude.json` privado;
 4. executa Bubblewrap por `spawn`, com argv fixo, `shell: false` e ambiente limpo;
 5. limita stdout+stderr a 4 MiB e o tempo a 10 minutos;
 6. recusa eventos que indiquem ferramenta local e valida a decisão final;
 7. remove o workspace; cancelamento envia `SIGTERM` ao grupo e `SIGKILL` após 2 segundos.
 
-Somente o diretório de autenticação do CLI selecionado entra na sandbox. Nenhum repositório, home completo do operador ou secret do gateway entra nela.
+Somente o diretório de autenticação do CLI selecionado entra na sandbox. Para
+Claude, o arquivo de configuração top-level é validado como regular, privado,
+pertencente ao usuário do broker e limitado a 1 MiB, então copiado para o home
+efêmero. Nenhum repositório, home completo do operador ou secret do gateway entra
+nela.
 
 ## Dois regimes de streaming
 
@@ -88,7 +93,9 @@ Somente o diretório de autenticação do CLI selecionado entra na sandbox. Nenh
 3. Container -> upstream: HTTPS, paths tipados e credencial reconstruída.
 4. Container -> broker: Unix socket read-only no mount, UID igual e protocolo fechado.
 5. Broker -> CLI: subprocesso não confiável, Bubblewrap, ambiente mínimo e saída validada.
-6. Auth dirs -> CLI: credenciais necessárias, nunca montadas no container nem registradas.
+6. Auth dirs/config -> CLI: credenciais necessárias, nunca montadas no container
+   nem registradas; a configuração Claude é somente leitura no serviço e efêmera
+   na sandbox.
 
 ## Decisões
 
@@ -98,6 +105,9 @@ Somente o diretório de autenticação do CLI selecionado entra na sandbox. Nenh
 - [ADR-008](../adr/ADR-008-aliases-codex-com-modelo-fixo.md): seleção Codex por aliases fechados.
 - [ADR-009](../adr/ADR-009-claude-cli-esforco-configuravel.md): Claude no modelo padrão com esforço fechado.
 - [ADR-010](../adr/ADR-010-aliases-claude-com-modelo-fixo.md): aliases Claude com modelo e effort fixados.
+- [ADR-011](../adr/ADR-011-effort-qwen-para-provedores-cli.md): formatos de effort do Qwen e normalização Codex/Claude.
+- [ADR-012](../adr/ADR-012-configuracao-claude-em-home-efemero.md): configuração Claude em home efêmero.
+- [ADR-013](../adr/ADR-013-check-de-capacidade-codex-por-catalogo.md): check Codex por catálogo estruturado.
 
 ## Referências de integração
 

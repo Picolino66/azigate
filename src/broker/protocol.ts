@@ -1,5 +1,5 @@
 import type {
-  ClaudeEffortLevel,
+  CliEffortLevel,
   CliModel,
   CliProviderName,
 } from '../cli-catalog.js'
@@ -7,21 +7,25 @@ import type {
 export {
   CLAUDE_EFFORT_LEVELS,
   CLAUDE_MODEL_CATALOG,
+  CLI_EFFORT_LEVELS,
   CLI_ALIAS_CATALOG,
   CODEX_CLI_MODELS,
+  CODEX_MODEL_CATALOG,
   isClaudeCliModel,
+  isCliEffortLevel,
   isCodexCliModel,
 } from '../cli-catalog.js'
 export type {
   ClaudeCliModel,
   ClaudeEffortLevel,
   CliAlias,
+  CliEffortLevel,
   CliModel,
   CliProviderName,
   CodexCliModel,
 } from '../cli-catalog.js'
 
-export const BROKER_PROTOCOL_VERSION = 4 as const
+export const BROKER_PROTOCOL_VERSION = 5 as const
 
 export interface BrokerHistoricalToolCall {
   id: string
@@ -49,7 +53,7 @@ export interface BrokerExecuteRequest {
   requestId: string
   provider: CliProviderName
   model: CliModel
-  effort?: ClaudeEffortLevel
+  effort?: CliEffortLevel
   messages: BrokerMessage[]
   tools: BrokerTool[]
   toolChoice: BrokerToolChoice

@@ -1,4 +1,4 @@
-import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { chmod, copyFile, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { BrokerConfig } from './config.js'
 import type { ProviderCapabilities } from './capabilities.js'
@@ -150,7 +150,9 @@ function assertProcessState(result: ProcessRunResult): void {
 }
 
 function assertProcessExit(result: ProcessRunResult): void {
-  if (result.exitCode !== 0) throw new CliProcessExitError(result.exitCode, processExitCategory(result.stderr))
+  if (result.exitCode !== 0) {
+    throw new CliProcessExitError(result.exitCode, processExitCategory(`${result.stderr}\n${result.stdout}`))
+  }
 }
 
 function processExitCategory(stderr: string): string {
@@ -216,8 +218,17 @@ export class BrokerExecutor {
         '{"hooks":{},"permissions":{"allow":[],"deny":[]}}',
         { mode: 0o600 },
       )
+      let ephemeralHome: string | undefined
+      if (request.provider === 'claude') {
+        if (capability.configPath === undefined) throw new CliUnavailableError()
+        ephemeralHome = join(workspace, 'claude-home')
+        await mkdir(join(ephemeralHome, '.claude'), { recursive: true, mode: 0o700 })
+        const ephemeralConfigPath = join(ephemeralHome, '.claude.json')
+        await copyFile(capability.configPath, ephemeralConfigPath)
+        await chmod(ephemeralConfigPath, 0o600)
+      }
       const cliArgs = request.provider === 'codex'
-        ? this.codexArgs(request.model)
+        ? this.codexArgs(request.model, request.effort)
         : this.claudeArgs(request.model, request.effort)
       const isolated = buildIsolationCommand(
         this.config,
@@ -226,6 +237,7 @@ export class BrokerExecutor {
         capability.authDir,
         workspace,
         cliArgs,
+        ephemeralHome,
       )
       const result = await this.runner.run({
         command: isolated.command,
@@ -261,8 +273,8 @@ export class BrokerExecutor {
     }
   }
 
-  private codexArgs(model: BrokerExecuteRequest['model']): string[] {
-    if (!isCodexCliModel(model)) throw new CliUnavailableError()
+  private codexArgs(model: BrokerExecuteRequest['model'], effort: BrokerExecuteRequest['effort']): string[] {
+    if (!isCodexCliModel(model) || effort === undefined) throw new CliUnavailableError()
     return [
       'exec',
       '--ephemeral',
@@ -277,6 +289,7 @@ export class BrokerExecutor {
       '--output-schema', '/work/decision.schema.json',
       '--output-last-message', '/work/final.json',
       '--color', 'never',
+      '-c', `model_reasoning_effort="${effort}"`,
       '-c', 'approval_policy="never"',
       '-c', 'shell_environment_policy.inherit="none"',
       '-c', 'mcp_servers={}',

@@ -10,7 +10,7 @@ Aliases experimentais Codex que escolhem um modelo fixo da sessão autenticada. 
 
 ## Entrada
 
-Mensagens textuais, function tools, `tool_choice` e `parallel_tool_calls`. Os modelos públicos são `codex-cli-sol`, `codex-cli-terra`, `codex-cli-luna`, `codex-cli-5.5` e `codex-cli-5.4`, mapeados para `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5` e `gpt-5.4`. `codex-cli` continua como sinônimo de `gpt-5.4`.
+Mensagens textuais, function tools, `tool_choice` e `parallel_tool_calls`. Os modelos públicos são `codex-cli-sol`, `codex-cli-terra`, `codex-cli-luna`, `codex-cli-5.5` e `codex-cli-5.4`, mapeados para `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5` e `gpt-5.4`. `codex-cli` continua como sinônimo de `gpt-5.4`. Effort aceita `reasoning_effort` ou `reasoning.effort` com `low`, `medium`, `high`, `xhigh` ou `max`.
 
 ## Saída
 
@@ -24,18 +24,27 @@ Codex CLI autenticado, Bubblewrap, `~/.codex` privado, broker ativo e `ENABLE_CO
 
 - Execução `--ephemeral`, JSONL e output schema.
 - O modelo chega ao broker somente pela allowlist interna e é passado como `--model` no argv fixo.
+- O default de todos os modelos é `medium`; `max` é reduzido para `xhigh`. O valor efetivo chega pelo protocolo v5 e vira `-c model_reasoning_effort="..."` reconstruído.
+- `reasoning_effort` plano tem precedência sobre `reasoning.effort`; `reasoning: false`, ausência ou objeto sem effort usa o default.
 - Configuração e rules do usuário ignoradas.
 - Sandbox `read-only`, approval `never` e shell/apps/browser/computer/hooks/multi-agent desabilitados.
 - Qualquer evento de ferramenta local invalida a execução.
 - O gate usa 10 cenários duas vezes: 100% estrutural, zero ferramentas locais e 90% de categoria.
+- O startup não faz inferência: interpreta `debug models --bundled` e exige todos
+  os modelos/efforts fixados. A execução real mantém `--strict-config`.
 
 ## Evidência de viabilidade
 
 Em 16/07/2026, a versão instalada `codex-cli 0.133.0` passou 20/20 saídas estruturais, 20/20 categorias e produziu zero evento de ferramenta local. O gate deve ser repetido para cada modelo publicado e após upgrades.
 
+Em 20/07/2026, após upgrade para `codex-cli 0.144.6`, smokes isolados no effort
+`medium` aprovaram Sol, Terra e Luna com 1/1 estrutura válida, 1/1 categoria e
+zero ferramenta local por modelo. Isso valida o caminho funcional, mas não
+substitui o gate completo de 20 cenários de cada modelo.
+
 ## Fluxo resumido
 
-Gateway normaliza -> broker cria prompt/schema -> Codex roda isolado -> broker inspeciona JSONL/final -> gateway valida allowlist -> o agente recebe a decisão.
+Gateway normaliza modelo/effort -> protocolo v5 -> broker revalida -> Codex roda isolado com configuração fixada -> broker inspeciona JSONL/final -> gateway valida allowlist -> o agente recebe a decisão.
 
 ## Possíveis erros
 

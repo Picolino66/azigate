@@ -4,12 +4,12 @@
 
 Evoluir o monólito Fastify existente sem alterar suas quatro rotas públicas. A DeepSeek permanece transparente; Codex e Claude são adaptadores experimentais, sem ferramentas, acionados por broker host. O Qwen Code no computador da VPN continua responsável por ler, executar e alterar o repositório.
 
-## Estado em 18/07/2026
+## Estado em 20/07/2026
 
 | Tarefa | Estado | Evidência principal |
 |---|---|---|
-| 1. ADRs | concluída | ADR-005 a ADR-010 |
-| 2. Contrato/prompt | evoluída | protocolo v4, modelos/efforts fechados e testes fail-closed |
+| 1. ADRs | concluída | ADR-005 a ADR-013 |
+| 2. Contrato/prompt | evoluída | protocolo v5, modelos/efforts fechados e testes fail-closed |
 | 3. Núcleo multiprovedor | concluída | registry, catálogo/readiness e rename `gateway-ai` |
 | 4. Cliente/respostas CLI | concluída | Unix socket, JSON/SSE, erros e cancelamento |
 | 5. Broker isolado | concluída | Bubblewrap, systemd, socket privado e limites |
@@ -18,6 +18,9 @@ Evoluir o monólito Fastify existente sem alterar suas quatro rotas públicas. A
 | 8. Qwen remoto | documentada, smoke pendente | runbook completo; requer PC da VPN |
 | 9. Qualidade/segurança | concluída localmente | logs com cor única por alias e effort seguro; cobertura, audit e revisão de segurança |
 | 10. Fonte de verdade | concluída | docs/specs/ADRs/contexto sincronizados |
+| 11. Effort Qwen/Codex | implementada, deploy pendente | `reasoning.effort`, precedência, defaults, clamp Codex e testes de regressão |
+| 12. Incidente de configuração Claude | corrigida localmente, deploy pendente | home efêmero, cópia privada de `.claude.json`, regressões e ADR-012; smoke real alcançou a API e recebeu `429` externo |
+| 13. Compatibilidade Codex 0.144.6 | implementada, deploy pendente | check por catálogo JSON; smokes Sol/Terra/Luna aprovados; ADR-013 |
 
 O5 continua sendo o último snapshot estável até o smoke Qwen e o deploy LAN/TLS reais. Os aliases permanecem desligados por padrão; a aprovação dos gates não os publica automaticamente.
 
@@ -31,7 +34,7 @@ O5 continua sendo o último snapshot estável até o smoke Qwen e o deploy LAN/T
 
 2. **Definir contrato interno e prompt canônico**
    - Objetivo: limitar a tradução OpenAI para CLI a dados estritamente necessários.
-   - Escopo: protocolo v4, mensagens textuais, modelos Codex/Claude fechados, effort Claude por modelo, function tools, schema de decisão, erros e validação de transcript.
+   - Escopo: protocolo v5, mensagens textuais, modelos Codex/Claude fechados, effort comum revalidado por modelo, function tools, schema de decisão, erros e validação de transcript.
    - Aceite: entrada rejeita cwd/comando/URL/path; saída aceita somente texto ou tool calls permitidas com JSON válido.
    - Dependências: tarefa 1.
 
@@ -89,6 +92,31 @@ O5 continua sendo o último snapshot estável até o smoke Qwen e o deploy LAN/T
     - Aceite: links internos válidos; O5 preservado até gates; pendências manuais explicitadas.
     - Dependências: todas as anteriores.
 
+11. **Aceitar o effort nativo do Qwen e aplicá-lo ao Codex**
+    - Objetivo: fazer `/effort` controlar dinamicamente Codex e Claude sem configuração estática no cliente.
+    - Escopo: `reasoning.effort`, compatibilidade com `reasoning_effort`, precedência, defaults, protocolo v5 e `model_reasoning_effort` no Codex.
+    - Aceite: formato aninhado chega ao argv fixo; Codex `max` vira `xhigh`; DeepSeek recebe o body original; estrutura inválida falha com `400`.
+    - Dependências: tarefas 2, 5, 6 e 10.
+
+12. **Corrigir a configuração Claude dentro do isolamento**
+    - Objetivo: permitir que o Claude encontre sua configuração sem expor o home
+      real do operador.
+    - Escopo: `CLAUDE_CONFIG_PATH`, validação privada, bind read-only no systemd,
+      cópia por execução para home efêmero e classificação sanitizada de limite
+      remoto.
+    - Aceite: original nunca aparece no argv Bubblewrap nem é modificado; cópia
+      nasce `0600` e é removida; arquivo ausente/permissivo falha fechado; teste
+      real deixa de produzir erro de configuração.
+    - Dependências: tarefas 5, 6, 7, 9 e 10.
+
+13. **Adaptar o check de capacidade ao Codex CLI 0.144.6**
+    - Objetivo: evitar falso `required_effort_config_missing` após upgrades que
+      não rejeitam mais o sentinela em `debug models`.
+    - Escopo: catálogo JSON embutido, modelos/efforts exigidos e regressões.
+    - Aceite: startup sem inferência; catálogo inválido falha fechado; Sol, Terra
+      e Luna executam no Bubblewrap com o argv fixo.
+    - Dependências: tarefas 5, 6, 9 e 10.
+
 ## Matriz de rastreabilidade
 
 | ID | Requisito | ADR/Spec | Implementação esperada | Evidência |
@@ -105,3 +133,6 @@ O5 continua sendo o último snapshot estável até o smoke Qwen e o deploy LAN/T
 | MP-09 | Claude com effort configurável | ADR-009 | normalização + executor Claude | enum, argv, capacidades, gates e smoke Qwen |
 | MP-10 | seleção Claude por alias | ADR-010 / protocolo v4 | catálogo central + registry + broker | modelos, matrizes de effort, argv e gates por modelo |
 | MP-11 | logs por modelo e effort | docs de observabilidade | telemetria + destino Pino | cores únicas, effort normalizado e sanitização |
+| MP-12 | effort nativo do Qwen em Codex/Claude | ADR-011 / protocolo v5 | catálogo + normalização + executores | nested/flat, precedência, clamp, passthrough e argv |
+| MP-13 | configuração Claude isolada | ADR-012 / incidente de 20/07 | capabilities + isolation + executor + systemd | arquivo privado, cópia efêmera, original imutável e erro remoto categorizado |
+| MP-14 | compatibilidade Codex 0.144.6 | ADR-013 / incidente pós-deploy | capabilities + catálogo Codex | JSON estrutural, falha fechada e smokes Sol/Terra/Luna |

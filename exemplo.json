@@ -38,13 +38,30 @@
 				"maxOutputTokens": 384000
 			},
 			{
+				"id": "codex-cli",
+				"name": "Codex GPT-5.4 (alias legado)",
+				"url": "http://192.168.2.6:3000/v1/chat/completions",
+				"toolCalling": true,
+				"thinking": true,
+				"supportsReasoningEffort": [
+					"low",
+					"medium",
+					"high",
+					"xhigh",
+					"max"
+				],
+				"vision": false,
+				"streaming": true,
+				"maxInputTokens": 616000,
+				"maxOutputTokens": 384000
+			},
+			{
 				"id": "codex-cli-sol",
 				"name": "Codex GPT-5.6 Sol",
 				"url": "http://192.168.2.6:3000/v1/chat/completions",
 				"toolCalling": true,
 				"thinking": true,
 				"supportsReasoningEffort": [
-					"none",
 					"low",
 					"medium",
 					"high",
@@ -63,7 +80,6 @@
 				"toolCalling": true,
 				"thinking": true,
 				"supportsReasoningEffort": [
-					"none",
 					"low",
 					"medium",
 					"high",
@@ -82,7 +98,6 @@
 				"toolCalling": true,
 				"thinking": true,
 				"supportsReasoningEffort": [
-					"none",
 					"low",
 					"medium",
 					"high",
@@ -101,11 +116,11 @@
 				"toolCalling": true,
 				"thinking": true,
 				"supportsReasoningEffort": [
-					"none",
 					"low",
 					"medium",
 					"high",
-					"xhigh"
+					"xhigh",
+					"max"
 				],
 				"vision": false,
 				"streaming": true,
@@ -119,11 +134,11 @@
 				"toolCalling": true,
 				"thinking": true,
 				"supportsReasoningEffort": [
-					"none",
 					"low",
 					"medium",
 					"high",
-					"xhigh"
+					"xhigh",
+					"max"
 				],
 				"vision": false,
 				"streaming": true,
@@ -252,20 +267,23 @@
 			"deepseek-v4-flash": {
 				"reasoningEffort": "high"
 			},
+			"codex-cli": {
+				"reasoningEffort": "medium"
+			},
 			"codex-cli-sol": {
-				"reasoningEffort": "high"
+				"reasoningEffort": "medium"
 			},
 			"codex-cli-terra": {
-				"reasoningEffort": "high"
+				"reasoningEffort": "medium"
 			},
 			"codex-cli-luna": {
-				"reasoningEffort": "high"
+				"reasoningEffort": "medium"
 			},
 			"codex-cli-5.5": {
-				"reasoningEffort": "high"
+				"reasoningEffort": "medium"
 			},
 			"codex-cli-5.4": {
-				"reasoningEffort": "high"
+				"reasoningEffort": "medium"
 			},
 			"claude-cli-fable-5": {
 				"reasoningEffort": "high"

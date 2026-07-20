@@ -115,8 +115,7 @@ Em `~/.qwen/settings.json`, mescle sem remover outras configurações:
           "baseUrl": "https://ia.meudominio.com/v1",
           "generationConfig": {
             "timeout": 610000,
-            "maxRetries": 0,
-            "reasoningEffort": "high"
+            "maxRetries": 0
           }
         }
       ]
@@ -130,7 +129,7 @@ upstream padrão (DeepSeek). Se o operador configurou outro upstream (OpenAI,
 OpenRouter, etc.), use os IDs desse provedor — consulte `GET /v1/models` para ver o
 que está publicado. Os aliases `codex-cli-*`/`claude-cli-*` independem do upstream.
 
-Repita a entrada Claude trocando `id`, nome e `reasoningEffort` conforme a tabela. Inclua somente modelos aprovados no gate e presentes em `/v1/models`:
+Repita a entrada Claude trocando `id` e nome conforme a tabela. Inclua somente modelos aprovados no gate e presentes em `/v1/models`:
 
 | ID Qwen | Modelo | Efforts expostos | Default | Gate 18/07/2026 |
 |---|---|---|---|---|
@@ -142,6 +141,18 @@ Repita a entrada Claude trocando `id`, nome e `reasoningEffort` conforme a tabel
 | `claude-cli-sonnet-4.6` / `claude-cli` | Sonnet 4.6 | low, medium, high, max | high | reprovado; não configurar |
 | `claude-cli-sonnet-4.5` | Sonnet 4.5 | nenhum | omitir | aprovado |
 | `claude-cli-haiku-4.5` | Haiku 4.5 | nenhum | omitir | reprovado; não configurar |
+
+## Selecionar o effort
+
+Use o comando separado do prompt:
+
+```text
+/effort medium
+```
+
+Depois envie o pedido normalmente. O Qwen persiste `model.reasoningEffort` e envia `reasoning: { "effort": "medium" }`; o gateway aceita esse formato tanto para Codex quanto para Claude. Não adicione `extra_body.reasoning_effort` estático, pois ele tem precedência e impediria `/effort` de mudar o valor.
+
+Nos aliases Codex, `low`, `medium`, `high` e `xhigh` chegam ao CLI sem mudança, o default é `medium` e `max` aparece no log como `xhigh`. Nos aliases Claude, continuam valendo os defaults e limites da tabela; `reasoning: false` também usa o default do modelo.
 
 Não grave o valor da chave no JSON:
 
@@ -175,7 +186,7 @@ Depois de ativar o alias:
 4. peça um comando simples e confirme;
 5. valide o retorno de uma tool e a continuação da conversa;
 6. cancele uma execução pendente;
-7. alterne entre Codex, Claude (`low`, `high` e `max`) e um modelo do upstream;
+7. alterne entre Codex, Claude (`/effort low`, `/effort medium` e `/effort max`) e um modelo do upstream;
 8. confirme no servidor que nenhum arquivo do repositório apareceu no broker.
 
 O resultado correto é alteração somente no seu computador. Logs do gateway/broker devem conter metadados, nunca prompt, código, resposta ou argumentos.

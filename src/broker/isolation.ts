@@ -23,6 +23,23 @@ export function hardenAuthDirectory(path: string): string {
   return resolved
 }
 
+export function validatePrivateAuthFile(path: string): string {
+  const resolved = realpathSync(path)
+  const details = statSync(resolved)
+  if (!details.isFile() || details.size > 1_048_576) {
+    throw new Error('O arquivo de configuração CLI é inválido')
+  }
+  const currentUid = process.getuid?.()
+  if (currentUid !== undefined && details.uid !== currentUid) {
+    throw new Error('O arquivo de configuração CLI pertence a outro usuário')
+  }
+  if ((details.mode & 0o077) !== 0) {
+    throw new Error('O arquivo de configuração CLI não está privado')
+  }
+  accessSync(resolved, constants.R_OK)
+  return resolved
+}
+
 function systemBind(args: string[], path: string): void {
   if (existsSync(path)) args.push('--ro-bind', path, path)
 }
@@ -34,7 +51,11 @@ export function buildIsolationCommand(
   authDir: string,
   workspace: string,
   cliArgs: readonly string[],
+  ephemeralHome?: string,
 ): IsolationCommand {
+  if (provider === 'claude' && ephemeralHome === undefined) {
+    throw new Error('O home efêmero do Claude é obrigatório')
+  }
   const bwrap = resolveExecutable(config.bwrapPath)
   const args = [
     '--unshare-all',
@@ -59,7 +80,9 @@ export function buildIsolationCommand(
     '--proc', '/proc',
     '--dev', '/dev',
     '--dir', '/home',
-    '--dir', '/home/agent',
+    ...(ephemeralHome === undefined
+      ? ['--dir', '/home/agent']
+      : ['--bind', ephemeralHome, '/home/agent']),
     '--dir', '/opt',
     '--dir', '/opt/cli',
     '--bind', workspace, '/work',

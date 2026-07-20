@@ -19,7 +19,7 @@ import {
   BROKER_PROTOCOL_VERSION,
   type BrokerExecuteRequest,
   type ClaudeCliModel,
-  type ClaudeEffortLevel,
+  type CliEffortLevel,
 } from '../src/broker/protocol.js'
 import { createBrokerServer, listenBroker } from '../src/broker/server.js'
 import { CliBrokerClient } from '../src/providers/broker-client.js'
@@ -45,8 +45,10 @@ function config(root: string): BrokerConfig {
   const auth = join(root, 'auth')
   const work = join(root, 'work')
   const socketDirectory = join(root, 'socket')
+  const claudeConfigPath = join(root, '.claude.json')
   const executable = process.execPath
   mkdirSync(auth, { mode: 0o700 })
+  writeFileSync(claudeConfigPath, '{"preservado":true}', { mode: 0o600 })
   return {
     socketPath: join(socketDirectory, 'broker.sock'),
     workRoot: work,
@@ -61,6 +63,7 @@ function config(root: string): BrokerConfig {
     claudePath: executable,
     codexAuthDir: auth,
     claudeAuthDir: auth,
+    claudeConfigPath,
   }
 }
 
@@ -75,6 +78,7 @@ function brokerRequest(): BrokerExecuteRequest {
     requestId: 'request-1',
     provider: 'codex',
     model: 'gpt-5.4',
+    effort: 'medium',
     messages: [{ role: 'user', content: 'Responda texto' }],
     tools: [],
     toolChoice: 'none',
@@ -83,11 +87,13 @@ function brokerRequest(): BrokerExecuteRequest {
 }
 
 function claudeBrokerRequest(
-  effort?: ClaudeEffortLevel,
+  effort?: CliEffortLevel,
   model: ClaudeCliModel = 'claude-sonnet-4-6',
 ): BrokerExecuteRequest {
+  const base = brokerRequest()
+  delete base.effort
   return {
-    ...brokerRequest(),
+    ...base,
     provider: 'claude',
     model,
     ...(effort === undefined ? {} : { effort }),
@@ -149,6 +155,7 @@ describe('broker local', () => {
     expect(call?.args).toContain('--disable')
     expect(call?.args).toContain('--model')
     expect(call?.args).toContain('gpt-5.4')
+    expect(call?.args).toContain('model_reasoning_effort="medium"')
     expect(call?.args.join(' ')).not.toContain('/repos/privado')
     expect(Object.keys(call?.env ?? {}).sort()).toEqual(['LANG', 'LC_ALL', 'PATH'])
     expect(call?.stdin).toContain('cwd=/repos/privado')
@@ -179,10 +186,16 @@ describe('broker local', () => {
     const cfg = { ...config(root), enableClaude: true }
     const calls: ProcessRunSpec[] = []
     let settings: unknown
+    let ephemeralConfig: unknown
+    let ephemeralConfigMode: number | undefined
     const runner: ProcessRunnerLike = {
       async run(spec) {
         calls.push(spec)
         settings = JSON.parse(readFileSync(join(spec.cwd, 'claude-settings.json'), 'utf8'))
+        const ephemeralConfigPath = join(spec.cwd, 'claude-home', '.claude.json')
+        ephemeralConfig = JSON.parse(readFileSync(ephemeralConfigPath, 'utf8'))
+        ephemeralConfigMode = statSync(ephemeralConfigPath).mode & 0o777
+        writeFileSync(ephemeralConfigPath, '{"alterado_apenas_na_copia":true}')
         return completed(JSON.stringify({
           is_error: false,
           structured_output: { content: 'ok claude', tool_calls: [] },
@@ -193,7 +206,12 @@ describe('broker local', () => {
     }
     const executor = new BrokerExecutor(cfg, runner, {
       codex: { available: false, code: 'disabled' },
-      claude: { available: true, binaryPath: process.execPath, authDir: join(root, 'auth') },
+      claude: {
+        available: true,
+        binaryPath: process.execPath,
+        authDir: join(root, 'auth'),
+        configPath: cfg.claudeConfigPath,
+      },
     })
     const result = await executor.execute(claudeBrokerRequest('xhigh', 'claude-opus-4-8'))
     const args = calls[0]?.args ?? []
@@ -212,6 +230,10 @@ describe('broker local', () => {
       hooks: {},
       permissions: { allow: [], deny: [] },
     })
+    expect(ephemeralConfig).toEqual({ preservado: true })
+    expect(ephemeralConfigMode).toBe(0o600)
+    expect(readFileSync(cfg.claudeConfigPath, 'utf8')).toBe('{"preservado":true}')
+    expect(args).not.toContain(cfg.claudeConfigPath)
   })
 
   it('não adiciona --effort quando o pedido normalizado não possui effort', async () => {
@@ -225,7 +247,12 @@ describe('broker local', () => {
     }
     const executor = new BrokerExecutor({ ...config(root), enableClaude: true }, runner, {
       codex: { available: false, code: 'disabled' },
-      claude: { available: true, binaryPath: process.execPath, authDir: join(root, 'auth') },
+      claude: {
+        available: true,
+        binaryPath: process.execPath,
+        authDir: join(root, 'auth'),
+        configPath: join(root, '.claude.json'),
+      },
     })
     await executor.execute(claudeBrokerRequest(undefined, 'claude-haiku-4-5'))
     const args = calls[0]?.args ?? []
@@ -275,6 +302,30 @@ describe('broker local', () => {
       name: 'CliProcessExitError_1_bwrap',
     })
     expect(new CliProcessExitError(null, 'unknown')).toBeInstanceOf(CliExecutionFailedError)
+  })
+
+  it('classifica rate limit estruturado do Claude sem publicar sua saída', async () => {
+    const root = directory()
+    const runner: ProcessRunnerLike = {
+      async run() {
+        return {
+          ...completed(JSON.stringify({ is_error: true, api_error_status: 429, result: 'rate limit' })),
+          exitCode: 1,
+        }
+      },
+    }
+    const executor = new BrokerExecutor(config(root), runner, {
+      codex: { available: false, code: 'disabled' },
+      claude: {
+        available: true,
+        binaryPath: process.execPath,
+        authDir: join(root, 'auth'),
+        configPath: join(root, '.claude.json'),
+      },
+    })
+    await expect(executor.execute(claudeBrokerRequest())).rejects.toMatchObject({
+      name: 'CliProcessExitError_1_rate_limit',
+    })
   })
 
   it.each([
@@ -345,7 +396,12 @@ describe('broker local', () => {
     }
     const executor = new BrokerExecutor(config(root), runner, {
       codex: { available: false, code: 'disabled' },
-      claude: { available: true, binaryPath: process.execPath, authDir: join(root, 'auth') },
+      claude: {
+        available: true,
+        binaryPath: process.execPath,
+        authDir: join(root, 'auth'),
+        configPath: join(root, '.claude.json'),
+      },
     })
     await expect(executor.execute(claudeBrokerRequest())).resolves.toMatchObject({
       decision: { content: 'via result' },
@@ -367,7 +423,12 @@ describe('broker local', () => {
     const runner: ProcessRunnerLike = { run: async () => completed(stdout) }
     const executor = new BrokerExecutor(config(root), runner, {
       codex: { available: false, code: 'disabled' },
-      claude: { available: true, binaryPath: process.execPath, authDir: join(root, 'auth') },
+      claude: {
+        available: true,
+        binaryPath: process.execPath,
+        authDir: join(root, 'auth'),
+        configPath: join(root, '.claude.json'),
+      },
     })
     await expect(executor.execute(claudeBrokerRequest())).rejects.toBeInstanceOf(ErrorType)
   })

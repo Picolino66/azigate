@@ -30,6 +30,7 @@
 - [Configurar um agente OpenAI-compatible](./operations/openai-compatible-agents.md)
 - [Instalação e operação do broker](./operations/broker.md)
 - [Configuração do Qwen Code](./operations/qwen-code.md)
+- [Incidentes operacionais](./operations/incidents/index.md)
 
 ## Segurança
 
@@ -38,6 +39,7 @@
 - [Revisão de 16/07/2026](./security/2026-07-16-security-review.md)
 - [Plano de correção de 16/07/2026](./security/2026-07-16-remediation-plan.md)
 - [Revisão estável anterior](./security/2026-07-14-security-review.md)
+- [Verificação da configuração Claude isolada](./security/2026-07-20-claude-config-isolation-verification.md)
 
 ## Decisões arquiteturais
 
@@ -51,6 +53,9 @@
 - [ADR-008 — aliases Codex com modelo fixo](../adr/ADR-008-aliases-codex-com-modelo-fixo.md)
 - [ADR-009 — Claude CLI com esforço configurável](../adr/ADR-009-claude-cli-esforco-configuravel.md)
 - [ADR-010 — aliases Claude com modelo fixo](../adr/ADR-010-aliases-claude-com-modelo-fixo.md)
+- [ADR-011 — effort do Qwen para provedores CLI](../adr/ADR-011-effort-qwen-para-provedores-cli.md)
+- [ADR-012 — configuração Claude em home efêmero](../adr/ADR-012-configuracao-claude-em-home-efemero.md)
+- [ADR-013 — check Codex por catálogo estruturado](../adr/ADR-013-check-de-capacidade-codex-por-catalogo.md)
 
 ## Regra de sincronização
 

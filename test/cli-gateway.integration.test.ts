@@ -137,6 +137,51 @@ describe('gateway multiprovedor CLI', () => {
     })
   })
 
+  it('encaminha reasoning.effort aninhado do Qwen ao Claude', async () => {
+    broker.healthResult = health(true, true)
+    const response = await appFor({ enableClaudeCli: true }).inject({
+      method: 'POST',
+      url: '/v1/chat/completions',
+      headers: CHAT_HEADERS,
+      payload: {
+        model: 'claude-cli-opus-4.8',
+        messages: [{ role: 'user', content: 'olá' }],
+        reasoning: { effort: 'medium' },
+      },
+    })
+    expect(response.statusCode).toBe(200)
+    expect(broker.executeCalls[0]).toMatchObject({
+      provider: 'claude',
+      model: 'claude-opus-4-8',
+      effort: 'medium',
+    })
+  })
+
+  it('encaminha effort aninhado ao Codex, aplica precedência e normaliza max', async () => {
+    const nested = await appFor().inject({
+      method: 'POST',
+      url: '/v1/chat/completions',
+      headers: CHAT_HEADERS,
+      payload: { model: 'codex-cli-sol', messages: [], reasoning: { effort: 'max' } },
+    })
+    expect(nested.statusCode).toBe(200)
+    expect(broker.executeCalls[0]).toMatchObject({ provider: 'codex', model: 'gpt-5.6-sol', effort: 'xhigh' })
+
+    const precedence = await appFor().inject({
+      method: 'POST',
+      url: '/v1/chat/completions',
+      headers: CHAT_HEADERS,
+      payload: {
+        model: 'codex-cli',
+        messages: [],
+        reasoning_effort: 'high',
+        reasoning: { effort: 'low' },
+      },
+    })
+    expect(precedence.statusCode).toBe(200)
+    expect(broker.executeCalls[1]?.effort).toBe('high')
+  })
+
   it.each([
     ['claude-cli-opus-4.6', 'xhigh', 'claude-opus-4-6', 'high'],
     ['claude-cli-opus-4.7', undefined, 'claude-opus-4-7', 'xhigh'],
@@ -182,6 +227,30 @@ describe('gateway multiprovedor CLI', () => {
     expect(logs).not.toContain('PROMPT_ULTRASSECRETO')
   })
 
+  it('registra somente o effort Codex efetivo após normalizar max', async () => {
+    let logs = ''
+    const logger = pino({ level: 'info', base: null }, new Writable({
+      write(chunk: Buffer, _encoding, callback) {
+        logs += chunk.toString()
+        callback()
+      },
+    }))
+    const response = await appFor({}, { logger }).inject({
+      method: 'POST',
+      url: '/v1/chat/completions',
+      headers: CHAT_HEADERS,
+      payload: {
+        model: 'codex-cli-sol',
+        messages: [{ role: 'user', content: 'PROMPT_ULTRASSECRETO_CODEX' }],
+        reasoning: { effort: 'max' },
+      },
+    })
+    expect(response.statusCode).toBe(200)
+    expect(logs).toContain('"model":"codex-cli-sol"')
+    expect(logs).toContain('"effort":"xhigh"')
+    expect(logs).not.toContain('PROMPT_ULTRASSECRETO_CODEX')
+  })
+
   it('rejeita reasoning_effort Claude inválido antes de chamar o broker', async () => {
     broker.healthResult = health(true, true)
     const response = await appFor({ enableClaudeCli: true }).inject({
@@ -198,6 +267,18 @@ describe('gateway multiprovedor CLI', () => {
     expect(response.json()).toMatchObject({ error: { code: 'invalid_cli_request' } })
     expect(broker.executeCalls).toHaveLength(0)
     expect(upstream.requests).toHaveLength(0)
+  })
+
+  it('rejeita reasoning.effort inválido antes de chamar o broker', async () => {
+    const response = await appFor().inject({
+      method: 'POST',
+      url: '/v1/chat/completions',
+      headers: CHAT_HEADERS,
+      payload: { model: 'codex-cli', messages: [], reasoning: { effort: 'extreme' } },
+    })
+    expect(response.statusCode).toBe(400)
+    expect(response.json()).toMatchObject({ error: { code: 'invalid_cli_request' } })
+    expect(broker.executeCalls).toHaveLength(0)
   })
 
   it('modelo Claude fora da ALLOWED_MODELS recebe 403 sem chamar provider', async () => {

@@ -4,8 +4,14 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { CODEX_DISABLED_FEATURES, inspectCapabilities } from '../src/broker/capabilities.js'
 import { loadBrokerConfig, type BrokerConfig } from '../src/broker/config.js'
-import { buildIsolationCommand, hardenAuthDirectory, resolveExecutable } from '../src/broker/isolation.js'
+import {
+  buildIsolationCommand,
+  hardenAuthDirectory,
+  resolveExecutable,
+  validatePrivateAuthFile,
+} from '../src/broker/isolation.js'
 import type { ProcessRunResult, ProcessRunnerLike, ProcessRunSpec } from '../src/broker/process-runner.js'
+import { CODEX_CLI_MODELS, CODEX_MODEL_CATALOG } from '../src/cli-catalog.js'
 
 const roots: string[] = []
 
@@ -37,6 +43,7 @@ const CODEX_HELP = [
   '--output-last-message',
   '--json',
   '--sandbox',
+  '--config',
 ].join('\n')
 
 const CLAUDE_HELP = [
@@ -59,17 +66,30 @@ const CLAUDE_HELP = [
   '--permission-mode',
 ].join('\n')
 
+function codexCatalog(): string {
+  return JSON.stringify(CODEX_CLI_MODELS.map((slug) => ({
+    slug,
+    supported_reasoning_levels: CODEX_MODEL_CATALOG[slug].efforts.map((effort) => ({ effort })),
+  })))
+}
+
 class CapabilityRunner implements ProcessRunnerLike {
   readonly calls: ProcessRunSpec[] = []
 
   constructor(
-    private readonly failure: 'none' | 'bwrap' | 'codex_help' | 'features' | 'codex_auth' | 'claude_help' = 'none',
+    private readonly failure: 'none' | 'bwrap' | 'codex_help' | 'codex_effort' | 'codex_catalog' | 'features' | 'codex_auth' | 'claude_help' = 'none',
   ) {}
 
   run(spec: ProcessRunSpec): Promise<ProcessRunResult> {
     this.calls.push(spec)
     if (spec.args[0] === '--unshare-all') return Promise.resolve(result('', this.failure === 'bwrap' ? 1 : 0))
     if (spec.args[0] === 'exec') return Promise.resolve(result(this.failure === 'codex_help' ? '' : CODEX_HELP))
+    if (spec.args[0] === '-c') {
+      return Promise.resolve(result(
+        this.failure === 'codex_catalog' ? '{}' : codexCatalog(),
+        this.failure === 'codex_effort' ? 1 : 0,
+      ))
+    }
     if (spec.args[0] === 'features') {
       return Promise.resolve(result(this.failure === 'features' ? '' : CODEX_DISABLED_FEATURES.join('\n')))
     }
@@ -85,8 +105,10 @@ class CapabilityRunner implements ProcessRunnerLike {
 function brokerConfig(directory: string): BrokerConfig {
   const codexAuth = join(directory, 'codex-auth')
   const claudeAuth = join(directory, 'claude-auth')
+  const claudeConfig = join(directory, '.claude.json')
   mkdirSync(codexAuth, { mode: 0o755 })
   mkdirSync(claudeAuth, { mode: 0o755 })
+  writeFileSync(claudeConfig, '{}', { mode: 0o600 })
   return {
     socketPath: join(directory, 'run', 'broker.sock'),
     workRoot: join(directory, 'work'),
@@ -101,6 +123,7 @@ function brokerConfig(directory: string): BrokerConfig {
     claudePath: process.execPath,
     codexAuthDir: codexAuth,
     claudeAuthDir: claudeAuth,
+    claudeConfigPath: claudeConfig,
   }
 }
 
@@ -112,9 +135,11 @@ describe('configuração e capacidades do broker', () => {
     expect(config.executionTimeoutMs).toBe(600_000)
     expect(config.enableCodex).toBe(true)
     expect(config.enableClaude).toBe(false)
+    expect(config.claudeConfigPath).toBe(join(home, '.claude.json'))
     expect(() => loadBrokerConfig({ HOME: home, BROKER_SOCKET_PATH: 'relativo' })).toThrow(/absoluto/u)
     expect(() => loadBrokerConfig({ HOME: home, BROKER_ENABLE_CODEX_CLI: 'sim' })).toThrow(/true ou false/u)
     expect(() => loadBrokerConfig({ HOME: home, BROKER_MAX_OUTPUT_BYTES: '1' })).toThrow(/inteiro/u)
+    expect(() => loadBrokerConfig({ HOME: home, CLAUDE_CONFIG_PATH: 'relativo' })).toThrow(/absoluto/u)
   })
 
   it('aprova binários, auth, flags e features exigidos sem registrar saídas', async () => {
@@ -124,7 +149,9 @@ describe('configuração e capacidades do broker', () => {
     const capabilities = await inspectCapabilities(config, runner)
     expect(capabilities.codex.available).toBe(true)
     expect(capabilities.claude.available).toBe(true)
-    expect(runner.calls).toHaveLength(6)
+    expect(capabilities.claude.configPath).toBe(config.claudeConfigPath)
+    expect(runner.calls).toHaveLength(7)
+    expect(runner.calls.some((call) => call.args.includes('--bundled'))).toBe(true)
     expect((globalThis.process.getuid?.() ?? 0) >= 0).toBe(true)
     expect(statSync(config.codexAuthDir).mode & 0o777).toBe(0o700)
   })
@@ -132,6 +159,8 @@ describe('configuração e capacidades do broker', () => {
   it.each([
     ['bwrap', 'bwrap_unavailable'],
     ['codex_help', 'required_flag_missing'],
+    ['codex_effort', 'required_effort_config_missing'],
+    ['codex_catalog', 'required_effort_config_missing'],
     ['features', 'required_feature_missing'],
     ['codex_auth', 'not_authenticated'],
   ] as const)('falha fechada em %s', async (failure, code) => {
@@ -146,6 +175,18 @@ describe('configuração e capacidades do broker', () => {
     config.enableCodex = false
     const capabilities = await inspectCapabilities(config, new CapabilityRunner('claude_help'))
     expect(capabilities.claude).toMatchObject({ available: false, code: 'required_flag_missing' })
+  })
+
+  it('não publica Claude sem arquivo de configuração privado', async () => {
+    const config = brokerConfig(root())
+    config.enableCodex = false
+    rmSync(config.claudeConfigPath)
+    const missing = await inspectCapabilities(config, new CapabilityRunner())
+    expect(missing.claude).toMatchObject({ available: false, code: 'config_file_unavailable' })
+
+    writeFileSync(config.claudeConfigPath, '{}', { mode: 0o644 })
+    const exposed = await inspectCapabilities(config, new CapabilityRunner())
+    expect(exposed.claude).toMatchObject({ available: false, code: 'config_file_unavailable' })
   })
 
   it('marca providers desabilitados sem executar seus diagnósticos', async () => {
@@ -166,25 +207,43 @@ describe('configuração e capacidades do broker', () => {
     const executable = join(directory, 'cli-falso')
     const auth = join(directory, 'auth')
     const work = join(directory, 'work')
+    const ephemeralHome = join(directory, 'home')
+    const privateFile = join(directory, '.claude.json')
     writeFileSync(executable, '#!/bin/sh\nexit 0\n')
     chmodSync(executable, 0o700)
     mkdirSync(auth, { mode: 0o755 })
     mkdirSync(work)
+    mkdirSync(ephemeralHome)
+    writeFileSync(privateFile, '{}', { mode: 0o600 })
     expect(resolveExecutable(executable)).toBe(executable)
     expect(hardenAuthDirectory(auth)).toBe(auth)
+    expect(validatePrivateAuthFile(privateFile)).toBe(privateFile)
     expect(() => resolveExecutable('cli-relativo')).toThrow(/absoluto/u)
-    const command = buildIsolationCommand(
-      { ...brokerConfig(directory), bwrapPath: process.execPath },
+    const isolationConfig = { ...brokerConfig(directory), bwrapPath: process.execPath }
+    expect(() => buildIsolationCommand(
+      isolationConfig,
       'claude',
       executable,
       auth,
       work,
       ['--print'],
+    )).toThrow(/home efêmero/u)
+    const command = buildIsolationCommand(
+      isolationConfig,
+      'claude',
+      executable,
+      auth,
+      work,
+      ['--print'],
+      ephemeralHome,
     )
     expect(command.args).toContain('/opt/cli/claude-cli-falso')
     expect(command.args).toContain('--clearenv')
     expect(command.args.filter((value) => value === '/etc')).toHaveLength(1)
     expect(command.args).toContain('/etc/resolv.conf')
     expect(command.args).toContain('/etc/ssl/certs')
+    const homeIndex = command.args.indexOf(ephemeralHome)
+    expect(command.args[homeIndex - 1]).toBe('--bind')
+    expect(command.args[homeIndex + 1]).toBe('/home/agent')
   })
 })

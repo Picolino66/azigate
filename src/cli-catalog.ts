@@ -8,7 +8,7 @@ export const CODEX_CLI_MODELS = [
 
 export type CodexCliModel = typeof CODEX_CLI_MODELS[number]
 
-export const CLAUDE_EFFORT_LEVELS = [
+export const CLI_EFFORT_LEVELS = [
   'low',
   'medium',
   'high',
@@ -16,15 +16,26 @@ export const CLAUDE_EFFORT_LEVELS = [
   'max',
 ] as const
 
-export type ClaudeEffortLevel = typeof CLAUDE_EFFORT_LEVELS[number]
+export type CliEffortLevel = typeof CLI_EFFORT_LEVELS[number]
+export const CLAUDE_EFFORT_LEVELS = CLI_EFFORT_LEVELS
+export type ClaudeEffortLevel = CliEffortLevel
 
-interface ClaudeModelConfiguration {
-  efforts: readonly ClaudeEffortLevel[]
-  defaultEffort?: ClaudeEffortLevel
+interface CliModelConfiguration {
+  efforts: readonly CliEffortLevel[]
+  defaultEffort?: CliEffortLevel
 }
 
-const ALL_EFFORTS = CLAUDE_EFFORT_LEVELS
+const ALL_EFFORTS = CLI_EFFORT_LEVELS
 const STANDARD_EFFORTS = ['low', 'medium', 'high', 'max'] as const
+const CODEX_EFFORTS = ['low', 'medium', 'high', 'xhigh'] as const
+
+export const CODEX_MODEL_CATALOG: Readonly<Record<CodexCliModel, CliModelConfiguration>> = {
+  'gpt-5.6-sol': { efforts: CODEX_EFFORTS, defaultEffort: 'medium' },
+  'gpt-5.6-terra': { efforts: CODEX_EFFORTS, defaultEffort: 'medium' },
+  'gpt-5.6-luna': { efforts: CODEX_EFFORTS, defaultEffort: 'medium' },
+  'gpt-5.5': { efforts: CODEX_EFFORTS, defaultEffort: 'medium' },
+  'gpt-5.4': { efforts: CODEX_EFFORTS, defaultEffort: 'medium' },
+}
 
 const CLAUDE_MODELS = {
   'claude-fable-5': { efforts: ALL_EFFORTS, defaultEffort: 'high' },
@@ -38,7 +49,7 @@ const CLAUDE_MODELS = {
 } as const
 
 export type ClaudeCliModel = keyof typeof CLAUDE_MODELS
-export const CLAUDE_MODEL_CATALOG: Readonly<Record<ClaudeCliModel, ClaudeModelConfiguration>> = CLAUDE_MODELS
+export const CLAUDE_MODEL_CATALOG: Readonly<Record<ClaudeCliModel, CliModelConfiguration>> = CLAUDE_MODELS
 export type CliModel = CodexCliModel | ClaudeCliModel
 export type CliProviderName = 'codex' | 'claude'
 
@@ -68,4 +79,8 @@ export function isCodexCliModel(value: unknown): value is CodexCliModel {
 
 export function isClaudeCliModel(value: unknown): value is ClaudeCliModel {
   return typeof value === 'string' && value in CLAUDE_MODELS
+}
+
+export function isCliEffortLevel(value: unknown): value is CliEffortLevel {
+  return typeof value === 'string' && CLI_EFFORT_LEVELS.includes(value as CliEffortLevel)
 }

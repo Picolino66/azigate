@@ -70,7 +70,7 @@ OpenRouter, Together, Groq, Mistral ou um servidor local como Ollama/LM Studio/v
 Consulte `GET /v1/models` para ver os IDs disponíveis no seu ambiente. Este caminho
 funciona em **qualquer** cliente OpenAI-compatible, com ou sem suporte a tools.
 
-### Aliases Codex
+### Aliases Codex e effort
 
 | `model` | Modelo interno |
 |---|---|
@@ -81,11 +81,13 @@ funciona em **qualquer** cliente OpenAI-compatible, com ou sem suporte a tools.
 | `codex-cli-5.4` | GPT-5.4 |
 | `codex-cli` | sinônimo legado de GPT-5.4 |
 
-### Aliases Claude e `reasoning_effort`
+Os aliases Codex aceitam `reasoning_effort` ou `reasoning.effort` com `low`, `medium`, `high`, `xhigh` ou `max`. O default é `medium`; `max` é reduzido para `xhigh` antes de chegar ao CLI.
 
-Para os aliases Claude, o campo `reasoning_effort` aceita `low`, `medium`, `high`,
-`xhigh` ou `max`. Um valor omitido ou incompatível é substituído pelo **default do
-modelo**. Sonnet 4.5 e Haiku 4.5 nunca recebem effort.
+### Aliases Claude e effort
+
+Para os aliases Claude, `reasoning_effort` ou `reasoning.effort` aceita `low`, `medium`, `high`, `xhigh` ou `max`. Um valor omitido ou incompatível é substituído pelo **default do modelo**. Sonnet 4.5 e Haiku 4.5 nunca recebem effort.
+
+Em ambos os providers CLI, o campo plano tem precedência sobre o aninhado. `reasoning: false`, ausência ou objeto sem `effort` usa o default. Valor desconhecido ou estrutura malformada recebe `400 invalid_cli_request`; o passthrough do upstream não passa por essa normalização.
 
 | `model` | Modelo | Efforts | Default |
 |---|---|---|---|

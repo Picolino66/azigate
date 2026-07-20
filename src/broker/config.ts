@@ -15,6 +15,7 @@ export interface BrokerConfig {
   claudePath: string
   codexAuthDir: string
   claudeAuthDir: string
+  claudeConfigPath: string
 }
 
 function integer(env: NodeJS.ProcessEnv, name: string, fallback: number, min: number, max: number): number {
@@ -58,5 +59,9 @@ export function loadBrokerConfig(env: NodeJS.ProcessEnv = process.env): BrokerCo
     claudePath: env.CLAUDE_CLI_PATH?.trim() || join(home, '.local/bin/claude'),
     codexAuthDir: absolutePath(env.CODEX_AUTH_DIR?.trim() || join(home, '.codex'), 'CODEX_AUTH_DIR'),
     claudeAuthDir: absolutePath(env.CLAUDE_AUTH_DIR?.trim() || join(home, '.claude'), 'CLAUDE_AUTH_DIR'),
+    claudeConfigPath: absolutePath(
+      env.CLAUDE_CONFIG_PATH?.trim() || join(home, '.claude.json'),
+      'CLAUDE_CONFIG_PATH',
+    ),
   }
 }

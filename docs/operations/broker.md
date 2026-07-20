@@ -7,7 +7,13 @@
 - Codex CLI e/ou Claude CLI já instalados e autenticados pelo usuário do serviço;
 - gateway e broker executados com o mesmo UID para acessar o socket `0600`.
 
-Mantenha as versões instaladas. O startup verifica capacidades e deixa o provider indisponível se algum flag ou feature exigido faltar.
+Mantenha as versões instaladas. O startup verifica capacidades e deixa o provider
+indisponível se algum flag, feature ou a configuração Codex
+`model_reasoning_effort` exigida faltar. A partir do Codex CLI `0.144.6`,
+`debug models` não rejeita mais um effort sentinela inválido pelo exit code. Por
+isso o check carrega o catálogo embutido em JSON e confirma que todos os
+modelos/efforts fixados existem, sem executar inferência. A execução real continua
+usando `--ignore-user-config --strict-config`.
 
 ```bash
 codex --version
@@ -59,12 +65,14 @@ CODEX_CLI_PATH=/usr/bin/codex
 CLAUDE_CLI_PATH=/home/USUARIO/.local/bin/claude
 CODEX_AUTH_DIR=/home/USUARIO/.codex
 CLAUDE_AUTH_DIR=/home/USUARIO/.claude
+CLAUDE_CONFIG_PATH=/home/USUARIO/.claude.json
 ```
 
 Proteja os diretórios e instale a unidade substituindo `USUARIO`:
 
 ```bash
 chmod 0700 ~/.codex ~/.claude
+chmod 0600 ~/.claude.json
 sudo install -d -m 0755 /etc/gateway-ai
 sudo chmod 0600 /etc/gateway-ai/broker.env
 sudo systemctl daemon-reload
@@ -73,18 +81,26 @@ sudo systemctl enable --now gateway-ai-broker@USUARIO.service
 
 O broker também corrige os auth dirs habilitados para `0700` no startup. O diretório `/run/gateway-ai` nasce `0700` e o socket `0600`.
 
-A unidade usa `ProtectHome=tmpfs` e reexpõe somente `/home/USUARIO/.codex`, `/home/USUARIO/.claude` e os paths read-only da instalação Claude em `/home/USUARIO/.local`. Se o usuário tiver um home fora de `/home/USUARIO` ou o binário estiver em outro diretório, ajuste paths específicos em um override da unidade; não exponha o home inteiro.
+A unidade usa `ProtectHome=tmpfs` e reexpõe somente
+`/home/USUARIO/.codex`, `/home/USUARIO/.claude`, o arquivo
+`/home/USUARIO/.claude.json` e os paths read-only da instalação Claude em
+`/home/USUARIO/.local`. O arquivo top-level fica somente leitura para o serviço e
+é copiado para um home efêmero por execução. Se o usuário tiver um home fora de
+`/home/USUARIO` ou o binário estiver em outro diretório, ajuste paths específicos
+em um override da unidade; não exponha o home inteiro.
 
 ## Verificação sem inferência
 
 ```bash
 systemctl status gateway-ai-broker@USUARIO.service
 curl --unix-socket /run/gateway-ai/broker.sock http://localhost/health
-stat -c '%a %U:%G %n' /run/gateway-ai /run/gateway-ai/broker.sock ~/.codex ~/.claude
+stat -c '%a %U:%G %n' /run/gateway-ai /run/gateway-ai/broker.sock ~/.codex ~/.claude ~/.claude.json
 systemd-analyze verify config/systemd/gateway-ai-broker@.service
 ```
 
-O health retorna somente disponibilidade e código sanitizado. `not_authenticated`, `required_flag_missing`, `required_feature_missing` ou `bwrap_unavailable` impedem a publicação do alias.
+O health retorna somente disponibilidade e código sanitizado.
+`not_authenticated`, `config_file_unavailable`, `required_flag_missing`,
+`required_feature_missing` ou `bwrap_unavailable` impedem a publicação do alias.
 
 ## Gate de viabilidade
 
@@ -96,6 +112,8 @@ GATE_CODEX_MODEL=gpt-5.6-terra npm run gate:codex
 GATE_CODEX_MODEL=gpt-5.6-luna npm run gate:codex
 GATE_CODEX_MODEL=gpt-5.5 npm run gate:codex
 GATE_CODEX_MODEL=gpt-5.4 npm run gate:codex
+# repita cada modelo com GATE_CODEX_EFFORT=low, high e xhigh;
+# GATE_CODEX_EFFORT=max valida o mesmo valor efetivo xhigh
 GATE_CLAUDE_MODEL=claude-fable-5 npm run gate:claude
 GATE_CLAUDE_MODEL=claude-fable-5 npm run gate:claude-efforts
 # repita os dois comandos para sonnet-5, opus-4-8, opus-4-7, opus-4-6,
@@ -104,7 +122,7 @@ GATE_CLAUDE_MODEL=claude-fable-5 npm run gate:claude-efforts
 
 Aprovação exige, por modelo, 20/20 decisões estruturalmente válidas, zero evento de ferramenta local e pelo menos 18/20 categorias corretas. O segundo comando percorre todos os efforts suportados diferentes do default; Sonnet 4.5 e Haiku 4.5 já são cobertos pelo gate completo sem `--effort`. O relatório imprime somente modelo e contagens. Falha individual remove apenas os aliases correspondentes de `ALLOWED_MODELS`.
 
-O protocolo v4 invalida a evidência v3 para publicação dos modelos versionados. Em 18/07/2026, Fable 5, Sonnet 5, Opus 4.8, Opus 4.6 e Sonnet 4.5 passaram; Opus 4.7, Sonnet 4.6 e Haiku 4.5 falharam e permanecem fora da allowlist. Como `claude-cli` é sinônimo de Sonnet 4.6, também permanece indisponível. A versão atual usa `--json-schema` como mecanismo interno: `permissions.deny=["*"]` também o bloquearia, portanto o settings efêmero mantém allow/deny vazios enquanto `--tools ""`, MCP estrito vazio e `dontAsk` desabilitam ferramentas locais. Um upgrade do CLI invalida toda evidência.
+O protocolo v5 exige novo deploy coordenado do broker e gateway. A evidência estrutural anterior continua registrada, mas o novo argv Codex precisa de smoke por modelo/effort antes da publicação operacional. Em 18/07/2026, Fable 5, Sonnet 5, Opus 4.8, Opus 4.6 e Sonnet 4.5 passaram; Opus 4.7, Sonnet 4.6 e Haiku 4.5 falharam e permanecem fora da allowlist. Como `claude-cli` é sinônimo de Sonnet 4.6, também permanece indisponível. A versão atual usa `--json-schema` como mecanismo interno: `permissions.deny=["*"]` também o bloquearia, portanto o settings efêmero mantém allow/deny vazios enquanto `--tools ""`, MCP estrito vazio e `dontAsk` desabilitam ferramentas locais. Um upgrade do CLI invalida toda evidência.
 
 ## Ativação no gateway
 
@@ -158,5 +176,12 @@ sudo systemctl disable --now gateway-ai-broker@USUARIO.service
 - `cli_timeout`: a execução excedeu 10 minutos; não aumente antes de investigar rede/login.
 - `invalid_cli_output`: schema, tool name, argumentos ou evento local foi recusado; mantenha o alias desligado se for recorrente.
 - `bwrap_unavailable`: valide user namespaces e o smoke de Bubblewrap no mesmo usuário/systemd.
+- `config_file_unavailable`: confirme que `CLAUDE_CONFIG_PATH` aponta para um
+  arquivo regular, de no máximo 1 MiB, pertencente ao usuário do serviço e com
+  modo `0600`; não aponte para um diretório nem relaxe as permissões.
+- `cli_execution_failed` após cerca de dois segundos, com o health saudável: o
+  CLI chegou ao provedor, mas pode ter recebido limite de conta (`429`) ou outro
+  erro remoto. Execute um único gate diagnóstico e revise a conta; evite loops de
+  retry no agente.
 - socket com permission denied: alinhe UID/GID do container com o usuário da unidade; não relaxe para `0666`.
 - Claude indisponível: preserve o login existente e revise política/termos; não introduza API key automaticamente.

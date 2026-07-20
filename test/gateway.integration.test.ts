@@ -95,6 +95,7 @@ describe('gateway DeepSeek', () => {
       tools: [{ type: 'function', function: { name: 'ler', parameters: { type: 'object' } } }],
       tool_choice: 'auto',
       parallel_tool_calls: true,
+      reasoning: { effort: 'medium' },
       reasoning_content: 'estado opaco',
       futuro_campo: { preservado: true },
     }

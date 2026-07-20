@@ -150,8 +150,9 @@ claude --version
 claude
 claude auth status
 
-# Proteja o diretório de autenticação
+# Proteja o diretório de autenticação e o arquivo de configuração top-level
 chmod 0700 ~/.claude
+chmod 0600 ~/.claude.json
 ```
 
 Nenhuma API key nova é criada: o broker usa o login existente. Se o login ou a
@@ -166,6 +167,7 @@ pelo seu usuário e use o caminho retornado por `which claude`:
 BROKER_ENABLE_CLAUDE_CLI=true
 CLAUDE_CLI_PATH=/home/USUARIO/.local/bin/claude
 CLAUDE_AUTH_DIR=/home/USUARIO/.claude
+CLAUDE_CONFIG_PATH=/home/USUARIO/.claude.json
 ```
 
 A instalação da unidade `gateway-ai-broker@USUARIO.service` e o `reload` estão no
@@ -218,9 +220,13 @@ Um request de chat, escolhendo o effort:
 ```bash
 curl -N -H "Authorization: Bearer SUA_CHAVE_DO_GATEWAY" \
   -H "Content-Type: application/json" \
-  -d '{"model":"claude-cli-opus-4.8","reasoning_effort":"high","messages":[{"role":"user","content":"diga ola"}]}' \
+  -d '{"model":"claude-cli-opus-4.8","reasoning":{"effort":"high"},"messages":[{"role":"user","content":"diga ola"}]}' \
   http://127.0.0.1:3000/v1/chat/completions
 ```
+
+O formato aninhado acima é o emitido pelo Qwen Code. O campo plano
+`reasoning_effort` continua aceito para compatibilidade e, se ambos forem enviados,
+tem precedência.
 
 Se o alias retornar `503 cli_unavailable`, confira o broker (health do socket, login,
 `BROKER_ENABLE_CLAUDE_CLI`, caminho do binário) no [runbook](../operations/broker.md).

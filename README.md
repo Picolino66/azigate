@@ -56,6 +56,11 @@ tool call, mas **quem executa a ferramenta é o agente no seu computador**, com 
 confirmações que você já usa. O repositório, o `cwd`, o home completo e as
 ferramentas locais nunca entram na sandbox do servidor.
 
+O Claude precisa de `~/.claude` e do arquivo privado `~/.claude.json` para usar o
+login existente. O broker valida ambos e copia apenas o arquivo de configuração
+para um home efêmero por execução; o home real continua oculto e a cópia é apagada
+com o workspace.
+
 ```mermaid
 sequenceDiagram
     participant Ag as Agente (seu PC)
@@ -75,10 +80,10 @@ sequenceDiagram
 - **Passthrough do upstream:** preserva SSE byte a byte, `tool_calls`, `reasoning`,
   `usage`, campos futuros e o `[DONE]`. Funciona com qualquer provedor
   OpenAI-compatible (DeepSeek, OpenAI, OpenRouter, Ollama, etc.).
-- **Aliases Codex** (`codex-cli-*`): selecionam modelos GPT fixos. São *fail-closed*
-  e nunca caem automaticamente no upstream.
+- **Aliases Codex** (`codex-cli-*`): selecionam modelos GPT fixos e recebem effort
+  normalizado; `max` vira `xhigh`. São *fail-closed* e nunca caem automaticamente no upstream.
 - **Aliases Claude** (`claude-cli-*`): selecionam modelos Claude fixos, com
-  `reasoning_effort` normalizado por modelo. Apenas modelos aprovados no gate real
+  effort normalizado por modelo. Apenas modelos aprovados no gate real
   e presentes em `ALLOWED_MODELS` são publicados.
 - **Sem vazamento de credenciais:** o container não recebe os logins dos CLIs; o
   broker não recebe as chaves do upstream/gateway.
@@ -146,7 +151,7 @@ são aceitos em desenvolvimento ou atrás do seu próprio TLS.
 
 ## Modelos disponíveis
 
-Você seleciona o provedor apenas pelo `model`. Resumo (detalhes de `reasoning_effort`
+Você seleciona o provedor apenas pelo `model`. Resumo (detalhes de `reasoning_effort`/`reasoning.effort`
 e defaults no [guia de agentes](docs/operations/openai-compatible-agents.md)):
 
 | `model` | Provedor | Observação |

@@ -9,6 +9,7 @@ import type {
   BrokerTool,
   ClaudeCliModel,
   ClaudeEffortLevel,
+  CliEffortLevel,
   CliModel,
   CliProviderName,
   CodexCliModel,
@@ -17,7 +18,9 @@ import {
   BROKER_PROTOCOL_VERSION,
   CLAUDE_EFFORT_LEVELS,
   CLAUDE_MODEL_CATALOG,
+  CLI_EFFORT_LEVELS,
   CODEX_CLI_MODELS,
+  CODEX_MODEL_CATALOG,
   isClaudeCliModel,
 } from './protocol.js'
 import { GatewayError } from '../upstream/errors.js'
@@ -133,6 +136,15 @@ function selectedCodexModel(env: NodeJS.ProcessEnv): CodexCliModel {
   return model as CodexCliModel
 }
 
+function selectedCodexEffort(env: NodeJS.ProcessEnv, model: CodexCliModel): CliEffortLevel {
+  const configured = env.GATE_CODEX_EFFORT?.trim()
+  if (configured === undefined || configured === '') return CODEX_MODEL_CATALOG[model].defaultEffort ?? 'medium'
+  if (!CLI_EFFORT_LEVELS.includes(configured as CliEffortLevel)) {
+    throw new Error(`GATE_CODEX_EFFORT deve ser um destes valores: ${CLI_EFFORT_LEVELS.join(', ')}`)
+  }
+  return configured === 'max' ? 'xhigh' : configured as CliEffortLevel
+}
+
 function selectedClaudeModel(env: NodeJS.ProcessEnv): ClaudeCliModel {
   const model = env.GATE_CLAUDE_MODEL?.trim() || 'claude-sonnet-4-6'
   if (!isClaudeCliModel(model)) {
@@ -167,7 +179,9 @@ export async function runViabilityGate(provider: CliProviderName): Promise<boole
   const codexModel = provider === 'codex' ? selectedCodexModel(env) : undefined
   const claudeModel = provider === 'claude' ? selectedClaudeModel(env) : undefined
   const model: CliModel = codexModel ?? claudeModel ?? 'gpt-5.4'
+  const codexEffort = codexModel === undefined ? undefined : selectedCodexEffort(env, codexModel)
   const claudeEffort = claudeModel === undefined ? undefined : selectedClaudeEffort(env, claudeModel)
+  const effort = codexEffort ?? claudeEffort
   const runner = new ProcessRunner()
   const capabilities = await inspectCapabilities(config, runner)
   if (!capabilities[provider].available) {
@@ -194,7 +208,7 @@ export async function runViabilityGate(provider: CliProviderName): Promise<boole
           requestId: `gate-${provider}-${round}-${index}`,
           provider,
           model,
-          ...(claudeEffort === undefined ? {} : { effort: claudeEffort }),
+          ...(effort === undefined ? {} : { effort }),
           ...item.request,
         })
         structurallyValid += 1
@@ -214,6 +228,7 @@ export async function runViabilityGate(provider: CliProviderName): Promise<boole
   process.stdout.write(`${JSON.stringify({
     provider,
     model,
+    ...(effort === undefined ? {} : { effort }),
     scenarios: selectedScenarios.length,
     repetitions: repeat,
     diagnostic,

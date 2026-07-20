@@ -4,15 +4,18 @@ import type {
   BrokerMessage,
   BrokerTool,
   BrokerToolChoice,
-  ClaudeEffortLevel,
+  CliEffortLevel,
   CliModel,
   CliProviderName,
 } from '../broker/protocol.js'
 import {
   BROKER_PROTOCOL_VERSION,
-  CLAUDE_EFFORT_LEVELS,
   CLAUDE_MODEL_CATALOG,
+  CLI_EFFORT_LEVELS,
+  CODEX_MODEL_CATALOG,
   isClaudeCliModel,
+  isCliEffortLevel,
+  isCodexCliModel,
 } from '../broker/protocol.js'
 import type { ChatBody } from '../types.js'
 import { InvalidCliOutputError } from './errors.js'
@@ -117,31 +120,38 @@ function normalizeMessages(value: unknown, offeredNames: ReadonlySet<string>): B
   })
 }
 
+function requestedReasoningEffort(body: ChatBody): unknown {
+  if (body.reasoning_effort !== undefined) return body.reasoning_effort
+  if (body.reasoning === undefined || body.reasoning === false) return undefined
+  if (!isRecord(body.reasoning)) {
+    throw new CliRequestValidationError('reasoning para provedores CLI deve ser false ou um objeto')
+  }
+  return body.reasoning.effort
+}
+
 function normalizeReasoningEffort(
   value: unknown,
   provider: CliProviderName,
   model: CliModel,
-): ClaudeEffortLevel | undefined {
-  if (provider !== 'claude' || value === undefined) return undefined
-  if (
-    typeof value !== 'string' ||
-    !CLAUDE_EFFORT_LEVELS.includes(value as ClaudeEffortLevel)
-  ) {
+): CliEffortLevel | undefined {
+  if (!isCliEffortLevel(value) && value !== undefined) {
     throw new CliRequestValidationError(
-      `reasoning_effort para claude-cli deve ser: ${CLAUDE_EFFORT_LEVELS.join(', ')}`,
+      `reasoning effort para provedores CLI deve ser: ${CLI_EFFORT_LEVELS.join(', ')}`,
     )
   }
+
+  if (provider === 'codex') {
+    if (!isCodexCliModel(model)) throw new CliRequestValidationError('Modelo Codex interno inválido')
+    const configuration = CODEX_MODEL_CATALOG[model]
+    if (value === undefined) return configuration.defaultEffort
+    if (value === 'max') return 'xhigh'
+    return configuration.efforts.includes(value) ? value : configuration.defaultEffort
+  }
+
   if (!isClaudeCliModel(model)) throw new CliRequestValidationError('Modelo Claude interno inválido')
   const configuration = CLAUDE_MODEL_CATALOG[model]
-  return configuration.efforts.includes(value as ClaudeEffortLevel)
-    ? value as ClaudeEffortLevel
-    : configuration.defaultEffort
-}
-
-function defaultClaudeEffort(provider: CliProviderName, model: CliModel): ClaudeEffortLevel | undefined {
-  if (provider !== 'claude') return undefined
-  if (!isClaudeCliModel(model)) throw new CliRequestValidationError('Modelo Claude interno inválido')
-  return CLAUDE_MODEL_CATALOG[model].defaultEffort
+  if (value === undefined) return configuration.defaultEffort
+  return configuration.efforts.includes(value) ? value : configuration.defaultEffort
 }
 
 export class CliRequestValidationError extends Error {
@@ -158,9 +168,7 @@ export function normalizeCliRequest(
   model: CliModel,
 ): BrokerExecuteRequest {
   const tools = normalizeTools(body.tools)
-  const effort = body.reasoning_effort === undefined
-    ? defaultClaudeEffort(provider, model)
-    : normalizeReasoningEffort(body.reasoning_effort, provider, model)
+  const effort = normalizeReasoningEffort(requestedReasoningEffort(body), provider, model)
   const offeredNames = new Set(tools.map((tool) => tool.name))
   const toolChoice = normalizeToolChoice(body.tool_choice, offeredNames)
   if (toolChoice !== 'none' && tools.length === 0 && body.tool_choice !== undefined) {

@@ -10,7 +10,7 @@ Provider experimental com oito aliases versionados e o sinônimo legado `claude-
 
 ## Entrada
 
-O mesmo subconjunto textual/function tool do Codex. Conteúdo multimodal é rejeitado. O campo público `model` seleciona apenas um alias fechado; `reasoning_effort` aceita `low`, `medium`, `high`, `xhigh` ou `max`.
+O mesmo subconjunto textual/function tool do Codex. Conteúdo multimodal é rejeitado. O campo público `model` seleciona apenas um alias fechado; `reasoning_effort` ou `reasoning.effort` aceita `low`, `medium`, `high`, `xhigh` ou `max`.
 
 ## Saída
 
@@ -18,7 +18,9 @@ Decisão validada e normalizada para Chat Completions JSON/SSE.
 
 ## Dependências
 
-Claude CLI autenticado, Bubblewrap, `~/.claude` privado, broker ativo e dois flags explícitos de habilitação.
+Claude CLI autenticado, Bubblewrap, `~/.claude` com modo `0700`,
+`~/.claude.json` regular com modo `0600`, broker ativo e dois flags explícitos de
+habilitação.
 
 ## Regras de negócio
 
@@ -27,9 +29,13 @@ Claude CLI autenticado, Bubblewrap, `~/.claude` privado, broker ativo e dois fla
 - `dontAsk` não concede ferramentas; a lista de tools continua vazia.
 - Cada alias mapeia para um único nome completo enviado por `--model`; `claude-cli` equivale a Sonnet 4.6.
 - Omissão ou effort incompatível aplica o padrão do catálogo. Sonnet 4.5 e Haiku 4.5 não recebem `--effort`.
-- O protocolo v4 e o broker validam novamente provider, modelo e matriz de effort.
+- O formato plano tem precedência sobre o aninhado; `reasoning: false` usa o default do modelo.
+- O protocolo v5 e o broker validam novamente provider, modelo e matriz de effort.
 - Thinking permanece privado ao CLI e não é publicado em Chat Completions ou SSE.
 - A versão instalada deve oferecer todos os flags.
+- O startup valida proprietário, tipo, tamanho máximo de 1 MiB e permissões do
+  `CLAUDE_CONFIG_PATH`. Cada execução recebe uma cópia `0600` em um home efêmero;
+  o arquivo original nunca é montado na sandbox.
 - Bloqueio de autenticação/política mantém o alias indisponível; nenhuma API key é introduzida.
 
 ## Evidência de viabilidade
@@ -53,8 +59,12 @@ Assim, a allowlist local publica somente `claude-cli-fable-5`, `claude-cli-sonne
 
 ## Fluxo resumido
 
-Gateway resolve alias/modelo/default -> protocolo v4 -> broker revalida -> Claude roda isolado com `--model`/`--effort` fixos -> structured output é validado -> o agente recebe somente a decisão.
+Gateway resolve alias/modelo/default -> protocolo v5 -> broker revalida -> Claude roda isolado com `--model`/`--effort` fixos -> structured output é validado -> o agente recebe somente a decisão.
 
 ## Possíveis erros
 
-Os mesmos erros CLI. Falha no gate ou no login resulta em `cli_unavailable` e omissão do catálogo.
+Os mesmos erros CLI. Falha no gate ou no login resulta em `cli_unavailable` e
+omissão do catálogo. Arquivo `~/.claude.json` ausente, permissivo, grande demais ou
+com proprietário divergente produz o código sanitizado `config_file_unavailable`.
+Limite da conta/provedor encerra a execução como `cli_execution_failed`, sem
+registrar a resposta bruta.

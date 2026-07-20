@@ -1,15 +1,15 @@
 {
   "orchestration_id": "c16a8ea6-06e8-4ec2-bb2c-7ac4cd272dc5",
   "created_at": "2026-07-14T13:35:00Z",
-  "updated_at": "2026-07-19T11:21:00-03:00",
-  "mode": "feature-evolution",
-  "current_phase": "F6",
+  "updated_at": "2026-07-20T11:50:02-03:00",
+  "mode": "incident-response",
+  "current_phase": "F7",
   "snapshot_version": "O5",
   "last_stable_snapshot": "O5",
   "evolution_cycle": {
     "name": "multiprovider-cli-broker",
-    "status": "claude-model-gates-complete-protocol-v4-deploy-pending",
-    "reassessed_phases": ["F2", "F3", "F5", "F6"],
+    "status": "codex-0.144.6-validated-capability-fix-deploy-pending",
+    "reassessed_phases": ["F2", "F3", "F5", "F6", "F7"],
     "next_snapshot": "pending-remote-qwen-smoke"
   },
   "product": {
@@ -35,7 +35,7 @@
       "catálogo combinado com degradação parcial",
       "DeepSeek JSON/SSE transparente",
       "Codex e Claude JSON/SSE sintéticos",
-      "protocolo Unix v4 health/execute com modelos Codex/Claude fixados e effort Claude fechado por modelo"
+      "protocolo Unix v5 health/execute com modelos Codex/Claude fixados e effort comum fechado por modelo"
     ],
     "non_functional": [
       "Qwen como único executor",
@@ -50,8 +50,11 @@
       "sem novas API keys Codex/Claude",
       "aliases Codex dependem do login existente e de modelos internos fixados por allowlist",
       "Claude é opt-in e usa somente modelos fixados pelo catálogo e pela allowlist",
-      "reasoning_effort Claude aceita low, medium, high, xhigh ou max",
-      "sem repositório/home completo no servidor ou sandbox"
+      "aliases CLI aceitam reasoning_effort ou reasoning.effort; o campo plano tem precedência",
+      "Codex aceita low, medium, high, xhigh ou max, usa medium por padrão e reduz max para xhigh",
+      "Claude aceita low, medium, high, xhigh ou max e aplica a matriz/default do modelo",
+      "sem repositório/home completo no servidor ou sandbox",
+      "Claude exige .claude.json privado; o original fica read-only no serviço e somente uma cópia efêmera entra na sandbox"
     ]
   },
   "scope": {
@@ -80,7 +83,12 @@
       "structurally_valid": "20/20",
       "local_tool_executions": 0,
       "category_correct": "20/20",
-      "passed": true
+      "passed": true,
+      "post_deploy_model_smokes": {
+        "version": "0.144.6",
+        "passed": ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-5.4"],
+        "gpt_5_6_evidence": "1/1 estrutura, 1/1 categoria e zero ferramenta local por modelo no effort medium"
+      }
     },
     "claude_gate": {
       "version": "2.1.214",
@@ -94,7 +102,8 @@
       "mudança de flags/semântica das CLIs",
       "dependência de Bubblewrap/user namespaces/DNS do host",
       "smoke Qwen remoto pendente",
-      "rate limit e cache locais"
+      "rate limit e cache locais",
+      "upgrade automático de CLI pode invalidar checks de capacidade e exige novo gate"
     ]
   },
   "architecture": {
@@ -110,18 +119,18 @@
     "integration_contracts": [
       "Qwen Code OpenAI Compatible /v1",
       "DeepSeek /models e /chat/completions",
-      "broker Unix protocol v4 /health e /execute",
-      "Codex exec --model fixado, --json, --output-schema e --ephemeral",
-      "Claude print mode com --model/--effort fixados, JSON schema e tools/MCP vazios"
+      "broker Unix protocol v5 /health e /execute",
+      "Codex exec --model fixado, model_reasoning_effort fixado, --json, --output-schema e --ephemeral",
+      "Claude print mode com --model/--effort fixados, JSON schema, tools/MCP vazios e home efêmero com cópia privada da configuração"
     ],
     "security_model": {
       "authentication": "Bearer gateway e logins CLI existentes no host",
       "authorization": "IP/model/tool allowlists e aliases reservados",
-      "secrets": "gateway/container separados dos auth dirs do broker",
+      "secrets": "gateway/container separados dos auth dirs e da configuração Claude do broker",
       "ssrf": "DeepSeek e paths fixos; protocolo broker sem URL/path",
       "execution": "Qwen único executor; CLIs sem ferramentas locais"
     },
-    "adrs": ["ADR-001", "ADR-002", "ADR-003", "ADR-004", "ADR-005", "ADR-006", "ADR-007", "ADR-008", "ADR-009", "ADR-010"]
+    "adrs": ["ADR-001", "ADR-002", "ADR-003", "ADR-004", "ADR-005", "ADR-006", "ADR-007", "ADR-008", "ADR-009", "ADR-010", "ADR-011", "ADR-012", "ADR-013"]
   },
   "contracts": {
     "api_version": "v1",
@@ -142,7 +151,7 @@
       "broker": ["protocol", "capabilities", "prompt", "isolation", "process-runner", "executor", "server"],
       "operations": ["Docker", "Compose", "Nginx", "systemd"]
     },
-    "backlog": ["GW-01..GW-10", "MP-01..MP-11"],
+    "backlog": ["GW-01..GW-10", "MP-01..MP-14"],
     "test_coverage_thresholds": {
       "statements": 80,
       "branches": 70,
@@ -189,33 +198,65 @@
       "F5-claude-opus-4.6-gate-e-efforts",
       "F5-claude-sonnet-4.6-efforts-3-de-3",
       "F5-claude-sonnet-4.5-gate",
-      "F7-observabilidade-cores-unicas-effort-126-testes"
+      "F7-observabilidade-cores-unicas-effort-126-testes",
+      "F5-protocolo-v5-qwen-effort-check-139-testes",
+      "F5-protocolo-v5-cobertura-acima-dos-limiares",
+      "F5-protocolo-v5-audit-zero-vulnerabilidades",
+      "F6-protocolo-v5-compose-systemd-docker-build",
+      "F6-protocolo-v5-links-internos-38-arquivos",
+      "F5-codex-0.133-model-reasoning-effort-prova-positiva-negativa",
+      "F7-claude-config-home-efemero-check-141-testes",
+      "F7-claude-config-cobertura-acima-dos-limiares",
+      "F7-claude-config-audit-zero-vulnerabilidades",
+      "F7-claude-config-compose-systemd-docker-links",
+      "F7-claude-config-broker-efemero-v5-ready",
+      "F7-codex-0.144.6-check-141-testes",
+      "F7-codex-0.144.6-sol-terra-luna-smoke-medium",
+      "F7-codex-0.144.6-cobertura-acima-dos-limiares",
+      "F7-codex-0.144.6-audit-zero-vulnerabilidades"
     ],
     "gates_failed": [
       "F5-claude-opus-4.7-estrutura-19-de-20",
       "F5-claude-sonnet-4.6-estrutura-18-de-20",
       "F5-claude-haiku-4.5-estrutura-19-de-20-categoria-11-de-20"
     ],
-    "gates_pending": ["F6-deploy-conjunto-broker-gateway-v4", "F6-smoke-qwen-modelos-claude-aprovados-no-pc-da-vpn", "F6-deploy-tls-lan-real"],
-    "test_results": { "files": 6, "tests_passed": 126, "tests_failed": 0 },
-    "coverage_report": { "statements": 80.96, "branches": 75.6, "functions": 86.25, "lines": 86.39 },
+    "gates_pending": ["F6-deploy-check-catalogo-codex-0.144.6", "F6-gate-completo-codex-5.6-por-modelo", "F6-smoke-qwen-codex-5.6-no-pc-da-vpn", "F6-smoke-qwen-efforts-low-medium-max-no-pc-da-vpn", "F6-smoke-claude-bloqueado-por-429-da-conta", "F6-deploy-tls-lan-real"],
+    "test_results": { "files": 6, "tests_passed": 141, "tests_failed": 0 },
+    "coverage_report": { "statements": 81.61, "branches": 76.54, "functions": 86.63, "lines": 86.85 },
     "security_report": "docs/security/2026-07-16-security-review.md"
   },
   "operations": {
-    "deployment_record": "gateway foi recriado com o artefato v4 e observabilidade atualizada em 192.168.2.6:3000; o broker host ainda está no protocolo v3 e exige atualização coordenada com sudo antes de usar aliases CLI",
-    "smoke_test_results": "Claude 2.1.214: cinco modelos aprovados e três reprovados individualmente; socket/catálogo/ready v4 e Qwen remoto pendentes após deploy conjunto",
-    "observability_config": "stdout padrão dá uma cor ANSI estável e distinta a cada alias conhecido; logs incluem somente o effort seguro efetivamente usado (normalizado para Claude) e permanecem restritos a metadados",
+    "deployment_record": "broker e gateway v5 implantados pelo operador em 20/07/2026 às 11:11 BRT; Codex atualizou para 0.144.6 às 11:43 e o novo check de catálogo aguarda instalação antes do próximo restart",
+    "smoke_test_results": "DeepSeek respondeu 200; no Codex 0.144.6 Sol, Terra e Luna passaram individualmente no Bubblewrap com medium, além dos smokes anteriores 5.5/5.4; Claude alcançou o provider e recebeu rate_limit",
+    "observability_config": "stdout padrão dá uma cor ANSI estável e distinta a cada alias conhecido; logs incluem somente o effort efetivo seguro, incluindo max Codex normalizado para xhigh, e permanecem restritos a metadados",
     "local_activation": {
       "gateway_env": "ENABLE_CLAUDE_CLI e BROKER_ENABLE_CLAUDE_CLI preparados como true no .env local; secrets preservados e não lidos",
       "allowed_models": "DeepSeek, aliases Codex e somente Claude aprovados: Fable 5, Sonnet 5, Opus 4.8, Opus 4.6 e Sonnet 4.5",
-      "broker": "serviço em execução está no protocolo v3; dist v4 está pronto para instalação com sudo",
-      "gateway_restart": "container já usa v4; para restaurar compatibilidade dos aliases CLI, atualize e reinicie o broker imediatamente"
+      "broker": "serviço v5 ativo; subprocessos já usam Codex 0.144.6, mas o dist com check de catálogo precisa ser instalado antes de reiniciar",
+      "gateway_restart": "container v5 recriado e DeepSeek validada; Sol/Terra/Luna podem permanecer na allowlist"
     },
     "runbooks": ["docs/operations/broker.md", "docs/operations/qwen-code.md"],
     "rollback": "desabilitar aliases e recriar o gateway preserva DeepSeek",
     "slos": [],
     "alerts": [],
-    "incidents": []
+    "incidents": [
+      {
+        "id": "INC-2026-07-20-CLAUDE-CONFIG",
+        "severity": "P2",
+        "status": "corrigido-e-implantado-bloqueio-externo-429",
+        "cause": "ProtectHome=tmpfs e Bubblewrap ocultavam ~/.claude.json; health validava auth fora da sandbox e gerava falso positivo",
+        "evidence": "erro config_file_not_found reproduzido; após home efêmero o CLI alcançou a API e recebeu 429 externo",
+        "record": "docs/operations/incidents/2026-07-20-claude-config-ausente-na-sandbox.md"
+      },
+      {
+        "id": "INC-2026-07-20-CLI-AVAILABILITY",
+        "severity": "P2",
+        "status": "codex-recuperado-deploy-do-check-pendente-claude-limitado",
+        "cause": "Codex 0.133 recusou GPT-5.6; upgrade 0.144.6 recuperou os modelos e alterou a semântica do check debug models; Claude permanece sob rate limit",
+        "evidence": "Sol/Terra/Luna 1/1 válidos no 0.144.6; check por catálogo implementado; Claude rate_limit; DeepSeek 200",
+        "record": "docs/operations/incidents/2026-07-20-aliases-cli-indisponiveis-pos-deploy.md"
+      }
+    ]
   },
   "orchestration": {
     "external_skills_activated": [
@@ -266,6 +307,62 @@
         "mode": "coordenadora-principal",
         "phase": "F3-F6",
         "timestamp": "2026-07-19T11:21:00-03:00"
+      },
+      {
+        "skill_name": "autonomous-software-orchestrator",
+        "source": "~/.agents/skills/autonomous-software-orchestrator",
+        "reason": "coordenar a compatibilidade reasoning.effort do Qwen, protocolo v5, testes e documentação",
+        "mode": "coordenadora-principal",
+        "phase": "F3-F6",
+        "timestamp": "2026-07-20T10:27:22-03:00"
+      },
+      {
+        "skill_name": "openai-docs",
+        "source": "Codex skill system",
+        "reason": "validar a configuração oficial model_reasoning_effort do Codex CLI",
+        "mode": "referência-oficial",
+        "phase": "F3-F5",
+        "timestamp": "2026-07-20T10:27:22-03:00"
+      },
+      {
+        "skill_name": "autonomous-software-orchestrator",
+        "source": "~/.agents/skills/autonomous-software-orchestrator",
+        "reason": "coordenar resposta ao incidente Claude, correção fail-closed, evidência, documentação e deploy",
+        "mode": "coordenadora-principal",
+        "phase": "F7",
+        "timestamp": "2026-07-20T11:02:34-03:00"
+      },
+      {
+        "skill_name": "defensive-security-auditor",
+        "source": "~/.agents/skills/defensive-security-auditor",
+        "reason": "verificar que a correção da configuração Claude não expõe o home nem relaxa credenciais",
+        "mode": "complementar",
+        "phase": "F7",
+        "timestamp": "2026-07-20T11:02:34-03:00"
+      },
+      {
+        "skill_name": "autonomous-software-orchestrator",
+        "source": "~/.agents/skills/autonomous-software-orchestrator",
+        "reason": "coordenar o diagnóstico pós-deploy dos aliases CLI e separar falha de sandbox de indisponibilidade externa",
+        "mode": "coordenadora-principal",
+        "phase": "F7",
+        "timestamp": "2026-07-20T11:20:34-03:00"
+      },
+      {
+        "skill_name": "autonomous-software-orchestrator",
+        "source": "~/.agents/skills/autonomous-software-orchestrator",
+        "reason": "reavaliar o incidente após evidência do usuário, validar Codex 0.144.6 e coordenar a correção do startup check",
+        "mode": "coordenadora-principal",
+        "phase": "F7",
+        "timestamp": "2026-07-20T11:50:02-03:00"
+      },
+      {
+        "skill_name": "openai-docs",
+        "source": "Codex skill system",
+        "reason": "confirmar oficialmente seleção não interativa, modelos Sol/Terra/Luna e model_reasoning_effort",
+        "mode": "referência-oficial",
+        "phase": "F7",
+        "timestamp": "2026-07-20T11:50:02-03:00"
       }
     ]
   }

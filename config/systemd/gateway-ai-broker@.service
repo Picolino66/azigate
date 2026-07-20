@@ -26,7 +26,7 @@ PrivateTmp=yes
 ProtectSystem=strict
 ProtectHome=tmpfs
 BindPaths=-/home/%i/.codex -/home/%i/.claude
-BindReadOnlyPaths=-/home/%i/.local/bin/claude -/home/%i/.local/share/claude
+BindReadOnlyPaths=-/home/%i/.claude.json -/home/%i/.local/bin/claude -/home/%i/.local/share/claude
 ReadWritePaths=/run/gateway-ai
 ProtectKernelModules=yes
 # ProtectKernelTunables, ProtectKernelLogs e ProtectHostname conflitam com

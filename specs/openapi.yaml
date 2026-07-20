@@ -68,8 +68,10 @@ paths:
                 tool_choice: {}
                 parallel_tool_calls: { type: boolean }
                 reasoning_effort:
-                  type: string
-                  description: Para aliases claude-cli, aceita low, medium, high, xhigh ou max; omitido ou incompatível usa o padrão do modelo. Outros providers preservam seu contrato próprio.
+                  description: Para aliases CLI, formato plano legado com enum low, medium, high, xhigh ou max e precedência sobre reasoning.effort. Para o upstream, permanece opaco.
+                reasoning:
+                  description: Para aliases CLI, false usa o default e reasoning.effort aceita low, medium, high, xhigh ou max. Para o upstream, permanece opaco.
+                  example: { effort: medium }
               additionalProperties: true
       responses:
         '200':

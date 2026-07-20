@@ -2,6 +2,7 @@ import type { BrokerExecuteRequest, BrokerMessage, BrokerTool, BrokerToolChoice 
 import {
   BROKER_PROTOCOL_VERSION,
   CLAUDE_MODEL_CATALOG,
+  CODEX_MODEL_CATALOG,
   isClaudeCliModel,
   isCodexCliModel,
 } from './protocol.js'
@@ -74,7 +75,8 @@ export function isBrokerExecuteRequest(value: unknown): value is BrokerExecuteRe
     (value.provider === 'codex' || value.provider === 'claude') &&
     (value.provider === 'codex'
       ? isCodexCliModel(value.model) &&
-        value.effort === undefined
+        typeof value.effort === 'string' &&
+        CODEX_MODEL_CATALOG[value.model].efforts.some((effort) => effort === value.effort)
       : isClaudeCliModel(value.model) && (
         value.effort === undefined ||
         typeof value.effort === 'string' &&

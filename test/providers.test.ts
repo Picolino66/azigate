@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createTestConfig } from '../src/config.js'
-import { CLAUDE_MODEL_CATALOG } from '../src/cli-catalog.js'
+import { CLAUDE_MODEL_CATALOG, CODEX_MODEL_CATALOG } from '../src/cli-catalog.js'
 import { canonicalPrompt } from '../src/broker/prompt.js'
 import { isBrokerExecuteRequest } from '../src/broker/protocol-validation.js'
 import {
@@ -145,7 +145,33 @@ describe('providers CLI', () => {
     expect(noAdaptiveEffort).not.toHaveProperty('effort')
 
     const codex = request({ reasoning_effort: 'max' })
-    expect(codex).not.toHaveProperty('effort')
+    expect(codex.effort).toBe('xhigh')
+  })
+
+  it('aceita reasoning.effort do Qwen, preserva precedência e trata false como default', () => {
+    expect(request({ reasoning: { effort: 'low' } }).effort).toBe('low')
+    expect(request({ reasoning_effort: 'high', reasoning: { effort: 'low' } }).effort).toBe('high')
+    expect(request({ reasoning: false }).effort).toBe('medium')
+    expect(request({ reasoning: {} }).effort).toBe('medium')
+  })
+
+  it.each([
+    { reasoning: { effort: 'extreme' } },
+    { reasoning: 'medium' },
+    { reasoning: [] },
+    { reasoning: null },
+  ])('rejeita reasoning CLI malformado: %j', (overrides) => {
+    expect(() => request(overrides)).toThrow(CliRequestValidationError)
+  })
+
+  it('catálogo Codex define defaults e efforts efetivos', () => {
+    expect(CODEX_MODEL_CATALOG).toEqual({
+      'gpt-5.6-sol': { efforts: ['low', 'medium', 'high', 'xhigh'], defaultEffort: 'medium' },
+      'gpt-5.6-terra': { efforts: ['low', 'medium', 'high', 'xhigh'], defaultEffort: 'medium' },
+      'gpt-5.6-luna': { efforts: ['low', 'medium', 'high', 'xhigh'], defaultEffort: 'medium' },
+      'gpt-5.5': { efforts: ['low', 'medium', 'high', 'xhigh'], defaultEffort: 'medium' },
+      'gpt-5.4': { efforts: ['low', 'medium', 'high', 'xhigh'], defaultEffort: 'medium' },
+    })
   })
 
   it('catálogo Claude define a matriz de effort esperada', () => {
@@ -197,7 +223,8 @@ describe('providers CLI', () => {
     { ...request(), model: undefined },
     { ...request(), provider: 'claude', model: 'gpt-5.4' },
     { ...request(), model: 'claude-opus-4-8' },
-    { ...request(), effort: 'low' },
+    { ...request(), effort: undefined },
+    { ...request(), effort: 'max' },
     { ...request(), provider: 'claude', model: 'claude-opus-4-8', effort: 'extreme' },
     { ...request(), provider: 'claude', model: 'claude-opus-4-6', effort: 'xhigh' },
     { ...request(), messages: [{ role: 'root', content: 'x' }] },
@@ -211,7 +238,8 @@ describe('providers CLI', () => {
     expect(isBrokerExecuteRequest(value)).toBe(false)
   })
 
-  it('protocolo v4 aceita somente combinações Claude modelo/effort permitidas', () => {
+  it('protocolo v5 aceita somente combinações provider/modelo/effort permitidas', () => {
+    expect(isBrokerExecuteRequest(request({ reasoning: { effort: 'xhigh' } }))).toBe(true)
     const claude = { ...request(), provider: 'claude' as const, model: 'claude-opus-4-8' }
     expect(isBrokerExecuteRequest({ ...claude, effort: 'max' })).toBe(true)
     expect(isBrokerExecuteRequest(claude)).toBe(true)

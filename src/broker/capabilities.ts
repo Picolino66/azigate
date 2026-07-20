@@ -1,7 +1,9 @@
 import type { BrokerConfig } from './config.js'
-import { hardenAuthDirectory, resolveExecutable } from './isolation.js'
+import { dirname } from 'node:path'
+import { hardenAuthDirectory, resolveExecutable, validatePrivateAuthFile } from './isolation.js'
 import type { ProcessRunnerLike } from './process-runner.js'
 import type { BrokerProviderHealth, CliProviderName } from './protocol.js'
+import { CODEX_CLI_MODELS, CODEX_MODEL_CATALOG } from '../cli-catalog.js'
 
 const CODEX_FLAGS = [
   '--ephemeral',
@@ -11,6 +13,7 @@ const CODEX_FLAGS = [
   '--output-last-message',
   '--json',
   '--sandbox',
+  '--config',
 ] as const
 
 export const CODEX_DISABLED_FEATURES = [
@@ -59,12 +62,44 @@ const CLAUDE_FLAGS = [
 export interface ProviderCapability extends BrokerProviderHealth {
   binaryPath?: string
   authDir?: string
+  configPath?: string
 }
 
 export type ProviderCapabilities = Record<CliProviderName, ProviderCapability>
 
 function unavailable(code: string): ProviderCapability {
   return { available: false, code }
+}
+
+function supportsRequiredCodexModels(stdout: string): boolean {
+  let catalog: unknown
+  try {
+    catalog = JSON.parse(stdout)
+  } catch {
+    return false
+  }
+  const supported = new Map<string, Set<string>>()
+  const visit = (value: unknown): void => {
+    if (value === null || typeof value !== 'object') return
+    if (Array.isArray(value)) {
+      value.forEach(visit)
+      return
+    }
+    const record = value as Record<string, unknown>
+    if (typeof record.slug === 'string' && Array.isArray(record.supported_reasoning_levels)) {
+      supported.set(record.slug, new Set(record.supported_reasoning_levels.flatMap((level) => {
+        if (level === null || typeof level !== 'object' || Array.isArray(level)) return []
+        const effort = (level as Record<string, unknown>).effort
+        return typeof effort === 'string' ? [effort] : []
+      })))
+    }
+    Object.values(record).forEach(visit)
+  }
+  visit(catalog)
+  return CODEX_CLI_MODELS.every((model) => {
+    const efforts = supported.get(model)
+    return efforts !== undefined && CODEX_MODEL_CATALOG[model].efforts.every((effort) => efforts.has(effort))
+  })
 }
 
 async function diagnosticRun(
@@ -136,6 +171,15 @@ async function inspectCodex(config: BrokerConfig, runner: ProcessRunnerLike): Pr
   }
   const help = await diagnosticRun(runner, binaryPath, ['exec', '--help'], env)
   if (!help.ok || CODEX_FLAGS.some((flag) => !help.stdout.includes(flag))) return unavailable('required_flag_missing')
+  const acceptedEffort = await diagnosticRun(
+    runner,
+    binaryPath,
+    ['-c', 'model_reasoning_effort="low"', 'debug', 'models', '--bundled'],
+    env,
+  )
+  if (!acceptedEffort.ok || !supportsRequiredCodexModels(acceptedEffort.stdout)) {
+    return unavailable('required_effort_config_missing')
+  }
   const features = await diagnosticRun(runner, binaryPath, ['features', 'list'], env)
   if (!features.ok || CODEX_DISABLED_FEATURES.some((feature) => !features.stdout.includes(feature))) {
     return unavailable('required_feature_missing')
@@ -149,14 +193,20 @@ async function inspectClaude(config: BrokerConfig, runner: ProcessRunnerLike): P
   if (!config.enableClaude) return unavailable('disabled')
   let binaryPath: string
   let authDir: string
+  let configPath: string
   try {
     binaryPath = resolveExecutable(config.claudePath)
     authDir = hardenAuthDirectory(config.claudeAuthDir)
   } catch {
     return unavailable('filesystem_unavailable')
   }
+  try {
+    configPath = validatePrivateAuthFile(config.claudeConfigPath)
+  } catch {
+    return unavailable('config_file_unavailable')
+  }
   const env = {
-    HOME: authDir.substring(0, authDir.lastIndexOf('/')) || '/home/agent',
+    HOME: dirname(configPath),
     PATH: '/usr/local/bin:/usr/bin:/bin',
     LANG: 'C.UTF-8',
     LC_ALL: 'C.UTF-8',
@@ -166,7 +216,7 @@ async function inspectClaude(config: BrokerConfig, runner: ProcessRunnerLike): P
   if (!help.ok || CLAUDE_FLAGS.some((flag) => !help.stdout.includes(flag))) return unavailable('required_flag_missing')
   const auth = await diagnosticRun(runner, binaryPath, ['auth', 'status'], env)
   if (!auth.ok) return unavailable('not_authenticated')
-  return { available: true, binaryPath, authDir }
+  return { available: true, binaryPath, authDir, configPath }
 }
 
 export async function inspectCapabilities(
