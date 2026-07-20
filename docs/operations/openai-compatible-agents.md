@@ -117,6 +117,12 @@ Em ambos os providers CLI, o campo plano tem precedência sobre o aninhado. `rea
 - **Contrato restrito dos aliases CLI:** mensagens devem ser texto (blocos
   `{ "type": "text" }`); conteúdo multimodal recebe `400`. Parâmetros de sampling
   não aplicáveis são ignorados. Detalhes no [contrato público](../../specs/gateway-api.md).
+- **Sessão e contexto:** o broker pode reaproveitar um prefixo exato somente em RAM
+  e enviar apenas o delta. Contexto normalizado acima de 256 KiB recebe `413`; use
+  compactação e limpe tarefas sem relação.
+- **Usage:** `prompt_tokens` Claude inclui input novo, criação e leitura de cache.
+  No Codex, cache já está dentro do input. Esses tokens não correspondem diretamente
+  à porcentagem de cota mostrada pelo plano.
 - **Mantenha aprovação interativa.** Não use YOLO/auto-approval: o agente é quem
   aplica alterações no seu computador. O gateway nunca executa ferramentas.
 

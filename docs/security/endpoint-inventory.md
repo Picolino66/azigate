@@ -20,7 +20,7 @@ Não é TCP nem pública. Existe somente no Unix socket `0600`, sob diretório `
 | Método | Rota | Controle | Entrada | Saída | Status |
 |---|---|---|---|---|---|
 | GET | `/health` | filesystem/UID + protocolo local | nenhuma | versão e capacidade sanitizada | OK |
-| POST | `/execute` | filesystem/UID + header v5 + JSON | request ID, provider, modelo CLI permitido, effort efetivo, mensagens e function tools | decisão estruturada ou erro sanitizado | OK |
+| POST | `/execute` | filesystem/UID + header v6 + JSON | request ID, provider, modelo CLI permitido, effort efetivo, mensagens e function tools | decisão, usage provider-specific e metadados seguros da sessão | OK local |
 
 `/execute` rejeita campos extras, inclusive `cwd`, comando, argv, ambiente, URL e path. O gateway reconstrói a entrada; nenhum campo HTTP do agente cliente escolhe binário ou filesystem.
 
@@ -30,7 +30,7 @@ Não é TCP nem pública. Existe somente no Unix socket `0600`, sob diretório `
 |---|---|---|---|---|---|
 | Consultar modelos | chave/IP/model allowlist | rate limit e cache local | metadados sem body | consumo de cota/enumeração | OK |
 | Inferência do upstream | chave/IP/model | body, timeout e retries pré-resposta | sem conteúdo | custo e dados sensíveis | OK |
-| Decisão Codex/Claude | chave/IP/alias + socket UID | 1 execução, 10 min, 4 MiB, sem retry | sem prompt/stdout/stderr | login CLI e prompt injection; Claude usa cópia efêmera privada de `.claude.json` | OK local |
+| Decisão Codex/Claude | chave/IP/alias + socket UID | 1 execução, 10 min, 4 MiB/turno, transcript 256 KiB, 4 sessões RAM, sem retry do gateway | usage/cache/sessão sem prompt/stdout/stderr | login CLI, confusão de sessão e prompt injection | OK automatizado; benchmark real pendente |
 | Executar ferramenta | confirmação do agente no seu computador | política do agente | fora do gateway | alteração no repositório | smoke remoto pendente |
 
 ## Mass assignment e exposição

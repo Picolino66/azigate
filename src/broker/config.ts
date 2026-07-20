@@ -10,12 +10,23 @@ export interface BrokerConfig {
   killGraceMs: number
   maxOutputBytes: number
   maxRequestBytes: number
+  maxTranscriptBytes: number
+  codexSessionMode: 'stateless' | 'memory'
+  claudeSessionMode: 'stateless' | 'memory'
+  maxActiveSessions: number
+  sessionIdleMs: number
   bwrapPath: string
   codexPath: string
   claudePath: string
   codexAuthDir: string
   claudeAuthDir: string
   claudeConfigPath: string
+}
+
+function sessionMode(env: NodeJS.ProcessEnv, name: string, fallback: 'stateless' | 'memory'): 'stateless' | 'memory' {
+  const value = env[name]?.trim() || fallback
+  if (value !== 'stateless' && value !== 'memory') throw new Error(`${name} deve ser stateless ou memory`)
+  return value
 }
 
 function integer(env: NodeJS.ProcessEnv, name: string, fallback: number, min: number, max: number): number {
@@ -54,6 +65,11 @@ export function loadBrokerConfig(env: NodeJS.ProcessEnv = process.env): BrokerCo
     killGraceMs: integer(env, 'BROKER_KILL_GRACE_MS', 2000, 100, 30_000),
     maxOutputBytes: integer(env, 'BROKER_MAX_OUTPUT_BYTES', 4_194_304, 65_536, 16_777_216),
     maxRequestBytes: integer(env, 'BROKER_MAX_REQUEST_BYTES', 10_485_760, 1024, 100 * 1024 * 1024),
+    maxTranscriptBytes: integer(env, 'BROKER_MAX_TRANSCRIPT_BYTES', 262_144, 1024, 100 * 1024 * 1024),
+    codexSessionMode: sessionMode(env, 'BROKER_CODEX_SESSION_MODE', 'memory'),
+    claudeSessionMode: sessionMode(env, 'BROKER_CLAUDE_SESSION_MODE', 'memory'),
+    maxActiveSessions: integer(env, 'BROKER_MAX_ACTIVE_SESSIONS', 4, 1, 64),
+    sessionIdleMs: integer(env, 'BROKER_SESSION_IDLE_MS', 1_800_000, 1000, 86_400_000),
     bwrapPath: env.BWRAP_PATH?.trim() || '/usr/bin/bwrap',
     codexPath: env.CODEX_CLI_PATH?.trim() || '/usr/bin/codex',
     claudePath: env.CLAUDE_CLI_PATH?.trim() || join(home, '.local/bin/claude'),

@@ -28,6 +28,7 @@ export interface AppConfig {
   enableClaudeCli: boolean
   cliRequestTimeoutMs: number
   cliHeartbeatIntervalMs: number
+  cliMaxTranscriptBytes: number
 }
 
 function readValue(env: NodeJS.ProcessEnv, name: string): string | undefined {
@@ -143,6 +144,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     enableClaudeCli: boolean(env, 'ENABLE_CLAUDE_CLI', false),
     cliRequestTimeoutMs: integer(env, 'CLI_REQUEST_TIMEOUT_MS', 600_000, 1000, 3_600_000),
     cliHeartbeatIntervalMs: integer(env, 'CLI_HEARTBEAT_INTERVAL_MS', 15_000, 1000, 60_000),
+    cliMaxTranscriptBytes: integer(env, 'CLI_MAX_TRANSCRIPT_BYTES', 262_144, 1024, 100 * 1024 * 1024),
   }
 }
 
@@ -173,6 +175,7 @@ export function createTestConfig(overrides: Partial<AppConfig> = {}): AppConfig 
     enableClaudeCli: false,
     cliRequestTimeoutMs: 1000,
     cliHeartbeatIntervalMs: 15_000,
+    cliMaxTranscriptBytes: 262_144,
     ...overrides,
   }
 }

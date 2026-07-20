@@ -1,5 +1,5 @@
 import type { BrokerConfig } from './config.js'
-import { dirname } from 'node:path'
+import { dirname, join } from 'node:path'
 import { hardenAuthDirectory, resolveExecutable, validatePrivateAuthFile } from './isolation.js'
 import type { ProcessRunnerLike } from './process-runner.js'
 import type { BrokerProviderHealth, CliProviderName } from './protocol.js'
@@ -15,6 +15,8 @@ const CODEX_FLAGS = [
   '--sandbox',
   '--config',
 ] as const
+
+const CODEX_APP_SERVER_FLAGS = ['--stdio', '--strict-config'] as const
 
 export const CODEX_DISABLED_FEATURES = [
   'apps',
@@ -57,6 +59,9 @@ const CLAUDE_FLAGS = [
   '--permission-mode',
   '--agents',
   '--system-prompt',
+  '--safe-mode',
+  '--verbose',
+  '--prompt-suggestions',
 ] as const
 
 export interface ProviderCapability extends BrokerProviderHealth {
@@ -158,6 +163,7 @@ async function inspectCodex(config: BrokerConfig, runner: ProcessRunnerLike): Pr
   try {
     binaryPath = resolveExecutable(config.codexPath)
     authDir = hardenAuthDirectory(config.codexAuthDir)
+    if (config.codexSessionMode === 'memory') validatePrivateAuthFile(join(authDir, 'auth.json'))
   } catch {
     return unavailable('filesystem_unavailable')
   }
@@ -171,6 +177,12 @@ async function inspectCodex(config: BrokerConfig, runner: ProcessRunnerLike): Pr
   }
   const help = await diagnosticRun(runner, binaryPath, ['exec', '--help'], env)
   if (!help.ok || CODEX_FLAGS.some((flag) => !help.stdout.includes(flag))) return unavailable('required_flag_missing')
+  if (config.codexSessionMode === 'memory') {
+    const appServerHelp = await diagnosticRun(runner, binaryPath, ['app-server', '--help'], env)
+    if (!appServerHelp.ok || CODEX_APP_SERVER_FLAGS.some((flag) => !appServerHelp.stdout.includes(flag))) {
+      return unavailable('required_app_server_flag_missing')
+    }
+  }
   const acceptedEffort = await diagnosticRun(
     runner,
     binaryPath,
@@ -197,6 +209,7 @@ async function inspectClaude(config: BrokerConfig, runner: ProcessRunnerLike): P
   try {
     binaryPath = resolveExecutable(config.claudePath)
     authDir = hardenAuthDirectory(config.claudeAuthDir)
+    if (config.claudeSessionMode === 'memory') validatePrivateAuthFile(join(authDir, '.credentials.json'))
   } catch {
     return unavailable('filesystem_unavailable')
   }

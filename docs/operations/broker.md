@@ -12,8 +12,9 @@ indisponível se algum flag, feature ou a configuração Codex
 `model_reasoning_effort` exigida faltar. A partir do Codex CLI `0.144.6`,
 `debug models` não rejeita mais um effort sentinela inválido pelo exit code. Por
 isso o check carrega o catálogo embutido em JSON e confirma que todos os
-modelos/efforts fixados existem, sem executar inferência. A execução real continua
-usando `--ignore-user-config --strict-config`.
+modelos/efforts fixados existem, sem executar inferência. O App Server usa um home
+efêmero sem `config.toml` e `--strict-config`; o modo stateless continua usando
+`--ignore-user-config --strict-config`.
 
 ```bash
 codex --version
@@ -60,6 +61,12 @@ BROKER_ENABLE_CLAUDE_CLI=false
 BROKER_EXECUTION_TIMEOUT_MS=600000
 BROKER_KILL_GRACE_MS=2000
 BROKER_MAX_OUTPUT_BYTES=4194304
+BROKER_MAX_REQUEST_BYTES=10485760
+BROKER_MAX_TRANSCRIPT_BYTES=262144
+BROKER_CODEX_SESSION_MODE=memory
+BROKER_CLAUDE_SESSION_MODE=memory
+BROKER_MAX_ACTIVE_SESSIONS=4
+BROKER_SESSION_IDLE_MS=1800000
 BWRAP_PATH=/usr/bin/bwrap
 CODEX_CLI_PATH=/usr/bin/codex
 CLAUDE_CLI_PATH=/home/USUARIO/.local/bin/claude
@@ -72,20 +79,24 @@ Proteja os diretórios e instale a unidade substituindo `USUARIO`:
 
 ```bash
 chmod 0700 ~/.codex ~/.claude
-chmod 0600 ~/.claude.json
+chmod 0600 ~/.codex/auth.json ~/.claude/.credentials.json ~/.claude.json
 sudo install -d -m 0755 /etc/gateway-ai
 sudo chmod 0600 /etc/gateway-ai/broker.env
 sudo systemctl daemon-reload
 sudo systemctl enable --now gateway-ai-broker@USUARIO.service
 ```
 
-O broker também corrige os auth dirs habilitados para `0700` no startup. O diretório `/run/gateway-ai` nasce `0700` e o socket `0600`.
+O broker também corrige os auth dirs habilitados para `0700` no startup e valida os
+arquivos privados usados pelo modo `memory`. O diretório `/run/gateway-ai` nasce
+`0700` e o socket `0600`.
 
 A unidade usa `ProtectHome=tmpfs` e reexpõe somente
 `/home/USUARIO/.codex`, `/home/USUARIO/.claude`, o arquivo
 `/home/USUARIO/.claude.json` e os paths read-only da instalação Claude em
 `/home/USUARIO/.local`. O arquivo top-level fica somente leitura para o serviço e
-é copiado para um home efêmero por execução. Se o usuário tiver um home fora de
+é copiado para um home efêmero por sessão. O Bubblewrap monta somente
+`auth.json` ou `.credentials.json`, não histórico/configuração do diretório inteiro.
+Se o usuário tiver um home fora de
 `/home/USUARIO` ou o binário estiver em outro diretório, ajuste paths específicos
 em um override da unidade; não exponha o home inteiro.
 
@@ -122,7 +133,16 @@ GATE_CLAUDE_MODEL=claude-fable-5 npm run gate:claude-efforts
 
 Aprovação exige, por modelo, 20/20 decisões estruturalmente válidas, zero evento de ferramenta local e pelo menos 18/20 categorias corretas. O segundo comando percorre todos os efforts suportados diferentes do default; Sonnet 4.5 e Haiku 4.5 já são cobertos pelo gate completo sem `--effort`. O relatório imprime somente modelo e contagens. Falha individual remove apenas os aliases correspondentes de `ALLOWED_MODELS`.
 
-O protocolo v5 exige novo deploy coordenado do broker e gateway. A evidência estrutural anterior continua registrada, mas o novo argv Codex precisa de smoke por modelo/effort antes da publicação operacional. Em 18/07/2026, Fable 5, Sonnet 5, Opus 4.8, Opus 4.6 e Sonnet 4.5 passaram; Opus 4.7, Sonnet 4.6 e Haiku 4.5 falharam e permanecem fora da allowlist. Como `claude-cli` é sinônimo de Sonnet 4.6, também permanece indisponível. A versão atual usa `--json-schema` como mecanismo interno: `permissions.deny=["*"]` também o bloquearia, portanto o settings efêmero mantém allow/deny vazios enquanto `--tools ""`, MCP estrito vazio e `dontAsk` desabilitam ferramentas locais. Um upgrade do CLI invalida toda evidência.
+O protocolo v6 exige novo deploy coordenado do broker e gateway. A evidência
+estrutural anterior continua registrada, mas App Server/stream-json precisam de
+smoke por modelo/effort antes da publicação operacional. Em 18/07/2026, Fable 5,
+Sonnet 5, Opus 4.8, Opus 4.6 e Sonnet 4.5 passaram no executor v4/v5; Opus 4.7,
+Sonnet 4.6 e Haiku 4.5 falharam e permanecem fora da allowlist. Isso não certifica
+automaticamente o novo modo multi-turn. A versão atual usa `--json-schema` como
+mecanismo interno: `permissions.deny=["*"]` também o bloquearia, portanto o settings
+efêmero mantém allow/deny vazios enquanto `--tools ""`, MCP estrito vazio,
+`--safe-mode` e `dontAsk` desabilitam ferramentas locais. Um upgrade invalida a
+evidência.
 
 ## Ativação no gateway
 
@@ -132,6 +152,7 @@ Depois do gate aprovado, ajuste o `.env` usado pelo Compose:
 ENABLE_CODEX_CLI=true
 ENABLE_CLAUDE_CLI=true
 CLI_BROKER_SOCKET_PATH=/run/gateway-ai/broker.sock
+CLI_MAX_TRANSCRIPT_BYTES=262144
 BROKER_RUNTIME_DIR=/run/gateway-ai
 BROKER_UID=1000
 BROKER_GID=1000
@@ -174,6 +195,8 @@ sudo systemctl disable --now gateway-ai-broker@USUARIO.service
 - `cli_unavailable`: consulte `/health` do socket; confirme login, versão, paths e flags.
 - `cli_busy`: existe uma execução ativa; não há fila. Aguarde ou cancele no agente.
 - `cli_timeout`: a execução excedeu 10 minutos; não aumente antes de investigar rede/login.
+- `cli_context_too_large`: use compactação ou `/clear`; o gateway nunca trunca o
+  transcript automaticamente.
 - `invalid_cli_output`: schema, tool name, argumentos ou evento local foi recusado; mantenha o alias desligado se for recorrente.
 - `bwrap_unavailable`: valide user namespaces e o smoke de Bubblewrap no mesmo usuário/systemd.
 - `config_file_unavailable`: confirme que `CLAUDE_CONFIG_PATH` aponta para um
@@ -185,3 +208,23 @@ sudo systemctl disable --now gateway-ai-broker@USUARIO.service
   retry no agente.
 - socket com permission denied: alinhe UID/GID do container com o usuário da unidade; não relaxe para `0666`.
 - Claude indisponível: preserve o login existente e revise política/termos; não introduza API key automaticamente.
+
+## Benchmark de sessão e cache
+
+Depois do deploy v6, execute uma conversa descartável de dez turnos com um arquivo
+de aproximadamente 8 KiB. Confirme nos logs `sessionMode=memory`,
+`sessionReused=true` a partir do segundo turno e compare `freshInputTokens`,
+`cachedInputTokens`/`cacheReadInputTokens` e `cacheCreationInputTokens`. O gate de
+aceite é reduzir ao menos 60% do input não cacheado após o primeiro turno, sem
+retry do Qwen/gateway e sem ferramentas locais. Retries internos documentados do
+próprio CLI não são controlados pelo gateway. Não use a porcentagem da UI como único
+critério.
+
+Se um provider falhar no smoke multi-turn, ajuste somente seu ambiente privado:
+
+```dotenv
+BROKER_CODEX_SESSION_MODE=stateless
+BROKER_CLAUDE_SESSION_MODE=stateless
+```
+
+Reinicie o broker. Não existe fallback automático entre providers.

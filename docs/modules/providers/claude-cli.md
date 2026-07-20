@@ -6,7 +6,9 @@ Provider experimental com oito aliases versionados e o sinônimo legado `claude-
 
 ## Localização no código
 
-`src/providers/`, `src/broker/executor.ts`, `src/broker/capabilities.ts` e `src/broker/viability-gate.ts`.
+`src/providers/`, `src/broker/executor.ts`, `src/broker/memory-executor.ts`,
+`src/broker/session-correlation.ts`, `src/broker/capabilities.ts` e
+`src/broker/viability-gate.ts`.
 
 ## Entrada
 
@@ -24,18 +26,25 @@ habilitação.
 
 ## Regras de negócio
 
-- Print mode, JSON schema, tools vazias e MCP estrito vazio.
+- Print mode persistente com input/output `stream-json`, JSON schema, tools vazias
+  e MCP estrito vazio. `stateless` preserva o modo JSON de uma chamada.
 - Slash commands, Chrome, persistência e fontes de settings são desabilitados.
+- Prompt suggestions são desabilitadas para evitar chamadas auxiliares.
 - `dontAsk` não concede ferramentas; a lista de tools continua vazia.
 - Cada alias mapeia para um único nome completo enviado por `--model`; `claude-cli` equivale a Sonnet 4.6.
 - Omissão ou effort incompatível aplica o padrão do catálogo. Sonnet 4.5 e Haiku 4.5 não recebem `--effort`.
 - O formato plano tem precedência sobre o aninhado; `reasoning: false` usa o default do modelo.
-- O protocolo v5 e o broker validam novamente provider, modelo e matriz de effort.
+- O protocolo v6 e o broker validam novamente provider, modelo e matriz de effort.
 - Thinking permanece privado ao CLI e não é publicado em Chat Completions ou SSE.
 - A versão instalada deve oferecer todos os flags.
 - O startup valida proprietário, tipo, tamanho máximo de 1 MiB e permissões do
-  `CLAUDE_CONFIG_PATH`. Cada execução recebe uma cópia `0600` em um home efêmero;
-  o arquivo original nunca é montado na sandbox.
+  `CLAUDE_CONFIG_PATH` e de `.claude/.credentials.json`. Cada sessão recebe uma
+  cópia `0600` da configuração e monta somente a credencial no home efêmero; o
+  arquivo original nunca é montado na sandbox.
+- A correlação em RAM reutiliza o processo somente com um prefixo semântico exato.
+  Mudança de effort cria sessão nova porque `--effort` pertence à inicialização.
+- Usage soma input novo, criação de cache e leitura de cache. O custo do CLI é
+  registrado como estimativa, não como porcentagem da cota.
 - Bloqueio de autenticação/política mantém o alias indisponível; nenhuma API key é introduzida.
 
 ## Evidência de viabilidade
@@ -59,7 +68,9 @@ Assim, a allowlist local publica somente `claude-cli-fable-5`, `claude-cli-sonne
 
 ## Fluxo resumido
 
-Gateway resolve alias/modelo/default -> protocolo v5 -> broker revalida -> Claude roda isolado com `--model`/`--effort` fixos -> structured output é validado -> o agente recebe somente a decisão.
+Gateway resolve alias/modelo/default -> protocolo v6 -> broker correlaciona o
+prefixo -> Claude recebe transcript completo ou delta -> structured output é
+validado -> o agente recebe somente a decisão.
 
 ## Possíveis erros
 

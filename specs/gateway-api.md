@@ -54,6 +54,9 @@ Alias desabilitado retorna `503 cli_unavailable`; nunca há fallback automático
 
 - Mensagens devem conter somente texto. Arrays de content aceitam exclusivamente blocos `{ "type": "text", "text": "..." }`.
 - Tools devem ser `type: function`, ter nomes únicos válidos e parameters em objeto.
+- `parameters` omitido ou vazio é normalizado para `{}`. Tool calls históricas são
+  validadas estruturalmente, mas não precisam continuar na allowlist do turno atual;
+  somente novas tool calls produzidas pelo modelo ficam restritas às tools atuais.
 - `tool_choice` aceita `auto`, `none`, `required` ou uma função oferecida.
 - `parallel_tool_calls` deve ser boolean.
 - Para aliases Codex e Claude, o effort pode vir como `reasoning_effort` ou `reasoning.effort`; o campo plano tem precedência. A enum pública é `low`, `medium`, `high`, `xhigh` ou `max`. Estrutura ou valor desconhecido recebe `400 invalid_cli_request`.
@@ -63,6 +66,12 @@ Alias desabilitado retorna `503 cli_unavailable`; nunca há fallback automático
 - Cada alias Codex é traduzido pelo gateway para um único modelo interno permitido; modelo e effort são revalidados pelo broker e viram `--model`/`model_reasoning_effort` reconstruídos. O cliente não escolhe argv.
 - Cada alias Claude seleciona um único modelo completo por `--model`; modelo e effort são validados novamente pelo broker. Thinking não é publicado.
 - A saída contém texto ou tool calls, nunca ambos. Nome/argumentos são validados e os IDs são gerados localmente.
+- Mensagens+tools normalizadas acima de `CLI_MAX_TRANSCRIPT_BYTES` recebem
+  `413 cli_context_too_large` antes do broker. O broker aplica novamente seu limite.
+- Em `memory`, o primeiro turno envia o transcript completo; turnos seguintes
+  enviam somente o delta quando existe um único prefixo semântico exato. A resposta
+  OpenAI continua expondo apenas `prompt_tokens`, `completion_tokens` e
+  `total_tokens`; detalhes de cache ficam em logs/métricas.
 
 ## Streaming CLI
 
@@ -83,7 +92,8 @@ Falha antes do primeiro byte mantém o status HTTP do erro. Falha depois do hear
 | 400 | `invalid_cli_request` | conteúdo/tool contract não suportado pelo CLI |
 | 401 | `invalid_gateway_key` | Bearer ausente/inválido |
 | 403 | `ip_not_allowed`, `model_not_allowed` | allowlist |
-| 413 | `request_body_too_large` | corpo acima do limite |
+| 413 | `request_body_too_large` | corpo HTTP acima do limite |
+| 413 | `cli_context_too_large` | transcript CLI normalizado acima do limite |
 | 415 | `unsupported_media_type` | Content-Type incompatível |
 | 429 | `rate_limit_exceeded` | limite HTTP local |
 | 429 | `cli_busy` | broker ocupado, sem fila |

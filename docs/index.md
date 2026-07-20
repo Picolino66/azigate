@@ -17,6 +17,7 @@
   - [Upstream OpenAI-compatible (DeepSeek por padrão)](./modules/providers/deepseek.md)
   - [Codex CLI](./modules/providers/codex-cli.md)
   - [Claude CLI](./modules/providers/claude-cli.md)
+  - [Sessões CLI efêmeras em memória](./modules/providers/sessoes-cli-em-memoria.md)
 - [Observabilidade](./modules/observability/index.md)
   - [Logs de requisição](./modules/observability/logs.md)
 
@@ -56,6 +57,7 @@
 - [ADR-011 — effort do Qwen para provedores CLI](../adr/ADR-011-effort-qwen-para-provedores-cli.md)
 - [ADR-012 — configuração Claude em home efêmero](../adr/ADR-012-configuracao-claude-em-home-efemero.md)
 - [ADR-013 — check Codex por catálogo estruturado](../adr/ADR-013-check-de-capacidade-codex-por-catalogo.md)
+- [ADR-014 — sessões CLI efêmeras em memória e usage por provider](../adr/ADR-014-sessoes-cli-efemeras-em-memoria-e-usage-por-provider.md)
 
 ## Regra de sincronização
 

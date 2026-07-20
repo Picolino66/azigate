@@ -1,5 +1,5 @@
 import { accessSync, chmodSync, constants, existsSync, realpathSync, statSync } from 'node:fs'
-import { basename, dirname, isAbsolute } from 'node:path'
+import { basename, dirname, isAbsolute, join } from 'node:path'
 import type { CliProviderName } from './protocol.js'
 import type { BrokerConfig } from './config.js'
 
@@ -52,9 +52,10 @@ export function buildIsolationCommand(
   workspace: string,
   cliArgs: readonly string[],
   ephemeralHome?: string,
+  authMount: 'directory' | 'codex-auth-file' | 'claude-auth-file' = 'directory',
 ): IsolationCommand {
-  if (provider === 'claude' && ephemeralHome === undefined) {
-    throw new Error('O home efêmero do Claude é obrigatório')
+  if ((provider === 'claude' || authMount !== 'directory') && ephemeralHome === undefined) {
+    throw new Error('O home efêmero do provider é obrigatório')
   }
   const bwrap = resolveExecutable(config.bwrapPath)
   const args = [
@@ -90,7 +91,17 @@ export function buildIsolationCommand(
   )
 
   const authDestination = `/home/agent/.${provider}`
-  args.push('--bind', authDir, authDestination)
+  if (provider === 'codex' && authMount === 'codex-auth-file') {
+    args.push('--bind', validatePrivateAuthFile(join(authDir, 'auth.json')), `${authDestination}/auth.json`)
+  } else if (provider === 'claude' && authMount === 'claude-auth-file') {
+    args.push(
+      '--bind',
+      validatePrivateAuthFile(join(authDir, '.credentials.json')),
+      `${authDestination}/.credentials.json`,
+    )
+  } else {
+    args.push('--bind', authDir, authDestination)
+  }
   let command = binaryPath
   if (!binaryPath.startsWith('/usr/') && !binaryPath.startsWith('/bin/')) {
     command = `/opt/cli/${provider}-${basename(binaryPath)}`

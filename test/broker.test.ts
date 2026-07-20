@@ -12,6 +12,8 @@ import {
   CliOutputLimitError,
   CliProcessExitError,
   CliTurnFailedError,
+  parseClaudeUsage,
+  parseCodexUsage,
   UnexpectedCliToolEventError,
 } from '../src/broker/executor.js'
 import { ProcessRunner, type ProcessRunResult, type ProcessRunnerLike, type ProcessRunSpec } from '../src/broker/process-runner.js'
@@ -25,6 +27,7 @@ import { createBrokerServer, listenBroker } from '../src/broker/server.js'
 import { CliBrokerClient } from '../src/providers/broker-client.js'
 import {
   CliBusyError,
+  CliContextTooLargeError,
   CliExecutionFailedError,
   CliTimeoutError,
   CliUnavailableError,
@@ -58,6 +61,11 @@ function config(root: string): BrokerConfig {
     killGraceMs: 20,
     maxOutputBytes: 1_048_576,
     maxRequestBytes: 1_048_576,
+    maxTranscriptBytes: 262_144,
+    codexSessionMode: 'stateless',
+    claudeSessionMode: 'stateless',
+    maxActiveSessions: 4,
+    sessionIdleMs: 1_800_000,
     bwrapPath: executable,
     codexPath: executable,
     claudePath: executable,
@@ -128,14 +136,55 @@ class FakeRunner implements ProcessRunnerLike {
 }
 
 afterEach(async () => {
-  await Promise.all(servers.splice(0).map(({ server, controller }) => new Promise<void>((resolve) => {
-    controller.shutdown()
-    server.close(() => resolve())
-  })))
+  await Promise.all(servers.splice(0).map(async ({ server, controller }) => {
+    const closed = new Promise<void>((resolve) => server.close(() => resolve()))
+    await Promise.all([controller.shutdown(), closed])
+  }))
   directories.splice(0).forEach((path) => rmSync(path, { recursive: true, force: true }))
 })
 
 describe('broker local', () => {
+  it('contabiliza usage por provider sem somar subconjuntos duas vezes', () => {
+    expect(parseClaudeUsage({
+      input_tokens: 2,
+      cache_creation_input_tokens: 100,
+      cache_read_input_tokens: 900,
+      output_tokens: 10,
+    }, 0.25)).toEqual({
+      promptTokens: 1002,
+      completionTokens: 10,
+      totalTokens: 1012,
+      freshInputTokens: 2,
+      cacheCreationInputTokens: 100,
+      cacheReadInputTokens: 900,
+      estimatedCostUsd: 0.25,
+    })
+    expect(parseCodexUsage({
+      input_tokens: 1000,
+      cached_input_tokens: 900,
+      output_tokens: 100,
+      reasoning_output_tokens: 80,
+    })).toEqual({
+      promptTokens: 1000,
+      completionTokens: 100,
+      totalTokens: 1100,
+      freshInputTokens: 100,
+      cachedInputTokens: 900,
+      reasoningOutputTokens: 80,
+    })
+    expect(parseCodexUsage({ input_tokens: 1, cached_input_tokens: 2, output_tokens: 1 })).toBeUndefined()
+    expect(parseClaudeUsage({ input_tokens: -1, output_tokens: 1 }, 0)).toBeUndefined()
+    expect(parseClaudeUsage({ input_tokens: Number.MAX_SAFE_INTEGER + 1 }, 0)).toBeUndefined()
+    expect(parseClaudeUsage({
+      input_tokens: Number.MAX_SAFE_INTEGER,
+      cache_read_input_tokens: 1,
+    }, 0)).toBeUndefined()
+    expect(parseCodexUsage({
+      input_tokens: Number.MAX_SAFE_INTEGER,
+      output_tokens: 1,
+    })).toBeUndefined()
+  })
+
   it('constrói argv fixo, ambiente mínimo e workspace descartável', async () => {
     const root = directory()
     const cfg = config(root)
@@ -217,6 +266,7 @@ describe('broker local', () => {
     const args = calls[0]?.args ?? []
     expect(result.decision.content).toBe('ok claude')
     expect(args).toContain('--print')
+    expect(args[args.indexOf('--prompt-suggestions') + 1]).toBe('false')
     expect(args).toContain('--strict-mcp-config')
     expect(args).toContain('--disable-slash-commands')
     expect(args).toContain('--no-session-persistence')
@@ -267,6 +317,20 @@ describe('broker local', () => {
       claude: { available: false, code: 'disabled' },
     })
     await expect(executor.execute(brokerRequest())).rejects.toBeInstanceOf(CliUnavailableError)
+  })
+
+  it('rejeita transcript acima do limite antes de criar subprocesso', async () => {
+    const root = directory()
+    const runner = new FakeRunner()
+    const executor = new BrokerExecutor({ ...config(root), maxTranscriptBytes: 1024 }, runner, {
+      ...capabilities,
+      codex: { available: true, binaryPath: process.execPath, authDir: join(root, 'auth') },
+    })
+    await expect(executor.execute({
+      ...brokerRequest(),
+      messages: [{ role: 'user', content: 'x'.repeat(2000) }],
+    })).rejects.toBeInstanceOf(CliContextTooLargeError)
+    expect(runner.calls).toHaveLength(0)
   })
 
   it.each([

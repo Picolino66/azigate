@@ -6,6 +6,8 @@ import { inspectCapabilities, type ProviderCapabilities } from './capabilities.j
 import { loadBrokerConfig, type BrokerConfig } from './config.js'
 import { BrokerExecutor } from './executor.js'
 import { ProcessRunner, type ProcessRunnerLike } from './process-runner.js'
+import { InteractiveProcessFactory, type InteractiveProcessFactoryLike } from './interactive-process.js'
+import { MemorySessionExecutor } from './memory-executor.js'
 import { BROKER_PROTOCOL_VERSION, type BrokerErrorResponse } from './protocol.js'
 import { isBrokerExecuteRequest } from './protocol-validation.js'
 import { CliBusyError } from '../providers/errors.js'
@@ -142,8 +144,9 @@ export class BrokerController {
     }
   }
 
-  shutdown(): void {
+  async shutdown(): Promise<void> {
     this.active?.abort(new ClientAbortedError())
+    await this.executor.shutdown()
   }
 
   private publicHealth(provider: 'codex' | 'claude'): { available: boolean; code?: string } {
@@ -159,8 +162,10 @@ export function createBrokerServer(
   config: BrokerConfig,
   capabilities: ProviderCapabilities,
   runner: ProcessRunnerLike,
+  interactiveFactory: InteractiveProcessFactoryLike = new InteractiveProcessFactory(),
 ): { server: Server; controller: BrokerController } {
-  const executor = new BrokerExecutor(config, runner, capabilities)
+  const memoryExecutor = new MemorySessionExecutor(config, capabilities, interactiveFactory)
+  const executor = new BrokerExecutor(config, runner, capabilities, memoryExecutor)
   const controller = new BrokerController(config, capabilities, executor)
   const server = createServer((request, response) => {
     void controller.handler(request, response)
@@ -206,9 +211,15 @@ async function main(): Promise<void> {
       claude: capabilities.claude.available,
     },
   })}\n`)
+  let shuttingDown = false
   const shutdown = (): void => {
-    controller.shutdown()
-    server.close(() => process.exit(0))
+    if (shuttingDown) return
+    shuttingDown = true
+    const serverClosed = new Promise<void>((resolve) => server.close(() => resolve()))
+    void Promise.all([controller.shutdown(), serverClosed]).then(
+      () => process.exit(0),
+      () => process.exit(1),
+    )
   }
   process.once('SIGTERM', shutdown)
   process.once('SIGINT', shutdown)

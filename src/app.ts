@@ -77,6 +77,31 @@ export function createApp(config: AppConfig, dependencies: AppDependencies = {})
       request.telemetry.inputTokens,
       request.telemetry.outputTokens,
       request.telemetry.totalTokens,
+      {
+        ...(request.telemetry.freshInputTokens === undefined
+          ? {}
+          : { freshInput: request.telemetry.freshInputTokens }),
+        ...(request.telemetry.cachedInputTokens === undefined
+          ? {}
+          : { cachedInput: request.telemetry.cachedInputTokens }),
+        ...(request.telemetry.cacheCreationInputTokens === undefined
+          ? {}
+          : { cacheCreationInput: request.telemetry.cacheCreationInputTokens }),
+        ...(request.telemetry.cacheReadInputTokens === undefined
+          ? {}
+          : { cacheReadInput: request.telemetry.cacheReadInputTokens }),
+        ...(request.telemetry.reasoningOutputTokens === undefined
+          ? {}
+          : { reasoningOutput: request.telemetry.reasoningOutputTokens }),
+        ...(request.telemetry.estimatedCostUsd === undefined
+          ? {}
+          : { estimatedCostUsd: request.telemetry.estimatedCostUsd }),
+      },
+    )
+    metrics.observeCliSession(
+      request.telemetry.sessionMode,
+      request.telemetry.sessionReused,
+      request.telemetry.transcriptBytes,
     )
     if ((request.telemetry.upstreamStatus ?? 0) >= 500) metrics.upstreamErrorsTotal += 1
     request.log.info({
@@ -94,6 +119,35 @@ export function createApp(config: AppConfig, dependencies: AppDependencies = {})
       ...(request.telemetry.inputTokens === undefined ? {} : { inputTokens: request.telemetry.inputTokens }),
       ...(request.telemetry.outputTokens === undefined ? {} : { outputTokens: request.telemetry.outputTokens }),
       ...(request.telemetry.totalTokens === undefined ? {} : { totalTokens: request.telemetry.totalTokens }),
+      ...(request.telemetry.freshInputTokens === undefined
+        ? {}
+        : { freshInputTokens: request.telemetry.freshInputTokens }),
+      ...(request.telemetry.cachedInputTokens === undefined
+        ? {}
+        : { cachedInputTokens: request.telemetry.cachedInputTokens }),
+      ...(request.telemetry.cacheCreationInputTokens === undefined
+        ? {}
+        : { cacheCreationInputTokens: request.telemetry.cacheCreationInputTokens }),
+      ...(request.telemetry.cacheReadInputTokens === undefined
+        ? {}
+        : { cacheReadInputTokens: request.telemetry.cacheReadInputTokens }),
+      ...(request.telemetry.reasoningOutputTokens === undefined
+        ? {}
+        : { reasoningOutputTokens: request.telemetry.reasoningOutputTokens }),
+      ...(request.telemetry.estimatedCostUsd === undefined
+        ? {}
+        : { estimatedCostUsd: request.telemetry.estimatedCostUsd }),
+      ...(request.telemetry.cacheHitPercent === undefined
+        ? {}
+        : { cacheHitPercent: request.telemetry.cacheHitPercent }),
+      ...(request.telemetry.sessionMode === undefined ? {} : { sessionMode: request.telemetry.sessionMode }),
+      ...(request.telemetry.sessionReused === undefined ? {} : { sessionReused: request.telemetry.sessionReused }),
+      ...(request.telemetry.transcriptBytes === undefined
+        ? {}
+        : { transcriptBytes: request.telemetry.transcriptBytes }),
+      ...(request.telemetry.validationCode === undefined
+        ? {}
+        : { validationCode: request.telemetry.validationCode }),
       ...(request.telemetry.error === undefined ? {} : { error: request.telemetry.error }),
     })
   })

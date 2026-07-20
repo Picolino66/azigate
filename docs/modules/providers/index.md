@@ -29,6 +29,9 @@ Fastify, Undici, Unix socket, Bubblewrap e os binários Codex/Claude instalados 
 - O agente cliente é o único executor de ferramentas.
 - Um alias só é publicado se habilitado e saudável.
 - O broker não aceita localização, comando ou ambiente do cliente.
+- O broker pode reutilizar sessões somente em RAM quando houver um único prefixo
+  exato; o gateway HTTP permanece stateless.
+- Transcript CLI acima do limite recebe `413`, sem truncamento.
 
 ## Fluxo resumido
 
@@ -36,10 +39,13 @@ Autenticar -> aplicar allowlists -> resolver provider -> executar o adaptador ->
 
 ## Possíveis erros
 
-`model_not_allowed`, `invalid_cli_request`, `cli_busy`, `invalid_cli_output`, `cli_execution_failed`, `cli_unavailable`, `providers_unavailable` e `cli_timeout`.
+`model_not_allowed`, `invalid_cli_request`, `cli_context_too_large`, `cli_busy`,
+`invalid_cli_output`, `cli_execution_failed`, `cli_unavailable`,
+`providers_unavailable` e `cli_timeout`.
 
 ## Features
 
 - [Upstream OpenAI-compatible (DeepSeek por padrão)](./deepseek.md)
 - [Codex CLI](./codex-cli.md)
 - [Claude CLI](./claude-cli.md)
+- [Sessões CLI efêmeras em memória](./sessoes-cli-em-memoria.md)

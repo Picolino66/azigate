@@ -12,6 +12,7 @@ import type {
 import { BROKER_PROTOCOL_VERSION } from '../src/broker/protocol.js'
 import { createTestConfig, type AppConfig } from '../src/config.js'
 import type { CliBrokerClientLike } from '../src/providers/broker-client.js'
+import { GatewayMetrics } from '../src/observability/metrics.js'
 import {
   CliBusyError,
   CliExecutionFailedError,
@@ -45,6 +46,7 @@ class MockBroker implements CliBrokerClientLike {
     requestId: input.requestId,
     decision: { content: 'ok', toolCalls: [] },
     usage: { promptTokens: 4, completionTokens: 2, totalTokens: 6 },
+    execution: { sessionMode: 'stateless', sessionReused: false, transcriptBytes: 10 },
   })
 
   health(): Promise<BrokerHealthResponse> {
@@ -251,6 +253,54 @@ describe('gateway multiprovedor CLI', () => {
     expect(logs).not.toContain('PROMPT_ULTRASSECRETO_CODEX')
   })
 
+  it('registra usage detalhado e reuso sem expor conteúdo', async () => {
+    let logs = ''
+    const metrics = new GatewayMetrics()
+    const logger = pino({ level: 'info', base: null }, new Writable({
+      write(chunk: Buffer, _encoding, callback) {
+        logs += chunk.toString()
+        callback()
+      },
+    }))
+    broker.executeHandler = async (input) => ({
+      version: BROKER_PROTOCOL_VERSION,
+      requestId: input.requestId,
+      decision: { content: 'RESPOSTA_SECRETA', toolCalls: [] },
+      usage: {
+        promptTokens: 100,
+        completionTokens: 5,
+        totalTokens: 105,
+        freshInputTokens: 10,
+        cacheReadInputTokens: 90,
+        estimatedCostUsd: 0.02,
+      },
+      execution: { sessionMode: 'memory', sessionReused: true, transcriptBytes: 8192 },
+    })
+    const response = await appFor({}, { logger, metrics }).inject({
+      method: 'POST',
+      url: '/v1/chat/completions',
+      headers: CHAT_HEADERS,
+      payload: { model: 'codex-cli', messages: [{ role: 'user', content: 'PROMPT_SECRETO' }] },
+    })
+    expect(response.statusCode).toBe(200)
+    expect(logs).toContain('"freshInputTokens":10')
+    expect(logs).toContain('"cacheReadInputTokens":90')
+    expect(logs).toContain('"cacheHitPercent":90')
+    expect(logs).toContain('"sessionMode":"memory"')
+    expect(logs).toContain('"sessionReused":true')
+    expect(logs).toContain('"transcriptBytes":8192')
+    expect(logs).not.toContain('PROMPT_SECRETO')
+    expect(logs).not.toContain('RESPOSTA_SECRETA')
+    expect(metrics.snapshot()).toMatchObject({
+      fresh_input_tokens_total: 10,
+      cache_read_input_tokens_total: 90,
+      estimated_cost_usd_total: 0.02,
+      memory_session_requests_total: 1,
+      reused_session_requests_total: 1,
+      transcript_bytes_total: 8192,
+    })
+  })
+
   it('rejeita reasoning_effort Claude inválido antes de chamar o broker', async () => {
     broker.healthResult = health(true, true)
     const response = await appFor({ enableClaudeCli: true }).inject({
@@ -281,6 +331,21 @@ describe('gateway multiprovedor CLI', () => {
     expect(broker.executeCalls).toHaveLength(0)
   })
 
+  it('rejeita contexto CLI acima do limite antes de chamar o broker', async () => {
+    const response = await appFor({ cliMaxTranscriptBytes: 1024 }).inject({
+      method: 'POST',
+      url: '/v1/chat/completions',
+      headers: CHAT_HEADERS,
+      payload: {
+        model: 'codex-cli',
+        messages: [{ role: 'user', content: 'x'.repeat(2000) }],
+      },
+    })
+    expect(response.statusCode).toBe(413)
+    expect(response.json()).toMatchObject({ error: { code: 'cli_context_too_large' } })
+    expect(broker.executeCalls).toHaveLength(0)
+  })
+
   it('modelo Claude fora da ALLOWED_MODELS recebe 403 sem chamar provider', async () => {
     broker.healthResult = health(true, true)
     const response = await appFor({
@@ -304,6 +369,7 @@ describe('gateway multiprovedor CLI', () => {
       requestId: input.requestId,
       decision: { content: null, toolCalls: [{ name: 'read_file', arguments: '{"path":"a.txt"}' }] },
       usage: { promptTokens: 8, completionTokens: 3, totalTokens: 11 },
+      execution: { sessionMode: 'stateless', sessionReused: false, transcriptBytes: 10 },
     })
     const response = await appFor().inject({
       method: 'POST',
@@ -333,6 +399,56 @@ describe('gateway multiprovedor CLI', () => {
     })
     expect(payload.usage.total_tokens).toBe(11)
     expect(upstream.requests).toHaveLength(0)
+  })
+
+  it('aceita o wire shape Qwen em texto -> tool call -> tool result sem 400', async () => {
+    broker.executeHandler = async (input) => ({
+      version: BROKER_PROTOCOL_VERSION,
+      requestId: input.requestId,
+      decision: input.messages.some((message) => message.role === 'tool')
+        ? { content: 'concluído', toolCalls: [] }
+        : { content: null, toolCalls: [{ name: 'read_file', arguments: '{"path":"a.txt"}' }] },
+      execution: { sessionMode: 'memory', sessionReused: false, transcriptBytes: 100 },
+    })
+    const first = await appFor().inject({
+      method: 'POST',
+      url: '/v1/chat/completions',
+      headers: CHAT_HEADERS,
+      payload: {
+        model: 'codex-cli',
+        messages: [{ role: 'user', content: 'leia' }],
+        tools: [{ type: 'function', function: { name: 'read_file' } }],
+      },
+    })
+    expect(first.statusCode).toBe(200)
+    const toolCall = first.json<{ choices: Array<{ message: { tool_calls: Array<{ id: string }> } }> }>()
+      .choices[0]?.message.tool_calls[0]
+    expect(toolCall?.id).toBeTypeOf('string')
+
+    const second = await appFor().inject({
+      method: 'POST',
+      url: '/v1/chat/completions',
+      headers: CHAT_HEADERS,
+      payload: {
+        model: 'codex-cli',
+        messages: [
+          { role: 'user', content: 'leia' },
+          {
+            role: 'assistant',
+            content: null,
+            tool_calls: [{
+              id: toolCall?.id,
+              type: 'function',
+              function: { name: 'read_file', arguments: '{"path":"a.txt"}' },
+            }],
+          },
+          { role: 'tool', tool_call_id: toolCall?.id, content: 'conteúdo' },
+        ],
+        tools: [{ type: 'function', function: { name: 'outra_tool' } }],
+      },
+    })
+    expect(second.statusCode).toBe(200)
+    expect(second.json()).toMatchObject({ choices: [{ message: { content: 'concluído' } }] })
   })
 
   it('encaminha somente o modelo interno mapeado para o alias Codex', async () => {
@@ -369,6 +485,7 @@ describe('gateway multiprovedor CLI', () => {
       version: BROKER_PROTOCOL_VERSION,
       requestId: input.requestId,
       decision: { content: null, toolCalls: [{ name: 'shell_interno', arguments: '{}' }] },
+      execution: { sessionMode: 'stateless', sessionReused: false, transcriptBytes: 10 },
     })
     const response = await appFor().inject({
       method: 'POST',
@@ -484,6 +601,7 @@ describe('gateway multiprovedor CLI', () => {
         requestId: input.requestId,
         decision: { content: 'resposta final', toolCalls: [] },
         usage: { totalTokens: 7 },
+        execution: { sessionMode: 'stateless', sessionReused: false, transcriptBytes: 10 },
       }
     }
     const app = appFor({ cliHeartbeatIntervalMs: 10 })

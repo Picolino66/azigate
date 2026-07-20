@@ -35,3 +35,9 @@ export class CliTimeoutError extends GatewayError {
     super(504, 'cli_timeout', 'O CLI não respondeu dentro do tempo limite')
   }
 }
+
+export class CliContextTooLargeError extends GatewayError {
+  constructor() {
+    super(413, 'cli_context_too_large', 'O contexto para o provedor CLI excede o limite configurado')
+  }
+}

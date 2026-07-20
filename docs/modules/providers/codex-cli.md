@@ -6,7 +6,9 @@ Aliases experimentais Codex que escolhem um modelo fixo da sessão autenticada. 
 
 ## Localização no código
 
-`src/providers/`, `src/broker/executor.ts`, `src/broker/capabilities.ts` e `src/broker/viability-gate.ts`.
+`src/providers/`, `src/broker/executor.ts`, `src/broker/memory-executor.ts`,
+`src/broker/session-correlation.ts`, `src/broker/capabilities.ts` e
+`src/broker/viability-gate.ts`.
 
 ## Entrada
 
@@ -22,16 +24,27 @@ Codex CLI autenticado, Bubblewrap, `~/.codex` privado, broker ativo e `ENABLE_CO
 
 ## Regras de negócio
 
-- Execução `--ephemeral`, JSONL e output schema.
-- O modelo chega ao broker somente pela allowlist interna e é passado como `--model` no argv fixo.
-- O default de todos os modelos é `medium`; `max` é reduzido para `xhigh`. O valor efetivo chega pelo protocolo v5 e vira `-c model_reasoning_effort="..."` reconstruído.
+- Em `memory`, um App Server privado cria threads com `ephemeral: true`; cada
+  `turn/start` recebe modelo/effort validados e `outputSchema`. O modo `stateless`
+  de contingência conserva `codex exec --ephemeral`/JSONL.
+- O modelo chega ao broker somente pela allowlist interna. No App Server ele é
+  definido em `thread/start`; em contingência vira `--model` no argv fixo.
+- O default de todos os modelos é `medium`; `max` é reduzido para `xhigh`. O valor
+  efetivo chega pelo protocolo v6 e é enviado em `turn/start`. No modo stateless,
+  vira `-c model_reasoning_effort="..."` reconstruído.
 - `reasoning_effort` plano tem precedência sobre `reasoning.effort`; `reasoning: false`, ausência ou objeto sem effort usa o default.
-- Configuração e rules do usuário ignoradas.
+- Configuração e rules do usuário ignoradas; somente `auth.json` entra no home
+  efêmero do App Server.
 - Sandbox `read-only`, approval `never` e shell/apps/browser/computer/hooks/multi-agent desabilitados.
 - Qualquer evento de ferramenta local invalida a execução.
 - O gate usa 10 cenários duas vezes: 100% estrutural, zero ferramentas locais e 90% de categoria.
 - O startup não faz inferência: interpreta `debug models --bundled` e exige todos
   os modelos/efforts fixados. A execução real mantém `--strict-config`.
+- A correlação em RAM reutiliza uma thread somente com um prefixo semântico exato.
+  Troca de effort é aplicada por turno sem perder a thread; divergência ou troca de
+  modelo cria thread nova.
+- Usage usa `thread/tokenUsage/updated.tokenUsage.last`: input já inclui cache,
+  cached/reasoning são subconjuntos e não são somados novamente.
 
 ## Evidência de viabilidade
 
@@ -44,8 +57,11 @@ substitui o gate completo de 20 cenários de cada modelo.
 
 ## Fluxo resumido
 
-Gateway normaliza modelo/effort -> protocolo v5 -> broker revalida -> Codex roda isolado com configuração fixada -> broker inspeciona JSONL/final -> gateway valida allowlist -> o agente recebe a decisão.
+Gateway normaliza modelo/effort -> protocolo v6 -> broker correlaciona o prefixo ->
+App Server recebe transcript completo ou delta -> broker recusa itens locais e
+valida a mensagem final -> gateway valida allowlist -> o agente recebe a decisão.
 
 ## Possíveis erros
 
-`invalid_cli_request`, `cli_busy`, `invalid_cli_output`, `cli_execution_failed`, `cli_unavailable` e `cli_timeout`.
+`invalid_cli_request`, `cli_context_too_large`, `cli_busy`, `invalid_cli_output`,
+`cli_execution_failed`, `cli_unavailable` e `cli_timeout`.

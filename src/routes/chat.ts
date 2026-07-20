@@ -4,8 +4,13 @@ import { publicError } from '../http/errors.js'
 import { createClientAbortSignal } from '../http/client-abort.js'
 import type { GatewayMetrics } from '../observability/metrics.js'
 import type { CliBrokerClientLike } from '../providers/broker-client.js'
-import { CliRequestValidationError, normalizeCliRequest, validateCliDecision } from '../providers/cli-request.js'
-import { CliUnavailableError } from '../providers/errors.js'
+import {
+  cliTranscriptBytes,
+  CliRequestValidationError,
+  normalizeCliRequest,
+  validateCliDecision,
+} from '../providers/cli-request.js'
+import { CliContextTooLargeError, CliUnavailableError } from '../providers/errors.js'
 import { cliCompletionJson, streamCliCompletion } from '../providers/openai-response.js'
 import { resolveProvider } from '../providers/registry.js'
 import type { ChatBody } from '../types.js'
@@ -101,11 +106,18 @@ export function registerChatRoute(
         } catch (error) {
           if (!(error instanceof CliRequestValidationError)) throw error
           request.telemetry.error = error.name
+          request.telemetry.validationCode = error.reasonCode
           return reply.code(400).send(publicError(error.publicMessage, 'invalid_cli_request'))
         }
+        const transcriptBytes = cliTranscriptBytes(brokerRequest)
+        request.telemetry.transcriptBytes = transcriptBytes
+        if (transcriptBytes > config.cliMaxTranscriptBytes) throw new CliContextTooLargeError()
         request.telemetry.effort = brokerRequest.effort ?? 'não_aplicável'
         const execute = async () => {
           const result = await broker.execute(brokerRequest, cancellation.signal)
+          request.telemetry.sessionMode = result.execution.sessionMode
+          request.telemetry.sessionReused = result.execution.sessionReused
+          request.telemetry.transcriptBytes = result.execution.transcriptBytes
           return { decision: validateCliDecision(result.decision, brokerRequest), ...(result.usage ? { usage: result.usage } : {}) }
         }
         if (stream) {

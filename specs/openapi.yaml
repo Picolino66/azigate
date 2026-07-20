@@ -86,6 +86,11 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+        '413':
+          description: Corpo HTTP ou transcript CLI normalizado acima do limite
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
         '429':
           description: Rate limit ou broker ocupado
           content:

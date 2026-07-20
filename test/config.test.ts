@@ -24,6 +24,7 @@ describe('configuração', () => {
       expect(config.deepseekBaseUrl.href).toBe('https://api.deepseek.com/')
       expect(config.deepseekApiKey).toBe('deepseek-file-secret')
       expect(config.gatewayApiKeys).toEqual(['gateway-one', 'gateway-two'])
+      expect(config.cliMaxTranscriptBytes).toBe(262_144)
     } finally {
       rmSync(directory, { recursive: true })
     }
@@ -38,5 +39,14 @@ describe('configuração', () => {
         DEEPSEEK_BASE_URL: 'http://api.deepseek.com',
       }),
     ).toThrow(/HTTPS/u)
+  })
+
+  it('valida o limite preventivo de transcript CLI', () => {
+    expect(() => loadConfig({
+      NODE_ENV: 'production',
+      DEEPSEEK_API_KEY: 'secret',
+      GATEWAY_API_KEYS: 'gateway',
+      CLI_MAX_TRANSCRIPT_BYTES: '100',
+    })).toThrow(/CLI_MAX_TRANSCRIPT_BYTES/u)
   })
 })

@@ -150,9 +150,9 @@ claude --version
 claude
 claude auth status
 
-# Proteja o diretório de autenticação e o arquivo de configuração top-level
+# Proteja o diretório, a credencial e o arquivo de configuração top-level
 chmod 0700 ~/.claude
-chmod 0600 ~/.claude.json
+chmod 0600 ~/.claude/.credentials.json ~/.claude.json
 ```
 
 Nenhuma API key nova é criada: o broker usa o login existente. Se o login ou a
@@ -165,6 +165,10 @@ pelo seu usuário e use o caminho retornado por `which claude`:
 
 ```dotenv
 BROKER_ENABLE_CLAUDE_CLI=true
+BROKER_CLAUDE_SESSION_MODE=memory
+BROKER_MAX_TRANSCRIPT_BYTES=262144
+BROKER_MAX_ACTIVE_SESSIONS=4
+BROKER_SESSION_IDLE_MS=1800000
 CLAUDE_CLI_PATH=/home/USUARIO/.local/bin/claude
 CLAUDE_AUTH_DIR=/home/USUARIO/.claude
 CLAUDE_CONFIG_PATH=/home/USUARIO/.claude.json

@@ -9,6 +9,7 @@ import { BROKER_PROTOCOL_VERSION } from '../broker/protocol.js'
 import { ClientAbortedError, GatewayError } from '../upstream/errors.js'
 import {
   CliBusyError,
+  CliContextTooLargeError,
   CliExecutionFailedError,
   CliTimeoutError,
   CliUnavailableError,
@@ -23,9 +24,24 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isUsage(value: unknown): value is BrokerUsage {
   if (!isRecord(value)) return false
-  return ['promptTokens', 'completionTokens', 'totalTokens'].every(
-    (key) => value[key] === undefined || (typeof value[key] === 'number' && value[key] >= 0),
-  )
+  const allowed = [
+    'promptTokens',
+    'completionTokens',
+    'totalTokens',
+    'freshInputTokens',
+    'cachedInputTokens',
+    'cacheCreationInputTokens',
+    'cacheReadInputTokens',
+    'reasoningOutputTokens',
+    'estimatedCostUsd',
+  ]
+  return Object.keys(value).every((key) => allowed.includes(key)) && allowed.every((key) =>
+    value[key] === undefined || (
+      typeof value[key] === 'number' &&
+      Number.isFinite(value[key]) &&
+      value[key] >= 0 &&
+      (key === 'estimatedCostUsd' || Number.isSafeInteger(value[key]))
+    ))
 }
 
 function isHealth(value: unknown): value is BrokerHealthResponse {
@@ -38,13 +54,20 @@ function isHealth(value: unknown): value is BrokerHealthResponse {
 }
 
 function isExecuteResponse(value: unknown): value is BrokerExecuteResponse {
+  const execution = isRecord(value) && isRecord(value.execution) ? value.execution : undefined
   if (
     !isRecord(value) ||
     value.version !== BROKER_PROTOCOL_VERSION ||
     typeof value.requestId !== 'string' ||
     !isRecord(value.decision) ||
     (value.decision.content !== null && typeof value.decision.content !== 'string') ||
-    !Array.isArray(value.decision.toolCalls)
+    !Array.isArray(value.decision.toolCalls) ||
+    execution === undefined ||
+    !['stateless', 'memory'].includes(String(execution.sessionMode)) ||
+    typeof execution.sessionReused !== 'boolean' ||
+    !Number.isSafeInteger(execution.transcriptBytes) ||
+    typeof execution.transcriptBytes !== 'number' ||
+    execution.transcriptBytes < 0
   ) {
     return false
   }
@@ -59,6 +82,7 @@ function brokerError(status: number, payload: unknown): GatewayError {
   if (status === 429 || code === 'cli_busy') return new CliBusyError()
   if (status === 504 || code === 'cli_timeout') return new CliTimeoutError()
   if (status === 503 || code === 'cli_unavailable') return new CliUnavailableError()
+  if (status === 413 || code === 'cli_context_too_large') return new CliContextTooLargeError()
   if (code === 'invalid_cli_output') return new InvalidCliOutputError()
   return new CliExecutionFailedError()
 }

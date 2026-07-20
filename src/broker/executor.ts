@@ -8,9 +8,11 @@ import type { ProcessRunResult, ProcessRunnerLike } from './process-runner.js'
 import type { BrokerDecision, BrokerExecuteRequest, BrokerExecuteResponse, BrokerUsage } from './protocol.js'
 import { BROKER_PROTOCOL_VERSION, isClaudeCliModel, isCodexCliModel } from './protocol.js'
 import { canonicalPrompt, DECISION_JSON_SCHEMA } from './prompt.js'
+import type { MemorySessionExecutorLike } from './memory-executor.js'
 import { validateCliDecision } from '../providers/cli-request.js'
 import {
   CliExecutionFailedError,
+  CliContextTooLargeError,
   CliTimeoutError,
   CliUnavailableError,
   InvalidCliOutputError,
@@ -66,18 +68,70 @@ function rawDecision(value: unknown): BrokerDecision {
   }
 }
 
-function usageFromRecord(value: unknown): BrokerUsage | undefined {
+function optionalNonNegativeInteger(record: Record<string, unknown>, key: string): number | undefined {
+  const value = record[key]
+  if (value === undefined) return undefined
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : undefined
+}
+
+function hasInvalidInteger(record: Record<string, unknown>, key: string): boolean {
+  return record[key] !== undefined && optionalNonNegativeInteger(record, key) === undefined
+}
+
+function safeSum(...values: number[]): number | undefined {
+  const result = values.reduce((total, value) => total + value, 0)
+  return Number.isSafeInteger(result) && result >= 0 ? result : undefined
+}
+
+export function parseCodexUsage(value: unknown): BrokerUsage | undefined {
   if (!isRecord(value)) return undefined
-  const promptTokens = typeof value.input_tokens === 'number' ? value.input_tokens : undefined
-  const completionTokens = typeof value.output_tokens === 'number' ? value.output_tokens : undefined
-  const totalTokens = promptTokens !== undefined && completionTokens !== undefined
-    ? promptTokens + completionTokens
+  const keys = ['input_tokens', 'cached_input_tokens', 'output_tokens', 'reasoning_output_tokens']
+  if (keys.some((key) => hasInvalidInteger(value, key))) return undefined
+  const input = optionalNonNegativeInteger(value, 'input_tokens')
+  const cached = optionalNonNegativeInteger(value, 'cached_input_tokens')
+  const output = optionalNonNegativeInteger(value, 'output_tokens')
+  const reasoning = optionalNonNegativeInteger(value, 'reasoning_output_tokens')
+  if (input === undefined && output === undefined) return undefined
+  if (cached !== undefined && (input === undefined || cached > input)) return undefined
+  if (reasoning !== undefined && (output === undefined || reasoning > output)) return undefined
+  const freshInputTokens = input === undefined ? undefined : input - (cached ?? 0)
+  const totalTokens = input !== undefined && output !== undefined ? safeSum(input, output) : undefined
+  if (input !== undefined && output !== undefined && totalTokens === undefined) return undefined
+  return {
+    ...(input === undefined ? {} : { promptTokens: input }),
+    ...(output === undefined ? {} : { completionTokens: output }),
+    ...(totalTokens === undefined ? {} : { totalTokens }),
+    ...(freshInputTokens === undefined ? {} : { freshInputTokens }),
+    ...(cached === undefined ? {} : { cachedInputTokens: cached }),
+    ...(reasoning === undefined ? {} : { reasoningOutputTokens: reasoning }),
+  }
+}
+
+export function parseClaudeUsage(value: unknown, estimatedCost: unknown): BrokerUsage | undefined {
+  if (!isRecord(value)) return undefined
+  const keys = ['input_tokens', 'cache_creation_input_tokens', 'cache_read_input_tokens', 'output_tokens']
+  if (keys.some((key) => hasInvalidInteger(value, key))) return undefined
+  const fresh = optionalNonNegativeInteger(value, 'input_tokens')
+  const cacheCreation = optionalNonNegativeInteger(value, 'cache_creation_input_tokens')
+  const cacheRead = optionalNonNegativeInteger(value, 'cache_read_input_tokens')
+  const output = optionalNonNegativeInteger(value, 'output_tokens')
+  const hasInput = fresh !== undefined || cacheCreation !== undefined || cacheRead !== undefined
+  if (!hasInput && output === undefined) return undefined
+  const promptTokens = hasInput ? safeSum(fresh ?? 0, cacheCreation ?? 0, cacheRead ?? 0) : undefined
+  if (hasInput && promptTokens === undefined) return undefined
+  const totalTokens = promptTokens !== undefined && output !== undefined ? safeSum(promptTokens, output) : undefined
+  if (promptTokens !== undefined && output !== undefined && totalTokens === undefined) return undefined
+  const cost = typeof estimatedCost === 'number' && Number.isFinite(estimatedCost) && estimatedCost >= 0
+    ? estimatedCost
     : undefined
-  if (promptTokens === undefined && completionTokens === undefined) return undefined
   return {
     ...(promptTokens === undefined ? {} : { promptTokens }),
-    ...(completionTokens === undefined ? {} : { completionTokens }),
+    ...(output === undefined ? {} : { completionTokens: output }),
     ...(totalTokens === undefined ? {} : { totalTokens }),
+    ...(fresh === undefined ? {} : { freshInputTokens: fresh }),
+    ...(cacheCreation === undefined ? {} : { cacheCreationInputTokens: cacheCreation }),
+    ...(cacheRead === undefined ? {} : { cacheReadInputTokens: cacheRead }),
+    ...(cost === undefined ? {} : { estimatedCostUsd: cost }),
   }
 }
 
@@ -101,7 +155,7 @@ function inspectCodexEvents(stdout: string): BrokerUsage | undefined {
       continue
     }
     if (event.type === 'turn.completed') {
-      usage = usageFromRecord(event.usage)
+      usage = parseCodexUsage(event.usage)
       continue
     }
     if (!['thread.started', 'turn.started'].includes(event.type)) throw new CliEventProtocolError()
@@ -139,7 +193,7 @@ function parseClaude(stdout: string): { decision: BrokerDecision; usage?: Broker
     }
   }
   if (structured === undefined && 'content' in payload && 'tool_calls' in payload) structured = payload
-  const usage = usageFromRecord(payload.usage)
+  const usage = parseClaudeUsage(payload.usage, payload.total_cost_usd)
   return { decision: rawDecision(structured), ...(usage === undefined ? {} : { usage }) }
 }
 
@@ -201,11 +255,21 @@ export class BrokerExecutor {
     private readonly config: BrokerConfig,
     private readonly runner: ProcessRunnerLike,
     private readonly capabilities: ProviderCapabilities,
+    private readonly memoryExecutor?: MemorySessionExecutorLike,
   ) {}
 
   async execute(request: BrokerExecuteRequest, signal?: AbortSignal): Promise<BrokerExecuteResponse> {
+    const transcriptBytes = Buffer.byteLength(JSON.stringify({ messages: request.messages, tools: request.tools }))
+    if (transcriptBytes > this.config.maxTranscriptBytes) throw new CliContextTooLargeError()
     const capability = this.capabilities[request.provider]
     if (!capability.available || !capability.binaryPath || !capability.authDir) throw new CliUnavailableError()
+    const sessionMode = request.provider === 'codex'
+      ? this.config.codexSessionMode
+      : this.config.claudeSessionMode
+    if (sessionMode === 'memory') {
+      if (this.memoryExecutor === undefined) throw new CliUnavailableError()
+      return this.memoryExecutor.execute(request, transcriptBytes, signal)
+    }
     await mkdir(this.config.workRoot, { recursive: true, mode: 0o700 })
     await chmod(this.config.workRoot, 0o700)
     const workspace = await mkdtemp(join(this.config.workRoot, 'request-'))
@@ -267,10 +331,19 @@ export class BrokerExecutor {
         requestId: request.requestId,
         decision,
         ...(parsed.usage === undefined ? {} : { usage: parsed.usage }),
+        execution: {
+          sessionMode: 'stateless',
+          sessionReused: false,
+          transcriptBytes,
+        },
       }
     } finally {
       await rm(workspace, { recursive: true, force: true })
     }
+  }
+
+  async shutdown(): Promise<void> {
+    await this.memoryExecutor?.shutdown()
   }
 
   private codexArgs(model: BrokerExecuteRequest['model'], effort: BrokerExecuteRequest['effort']): string[] {
@@ -302,6 +375,7 @@ export class BrokerExecutor {
     if (!isClaudeCliModel(model)) throw new CliUnavailableError()
     return [
       '--print',
+      '--prompt-suggestions', 'false',
       '--model', model,
       ...(effort === undefined ? [] : ['--effort', effort]),
       '--input-format', 'text',

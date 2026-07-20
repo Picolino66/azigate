@@ -46,6 +46,8 @@ const CODEX_HELP = [
   '--config',
 ].join('\n')
 
+const CODEX_APP_SERVER_HELP = ['--stdio', '--strict-config'].join('\n')
+
 const CLAUDE_HELP = [
   '--print',
   '--effort',
@@ -64,6 +66,9 @@ const CLAUDE_HELP = [
   '--setting-sources',
   '--settings',
   '--permission-mode',
+  '--safe-mode',
+  '--verbose',
+  '--prompt-suggestions',
 ].join('\n')
 
 function codexCatalog(): string {
@@ -84,6 +89,7 @@ class CapabilityRunner implements ProcessRunnerLike {
     this.calls.push(spec)
     if (spec.args[0] === '--unshare-all') return Promise.resolve(result('', this.failure === 'bwrap' ? 1 : 0))
     if (spec.args[0] === 'exec') return Promise.resolve(result(this.failure === 'codex_help' ? '' : CODEX_HELP))
+    if (spec.args[0] === 'app-server') return Promise.resolve(result(CODEX_APP_SERVER_HELP))
     if (spec.args[0] === '-c') {
       return Promise.resolve(result(
         this.failure === 'codex_catalog' ? '{}' : codexCatalog(),
@@ -118,6 +124,11 @@ function brokerConfig(directory: string): BrokerConfig {
     killGraceMs: 100,
     maxOutputBytes: 1_048_576,
     maxRequestBytes: 1_048_576,
+    maxTranscriptBytes: 262_144,
+    codexSessionMode: 'stateless',
+    claudeSessionMode: 'stateless',
+    maxActiveSessions: 4,
+    sessionIdleMs: 1_800_000,
     bwrapPath: process.execPath,
     codexPath: process.execPath,
     claudePath: process.execPath,
@@ -135,11 +146,17 @@ describe('configuração e capacidades do broker', () => {
     expect(config.executionTimeoutMs).toBe(600_000)
     expect(config.enableCodex).toBe(true)
     expect(config.enableClaude).toBe(false)
+    expect(config.maxTranscriptBytes).toBe(262_144)
+    expect(config.codexSessionMode).toBe('memory')
+    expect(config.claudeSessionMode).toBe('memory')
+    expect(config.maxActiveSessions).toBe(4)
+    expect(config.sessionIdleMs).toBe(1_800_000)
     expect(config.claudeConfigPath).toBe(join(home, '.claude.json'))
     expect(() => loadBrokerConfig({ HOME: home, BROKER_SOCKET_PATH: 'relativo' })).toThrow(/absoluto/u)
     expect(() => loadBrokerConfig({ HOME: home, BROKER_ENABLE_CODEX_CLI: 'sim' })).toThrow(/true ou false/u)
     expect(() => loadBrokerConfig({ HOME: home, BROKER_MAX_OUTPUT_BYTES: '1' })).toThrow(/inteiro/u)
     expect(() => loadBrokerConfig({ HOME: home, CLAUDE_CONFIG_PATH: 'relativo' })).toThrow(/absoluto/u)
+    expect(() => loadBrokerConfig({ HOME: home, BROKER_CODEX_SESSION_MODE: 'disco' })).toThrow(/stateless ou memory/u)
   })
 
   it('aprova binários, auth, flags e features exigidos sem registrar saídas', async () => {
@@ -154,6 +171,21 @@ describe('configuração e capacidades do broker', () => {
     expect(runner.calls.some((call) => call.args.includes('--bundled'))).toBe(true)
     expect((globalThis.process.getuid?.() ?? 0) >= 0).toBe(true)
     expect(statSync(config.codexAuthDir).mode & 0o777).toBe(0o700)
+  })
+
+  it('exige App Server e arquivos privados de autenticação no modo memory', async () => {
+    const config = brokerConfig(root())
+    config.codexSessionMode = 'memory'
+    config.claudeSessionMode = 'memory'
+    writeFileSync(join(config.codexAuthDir, 'auth.json'), '{}', { mode: 0o600 })
+    writeFileSync(join(config.claudeAuthDir, '.credentials.json'), '{}', { mode: 0o600 })
+    const capabilities = await inspectCapabilities(config, new CapabilityRunner())
+    expect(capabilities.codex.available).toBe(true)
+    expect(capabilities.claude.available).toBe(true)
+
+    rmSync(join(config.codexAuthDir, 'auth.json'))
+    const unavailable = await inspectCapabilities(config, new CapabilityRunner())
+    expect(unavailable.codex).toMatchObject({ available: false, code: 'filesystem_unavailable' })
   })
 
   it.each([

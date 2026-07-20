@@ -152,6 +152,24 @@ Use o comando separado do prompt:
 
 Depois envie o pedido normalmente. O Qwen persiste `model.reasoningEffort` e envia `reasoning: { "effort": "medium" }`; o gateway aceita esse formato tanto para Codex quanto para Claude. Não adicione `extra_body.reasoning_effort` estático, pois ele tem precedência e impediria `/effort` de mudar o valor.
 
+Para reduzir contexto excessivo, mescle também:
+
+```json
+{
+  "context": {
+    "autoCompactThreshold": 0.35
+  },
+  "model": {
+    "sessionTokenLimit": 60000,
+    "skipStartupContext": false
+  }
+}
+```
+
+Mantenha `skipStartupContext: false`: o Qwen precisa conhecer o computador onde
+executa. Use `/clear` entre tarefas sem relação. O gateway recusa, sem truncar,
+mensagens+tools normalizadas acima de 256 KiB.
+
 Nos aliases Codex, `low`, `medium`, `high` e `xhigh` chegam ao CLI sem mudança, o default é `medium` e `max` aparece no log como `xhigh`. Nos aliases Claude, continuam valendo os defaults e limites da tabela; `reasoning: false` também usa o default do modelo.
 
 Não grave o valor da chave no JSON:
@@ -162,6 +180,10 @@ qwen
 ```
 
 Dentro do Qwen, use `/model` para selecionar um modelo do upstream, um alias `codex-cli-*` ou um alias Claude aprovado. Effort omitido ou incompatível usa o default da tabela; Sonnet 4.5 e Haiku 4.5 ignoram qualquer effort. Todos usam a mesma `baseUrl` e chave. `codex-cli` continua selecionando GPT-5.4. O alias `claude-cli` representa Sonnet 4.6, mas permanece fora da publicação atual porque seu gate falhou. Mantenha approval interativo e não use YOLO/auto-approval.
+
+Nos aliases CLI, mantenha `generationConfig.maxRetries: 0`. O broker não repete
+uma inferência que possa ter chegado ao provider; retries do próprio binário CLI
+continuam sob a implementação oficial e podem aparecer como eventos internos.
 
 ## Fallback para versão antiga
 

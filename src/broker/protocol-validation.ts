@@ -57,6 +57,24 @@ function isToolChoice(value: unknown): value is BrokerToolChoice {
   )
 }
 
+function hasValidToolReferences(messages: readonly BrokerMessage[]): boolean {
+  const calls = new Set<string>()
+  const results = new Set<string>()
+  for (const message of messages) {
+    for (const call of message.toolCalls ?? []) {
+      if (calls.has(call.id)) return false
+      calls.add(call.id)
+    }
+    if (message.role === 'tool') {
+      if (message.toolCallId === undefined || !calls.has(message.toolCallId) || results.has(message.toolCallId)) {
+        return false
+      }
+      results.add(message.toolCallId)
+    }
+  }
+  return true
+}
+
 export function isBrokerExecuteRequest(value: unknown): value is BrokerExecuteRequest {
   if (!isRecord(value) || !exactKeys(value, [
     'version',
@@ -84,6 +102,7 @@ export function isBrokerExecuteRequest(value: unknown): value is BrokerExecuteRe
       )) &&
     Array.isArray(value.messages) &&
     value.messages.every(isMessage) &&
+    hasValidToolReferences(value.messages) &&
     Array.isArray(value.tools) &&
     value.tools.every(isTool) &&
     isToolChoice(value.toolChoice) &&

@@ -170,6 +170,13 @@ Quando `ALLOWED_MODELS` estiver preenchida, inclua explicitamente cada alias
 desejado. O catálogo completo e o roteamento estão em
 [specs/gateway-api.md](specs/gateway-api.md).
 
+Por padrão, o broker v6 mantém sessões CLI efêmeras somente em RAM: Codex usa App
+Server e Claude usa `stream-json`. O primeiro turno recebe o transcript completo e
+os seguintes enviam apenas o delta quando existe um único prefixo exato. O limite
+preventivo é 256 KiB, sem truncamento. Detalhes de cache nos logs não equivalem
+diretamente à porcentagem de cota da conta; veja o
+[runbook do broker](docs/operations/broker.md#benchmark-de-sessão-e-cache).
+
 ## Desenvolvimento e gates automatizados
 
 ```bash

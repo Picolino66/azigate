@@ -29,10 +29,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function textContent(value: unknown, allowNull: boolean): string | null {
   if (typeof value === 'string') return value
   if (value === null && allowNull) return null
-  if (!Array.isArray(value)) throw new CliRequestValidationError('As mensagens CLI devem conter apenas texto')
+  if (!Array.isArray(value)) {
+    throw new CliRequestValidationError('As mensagens CLI devem conter apenas texto', 'invalid_content_shape')
+  }
   const parts = value.map((part) => {
     if (!isRecord(part) || part.type !== 'text' || typeof part.text !== 'string') {
-      throw new CliRequestValidationError('Conteúdo multimodal não é suportado por provedores CLI')
+      throw new CliRequestValidationError(
+        'Conteúdo multimodal não é suportado por provedores CLI',
+        'invalid_content_shape',
+      )
     }
     return part.text
   })
@@ -47,19 +52,25 @@ function validJsonObject(value: string): boolean {
   }
 }
 
-function historicalToolCalls(value: unknown, offeredNames: ReadonlySet<string>): BrokerMessage['toolCalls'] {
+function historicalToolCalls(value: unknown): BrokerMessage['toolCalls'] {
   if (value === undefined) return undefined
   if (!Array.isArray(value) || value.length === 0) {
-    throw new CliRequestValidationError('tool_calls histórico deve ser um array não vazio')
+    throw new CliRequestValidationError('tool_calls histórico deve ser um array não vazio', 'invalid_historical_tool_calls')
   }
   return value.map((call) => {
-    if (!isRecord(call) || typeof call.id !== 'string' || call.type !== 'function' || !isRecord(call.function)) {
-      throw new CliRequestValidationError('tool_calls histórico contém uma chamada inválida')
+    if (
+      !isRecord(call) ||
+      typeof call.id !== 'string' ||
+      call.id.length === 0 ||
+      call.type !== 'function' ||
+      !isRecord(call.function)
+    ) {
+      throw new CliRequestValidationError('tool_calls histórico contém uma chamada inválida', 'invalid_historical_tool_calls')
     }
     const name = call.function.name
     const args = call.function.arguments
-    if (typeof name !== 'string' || !offeredNames.has(name) || typeof args !== 'string' || !validJsonObject(args)) {
-      throw new CliRequestValidationError('tool_calls histórico referencia ferramenta ou argumentos inválidos')
+    if (typeof name !== 'string' || !TOOL_NAME.test(name) || typeof args !== 'string' || !validJsonObject(args)) {
+      throw new CliRequestValidationError('tool_calls histórico referencia ferramenta ou argumentos inválidos', 'invalid_historical_tool_calls')
     }
     return { id: call.id, name, arguments: args }
   })
@@ -80,9 +91,15 @@ function normalizeTools(value: unknown): BrokerTool[] {
     if (description !== undefined && typeof description !== 'string') {
       throw new CliRequestValidationError('Descrição de function tool inválida')
     }
-    if (!isRecord(parameters)) throw new CliRequestValidationError('parameters deve ser um JSON Schema em objeto')
+    if (parameters !== undefined && !isRecord(parameters)) {
+      throw new CliRequestValidationError('parameters deve ser um JSON Schema em objeto', 'invalid_tool_schema')
+    }
     names.add(name)
-    return { name, ...(description === undefined ? {} : { description }), parameters }
+    return {
+      name,
+      ...(description === undefined ? {} : { description }),
+      parameters: parameters ?? {},
+    }
   })
 }
 
@@ -101,19 +118,36 @@ function normalizeToolChoice(value: unknown, offeredNames: ReadonlySet<string>):
   throw new CliRequestValidationError('tool_choice é inválido ou referencia uma ferramenta não oferecida')
 }
 
-function normalizeMessages(value: unknown, offeredNames: ReadonlySet<string>): BrokerMessage[] {
+function normalizeMessages(value: unknown): BrokerMessage[] {
   if (!Array.isArray(value)) throw new CliRequestValidationError('O campo messages deve ser um array')
+  const historicalCallIds = new Set<string>()
+  const completedCallIds = new Set<string>()
   return value.map((message) => {
     if (!isRecord(message) || !['system', 'developer', 'user', 'assistant', 'tool'].includes(String(message.role))) {
       throw new CliRequestValidationError('A mensagem possui role inválida')
     }
     const role = message.role as BrokerMessage['role']
-    const toolCalls = role === 'assistant' ? historicalToolCalls(message.tool_calls, offeredNames) : undefined
+    const toolCalls = role === 'assistant' ? historicalToolCalls(message.tool_calls) : undefined
+    if (toolCalls !== undefined) {
+      for (const call of toolCalls) {
+        if (historicalCallIds.has(call.id)) {
+          throw new CliRequestValidationError('tool_calls histórico possui ID duplicado', 'invalid_historical_tool_calls')
+        }
+        historicalCallIds.add(call.id)
+      }
+    }
     const content = textContent(message.content, role === 'assistant' && toolCalls !== undefined)
     if (role === 'tool') {
       if (typeof message.tool_call_id !== 'string' || message.tool_call_id === '') {
-        throw new CliRequestValidationError('Mensagem tool exige tool_call_id')
+        throw new CliRequestValidationError('Mensagem tool exige tool_call_id', 'invalid_tool_result')
       }
+      if (!historicalCallIds.has(message.tool_call_id) || completedCallIds.has(message.tool_call_id)) {
+        throw new CliRequestValidationError(
+          'Mensagem tool referencia uma chamada histórica inexistente ou já concluída',
+          'invalid_tool_result',
+        )
+      }
+      completedCallIds.add(message.tool_call_id)
       return { role, content, toolCallId: message.tool_call_id }
     }
     return { role, content, ...(toolCalls === undefined ? {} : { toolCalls }) }
@@ -155,7 +189,10 @@ function normalizeReasoningEffort(
 }
 
 export class CliRequestValidationError extends Error {
-  constructor(public readonly publicMessage: string) {
+  constructor(
+    public readonly publicMessage: string,
+    public readonly reasonCode = 'invalid_cli_request',
+  ) {
     super(publicMessage)
     this.name = 'CliRequestValidationError'
   }
@@ -183,11 +220,15 @@ export function normalizeCliRequest(
     provider,
     model,
     ...(effort === undefined ? {} : { effort }),
-    messages: normalizeMessages(body.messages, offeredNames),
+    messages: normalizeMessages(body.messages),
     tools,
     toolChoice,
     parallelToolCalls: body.parallel_tool_calls !== false,
   }
+}
+
+export function cliTranscriptBytes(request: Pick<BrokerExecuteRequest, 'messages' | 'tools'>): number {
+  return Buffer.byteLength(JSON.stringify({ messages: request.messages, tools: request.tools }))
 }
 
 export function validateCliDecision(decision: BrokerDecision, request: BrokerExecuteRequest): BrokerDecision {

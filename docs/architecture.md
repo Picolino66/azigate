@@ -28,7 +28,8 @@ Servidor (self-hosted, onde você quiser)
 
 ## Padrão e módulos
 
-O gateway continua um monólito modular e stateless. O broker é um serviço host auxiliar, privado:
+O gateway HTTP continua um monólito modular e stateless. O broker é um serviço
+host auxiliar privado e pode manter sessões efêmeras somente em RAM:
 
 - `config`: configuração e secrets do processo HTTP;
 - `security`: autenticação, allowlist e rate limit local;
@@ -37,12 +38,15 @@ O gateway continua um monólito modular e stateless. O broker é um serviço hos
 - `providers/broker-client`: cliente HTTP sobre Unix socket;
 - `providers/cli-request`: validação e tradução do contrato OpenAI para o protocolo interno;
 - `providers/openai-response`: Chat Completions e SSE sintéticos dos CLIs;
-- `broker`: capacidade, protocolo, prompt, isolamento, subprocessos e servidor host;
+- `broker`: capacidade, protocolo, prompt estável, correlação semântica, sessões em
+  memória, isolamento, subprocessos e servidor host;
 - `models`: catálogo do upstream cacheado combinado com aliases CLI saudáveis;
 - `observability`: métricas e logs somente de metadados; cada alias conhecido recebe uma cor ANSI
   própria no campo `model`, e o `effort` registrado para Claude é o valor normalizado efetivamente usado.
 
-Não há banco, fila, frontend, proxy genérico ou estado de conversa. Rate limit e cache continuam locais a cada processo.
+Não há banco, fila, frontend, proxy genérico nem persistência de conversa. As
+sessões do broker têm TTL/LRU, desaparecem em restart e guardam somente hashes de
+correlação e handles dos processos. Rate limit e caches continuam locais.
 
 O upstream é fixo e opaco para o cliente, mas configurável pelo operador em
 `DEEPSEEK_BASE_URL`/`DEEPSEEK_API_KEY` (nomes históricos). Por padrão a DeepSeek;
@@ -62,24 +66,44 @@ ou local via Ollama/LM Studio/vLLM) que exponha `models` e `chat/completions`.
 
 ## Broker e isolamento
 
-O protocolo v5 oferece somente `GET /health` e `POST /execute` em Unix socket. Sua entrada é reconstruída pelo gateway e contém request ID, provedor, modelo CLI validado, effort efetivo, mensagens textuais, function tools, `tool_choice` e `parallel_tool_calls`. Cwd, path de host, URL, comando, argv e ambiente não pertencem ao contrato.
+O protocolo v6 oferece somente `GET /health` e `POST /execute` em Unix socket. Sua
+entrada é reconstruída pelo gateway e contém request ID, provedor, modelo CLI
+validado, effort efetivo, mensagens textuais, function tools, `tool_choice` e
+`parallel_tool_calls`. Cwd, path de host, URL, comando, argv e ambiente não
+pertencem ao contrato.
 
-Cada execução:
+Cada request:
 
 1. verifica se o provedor passou os checks de binário, autenticação, flags e Bubblewrap;
 2. adquire a única vaga global ou retorna `cli_busy` sem fila;
-3. cria `/work` descartável, schema, settings e MCP vazio; para Claude, cria também
-   um home efêmero e copia nele o `~/.claude.json` privado;
-4. executa Bubblewrap por `spawn`, com argv fixo, `shell: false` e ambiente limpo;
-5. limita stdout+stderr a 4 MiB e o tempo a 10 minutos;
-6. recusa eventos que indiquem ferramenta local e valida a decisão final;
-7. remove o workspace; cancelamento envia `SIGTERM` ao grupo e `SIGKILL` após 2 segundos.
+3. rejeita mensagens+tools acima de 256 KiB, sem truncar;
+4. tenta correlacionar um único prefixo exato por hashes SHA-256, normalizando IDs
+   de tool calls; divergência ou ambiguidade cria sessão nova;
+5. cria `/work` e home descartáveis, settings/MCP vazios e monta somente o arquivo
+   de autenticação necessário;
+6. usa um App Server Codex com threads efêmeras ou um processo Claude `stream-json`
+   persistente; o primeiro turno recebe tudo e os seguintes somente o delta;
+7. limita a saída de cada turno a 4 MiB e o tempo a 10 minutos, recusa eventos de
+   ferramenta local e valida a decisão final;
+8. cancelamento interrompe o turno Codex ou encerra o grupo Claude; TTL, eviction,
+   crash e restart eliminam a sessão.
 
-Somente o diretório de autenticação do CLI selecionado entra na sandbox. Para
-Claude, o arquivo de configuração top-level é validado como regular, privado,
+Somente `~/.codex/auth.json` ou `~/.claude/.credentials.json` entra na sandbox em
+modo de sessão. Para Claude, o arquivo top-level é validado como regular, privado,
 pertencente ao usuário do broker e limitado a 1 MiB, então copiado para o home
-efêmero. Nenhum repositório, home completo do operador ou secret do gateway entra
-nela.
+efêmero. Nenhum repositório, home completo, histórico/configuração Codex do
+operador ou secret do gateway entra nela. O modo `stateless` de contingência
+preserva o isolamento anterior.
+
+## Usage e cache
+
+- Claude: `promptTokens = input + cache_creation + cache_read`.
+- Codex: `promptTokens = input`; `cached_input_tokens` é subconjunto e
+  `freshInputTokens = input - cached`.
+- Reasoning Codex é subconjunto da saída, nunca parcela adicional.
+- `totalTokens` é volume lógico, não porcentagem da cota do plano.
+- Detalhes de cache, custo estimado, reuso e bytes ficam em logs/métricas; a
+  resposta OpenAI conserva somente os três campos padrão.
 
 ## Dois regimes de streaming
 
@@ -108,9 +132,10 @@ nela.
 - [ADR-011](../adr/ADR-011-effort-qwen-para-provedores-cli.md): formatos de effort do Qwen e normalização Codex/Claude.
 - [ADR-012](../adr/ADR-012-configuracao-claude-em-home-efemero.md): configuração Claude em home efêmero.
 - [ADR-013](../adr/ADR-013-check-de-capacidade-codex-por-catalogo.md): check Codex por catálogo estruturado.
+- [ADR-014](../adr/ADR-014-sessoes-cli-efemeras-em-memoria-e-usage-por-provider.md): sessões efêmeras e contabilização provider-specific.
 
 ## Referências de integração
 
-- [Codex non-interactive mode](https://learn.chatgpt.com/docs/non-interactive-mode.md)
+- [Codex App Server](https://developers.openai.com/codex/app-server/)
 - [Claude CLI usage](https://code.claude.com/docs/en/cli-usage)
 - [Qwen Code model providers](https://qwenlm.github.io/qwen-code-docs/en/users/configuration/model-providers/)

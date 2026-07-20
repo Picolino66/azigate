@@ -12,6 +12,17 @@ export interface RequestTelemetry extends TokenUsage {
   upstreamStatus?: number
   error?: string
   credentialId?: string
+  freshInputTokens?: number
+  cachedInputTokens?: number
+  cacheCreationInputTokens?: number
+  cacheReadInputTokens?: number
+  reasoningOutputTokens?: number
+  estimatedCostUsd?: number
+  cacheHitPercent?: number
+  sessionMode?: string
+  sessionReused?: boolean
+  transcriptBytes?: number
+  validationCode?: string
 }
 
 export interface ChatBody {

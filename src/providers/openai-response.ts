@@ -63,6 +63,20 @@ function observeUsage(request: FastifyRequest, usage: BrokerUsage | undefined): 
   if (usage.promptTokens !== undefined) request.telemetry.inputTokens = usage.promptTokens
   if (usage.completionTokens !== undefined) request.telemetry.outputTokens = usage.completionTokens
   if (usage.totalTokens !== undefined) request.telemetry.totalTokens = usage.totalTokens
+  if (usage.freshInputTokens !== undefined) request.telemetry.freshInputTokens = usage.freshInputTokens
+  if (usage.cachedInputTokens !== undefined) request.telemetry.cachedInputTokens = usage.cachedInputTokens
+  if (usage.cacheCreationInputTokens !== undefined) {
+    request.telemetry.cacheCreationInputTokens = usage.cacheCreationInputTokens
+  }
+  if (usage.cacheReadInputTokens !== undefined) request.telemetry.cacheReadInputTokens = usage.cacheReadInputTokens
+  if (usage.reasoningOutputTokens !== undefined) {
+    request.telemetry.reasoningOutputTokens = usage.reasoningOutputTokens
+  }
+  if (usage.estimatedCostUsd !== undefined) request.telemetry.estimatedCostUsd = usage.estimatedCostUsd
+  const cacheHits = usage.cachedInputTokens ?? usage.cacheReadInputTokens
+  if (cacheHits !== undefined && usage.promptTokens !== undefined && usage.promptTokens > 0) {
+    request.telemetry.cacheHitPercent = Math.round((cacheHits / usage.promptTokens) * 10_000) / 100
+  }
 }
 
 export function cliCompletionJson(

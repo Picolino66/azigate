@@ -9,7 +9,7 @@ Evoluir o monólito Fastify existente sem alterar suas quatro rotas públicas. A
 | Tarefa | Estado | Evidência principal |
 |---|---|---|
 | 1. ADRs | concluída | ADR-005 a ADR-013 |
-| 2. Contrato/prompt | evoluída | protocolo v5, modelos/efforts fechados e testes fail-closed |
+| 2. Contrato/prompt | evoluída | protocolo v6, modelos/efforts fechados, usage provider-specific e testes fail-closed |
 | 3. Núcleo multiprovedor | concluída | registry, catálogo/readiness e rename `gateway-ai` |
 | 4. Cliente/respostas CLI | concluída | Unix socket, JSON/SSE, erros e cancelamento |
 | 5. Broker isolado | concluída | Bubblewrap, systemd, socket privado e limites |
@@ -21,6 +21,7 @@ Evoluir o monólito Fastify existente sem alterar suas quatro rotas públicas. A
 | 11. Effort Qwen/Codex | implementada, deploy pendente | `reasoning.effort`, precedência, defaults, clamp Codex e testes de regressão |
 | 12. Incidente de configuração Claude | corrigida localmente, deploy pendente | home efêmero, cópia privada de `.claude.json`, regressões e ADR-012; smoke real alcançou a API e recebeu `429` externo |
 | 13. Compatibilidade Codex 0.144.6 | implementada, deploy pendente | check por catálogo JSON; smokes Sol/Terra/Luna aprovados; ADR-013 |
+| 14. Sessões/usage CLI | implementada localmente, benchmark/deploy pendentes | protocolo v6, App Server/stream-json, delta por prefixo, limites e ADR-014 |
 
 O5 continua sendo o último snapshot estável até o smoke Qwen e o deploy LAN/TLS reais. Os aliases permanecem desligados por padrão; a aprovação dos gates não os publica automaticamente.
 
@@ -34,7 +35,7 @@ O5 continua sendo o último snapshot estável até o smoke Qwen e o deploy LAN/T
 
 2. **Definir contrato interno e prompt canônico**
    - Objetivo: limitar a tradução OpenAI para CLI a dados estritamente necessários.
-   - Escopo: protocolo v5, mensagens textuais, modelos Codex/Claude fechados, effort comum revalidado por modelo, function tools, schema de decisão, erros e validação de transcript.
+   - Escopo: protocolo v6, mensagens textuais, modelos Codex/Claude fechados, effort comum revalidado por modelo, function tools, schema de decisão, usage detalhado, erros e validação de transcript.
    - Aceite: entrada rejeita cwd/comando/URL/path; saída aceita somente texto ou tool calls permitidas com JSON válido.
    - Dependências: tarefa 1.
 
@@ -117,6 +118,18 @@ O5 continua sendo o último snapshot estável até o smoke Qwen e o deploy LAN/T
       e Luna executam no Bubblewrap com o argv fixo.
     - Dependências: tarefas 5, 6, 9 e 10.
 
+14. **Corrigir usage e reduzir reenvio de tokens**
+    - Objetivo: apresentar a contabilização correta e reaproveitar contexto
+      multi-turn sem persistir conversa.
+    - Escopo: protocolo v6, parsers Claude/Codex, App Server, Claude stream-json,
+      hashes semânticos, TTL/LRU, delta, limite 256 KiB e compatibilidade Qwen.
+    - Aceite automatizado: usage sem dupla contagem, primeira chamada completa,
+      segunda apenas delta, tool history fora da allowlist atual, divergência sem
+      reuso, `413`, cancelamento e nenhum conteúdo em logs.
+    - Aceite manual: deploy coordenado e benchmark de dez turnos com redução
+      mínima de 60% no input não cacheado após o primeiro turno.
+    - Dependências: tarefas 2, 4, 5, 6, 9 e 10.
+
 ## Matriz de rastreabilidade
 
 | ID | Requisito | ADR/Spec | Implementação esperada | Evidência |
@@ -136,3 +149,4 @@ O5 continua sendo o último snapshot estável até o smoke Qwen e o deploy LAN/T
 | MP-12 | effort nativo do Qwen em Codex/Claude | ADR-011 / protocolo v5 | catálogo + normalização + executores | nested/flat, precedência, clamp, passthrough e argv |
 | MP-13 | configuração Claude isolada | ADR-012 / incidente de 20/07 | capabilities + isolation + executor + systemd | arquivo privado, cópia efêmera, original imutável e erro remoto categorizado |
 | MP-14 | compatibilidade Codex 0.144.6 | ADR-013 / incidente pós-deploy | capabilities + catálogo Codex | JSON estrutural, falha fechada e smokes Sol/Terra/Luna |
+| MP-15 | usage correto e sessões efêmeras | ADR-014 / protocolo v6 | parsers + App Server + stream-json + correlação | fixtures, fake CLIs, 413, zero 400 no tool loop e benchmark manual |

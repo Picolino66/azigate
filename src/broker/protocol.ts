@@ -25,7 +25,7 @@ export type {
   CodexCliModel,
 } from '../cli-catalog.js'
 
-export const BROKER_PROTOCOL_VERSION = 5 as const
+export const BROKER_PROTOCOL_VERSION = 6 as const
 
 export interface BrokerHistoricalToolCall {
   id: string
@@ -74,6 +74,18 @@ export interface BrokerUsage {
   promptTokens?: number
   completionTokens?: number
   totalTokens?: number
+  freshInputTokens?: number
+  cachedInputTokens?: number
+  cacheCreationInputTokens?: number
+  cacheReadInputTokens?: number
+  reasoningOutputTokens?: number
+  estimatedCostUsd?: number
+}
+
+export interface BrokerExecutionMetadata {
+  sessionMode: 'stateless' | 'memory'
+  sessionReused: boolean
+  transcriptBytes: number
 }
 
 export interface BrokerExecuteResponse {
@@ -81,6 +93,7 @@ export interface BrokerExecuteResponse {
   requestId: string
   decision: BrokerDecision
   usage?: BrokerUsage
+  execution: BrokerExecutionMetadata
 }
 
 export interface BrokerProviderHealth {
