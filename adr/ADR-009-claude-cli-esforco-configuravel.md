@@ -6,7 +6,7 @@ Parcialmente superseded pelo ADR-010 em 18/07/2026 nos pontos relativos ao alias
 
 ## Contexto
 
-O provider Claude precisava ser publicado sem permitir que o cliente escolhesse binário, modelo arbitrário ou argumentos CLI. Ao mesmo tempo, o Qwen Code oferece `reasoning_effort`, e o Claude Code `2.1.214` suporta `--effort` com níveis fechados. O modelo efetivo deve continuar sendo o padrão da conta autenticada.
+O provider Claude precisava ser publicado sem permitir que o cliente escolhesse binário, modelo arbitrário ou argumentos CLI. Ao mesmo tempo, clientes OpenAI-compatible (por exemplo o Qwen Code) oferecem `reasoning_effort`, e o Claude Code `2.1.214` suporta `--effort` com níveis fechados. O modelo efetivo deve continuar sendo o padrão da conta autenticada.
 
 ## Alternativas consideradas
 
@@ -32,5 +32,5 @@ O contrato fica dependente dos cinco nomes suportados pelo Claude Code e exige u
 
 - Releases do Claude Code exigem nova checagem de flags e repetição do gate.
 - Níveis não suportados pelo modelo podem ser reduzidos pelo próprio Claude Code.
-- DeepSeek continua opaca, Codex mantém o comportamento atual e não existe fallback entre providers.
+- O upstream continua opaco, o Codex mantém o comportamento atual e não existe fallback entre providers.
 - Broker v2 e gateway v3 não são interoperáveis; o deploy deve atualizar os dois juntos.

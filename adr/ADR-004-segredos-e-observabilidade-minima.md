@@ -6,7 +6,7 @@
 
 ## Contexto
 
-Prompts de clientes como o Qwen Code podem conter código-fonte e tool arguments; logs operacionais não podem armazená-los.
+Prompts de clientes OpenAI-compatible (por exemplo o Qwen Code) podem conter código-fonte e tool arguments; logs operacionais não podem armazená-los.
 
 ## Opções consideradas
 

@@ -32,7 +32,7 @@ Exige `Content-Type: application/json` e `X-Broker-Protocol-Version: 4`.
   "messages": [{ "role": "user", "content": "texto" }],
   "tools": [{
     "name": "read_file",
-    "description": "Lê arquivo no computador do Qwen",
+    "description": "Lê arquivo no computador do agente",
     "parameters": { "type": "object" }
   }],
   "toolChoice": "auto",

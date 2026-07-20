@@ -1,8 +1,16 @@
-# Configuração do Qwen Code no PC da VPN
+# Configuração do Qwen Code
+
+Este é um exemplo concreto de cliente. O gateway serve para qualquer agente
+OpenAI-compatible; o padrão genérico e outros agentes (GitHub Copilot, Cline,
+Continue) estão em [Configurar um agente OpenAI-compatible](./openai-compatible-agents.md).
 
 ## Responsabilidade
 
-O Qwen Code permanece no computador que contém VS Code e os repositórios. Ele envia histórico e function tools ao gateway, pede confirmação e executa leitura, edição e shell localmente. Codex/Claude nunca recebem o cwd desse computador.
+O Qwen Code permanece no seu computador, que contém o VS Code e os repositórios (no
+caso do autor, um PC acessado na LAN através de uma VPN — mas pode ser qualquer
+máquina). Ele envia histórico e function tools ao gateway, pede confirmação e
+executa leitura, edição e shell localmente. Codex/Claude nunca recebem o cwd desse
+computador.
 
 ## Descobrir a versão
 
@@ -25,7 +33,7 @@ Em `~/.qwen/settings.json`, mescle sem remover outras configurações:
         {
           "id": "deepseek-v4-pro",
           "name": "DeepSeek V4 Pro via gateway-ai",
-          "description": "Passthrough para a DeepSeek",
+          "description": "Passthrough para o upstream (DeepSeek por padrão)",
           "envKey": "GATEWAY_AI_API_KEY",
           "baseUrl": "https://ia.meudominio.com/v1",
           "generationConfig": {
@@ -36,7 +44,7 @@ Em `~/.qwen/settings.json`, mescle sem remover outras configurações:
         {
           "id": "deepseek-v4-flash",
           "name": "DeepSeek V4 Flash via gateway-ai",
-          "description": "Passthrough para a DeepSeek",
+          "description": "Passthrough para o upstream (DeepSeek por padrão)",
           "envKey": "GATEWAY_AI_API_KEY",
           "baseUrl": "https://ia.meudominio.com/v1",
           "generationConfig": {
@@ -117,6 +125,11 @@ Em `~/.qwen/settings.json`, mescle sem remover outras configurações:
 }
 ```
 
+Os IDs `deepseek-v4-pro`/`deepseek-v4-flash` acima são apenas exemplos de modelos do
+upstream padrão (DeepSeek). Se o operador configurou outro upstream (OpenAI,
+OpenRouter, etc.), use os IDs desse provedor — consulte `GET /v1/models` para ver o
+que está publicado. Os aliases `codex-cli-*`/`claude-cli-*` independem do upstream.
+
 Repita a entrada Claude trocando `id`, nome e `reasoningEffort` conforme a tabela. Inclua somente modelos aprovados no gate e presentes em `/v1/models`:
 
 | ID Qwen | Modelo | Efforts expostos | Default | Gate 18/07/2026 |
@@ -137,7 +150,7 @@ export GATEWAY_AI_API_KEY='CHAVE_DO_GATEWAY'
 qwen
 ```
 
-Dentro do Qwen, use `/model` para selecionar DeepSeek, um alias `codex-cli-*` ou um alias Claude aprovado. Effort omitido ou incompatível usa o default da tabela; Sonnet 4.5 e Haiku 4.5 ignoram qualquer effort. Todos usam a mesma `baseUrl` e chave. `codex-cli` continua selecionando GPT-5.4. O alias `claude-cli` representa Sonnet 4.6, mas permanece fora da publicação atual porque seu gate falhou. Mantenha approval interativo e não use YOLO/auto-approval.
+Dentro do Qwen, use `/model` para selecionar um modelo do upstream, um alias `codex-cli-*` ou um alias Claude aprovado. Effort omitido ou incompatível usa o default da tabela; Sonnet 4.5 e Haiku 4.5 ignoram qualquer effort. Todos usam a mesma `baseUrl` e chave. `codex-cli` continua selecionando GPT-5.4. O alias `claude-cli` representa Sonnet 4.6, mas permanece fora da publicação atual porque seu gate falhou. Mantenha approval interativo e não use YOLO/auto-approval.
 
 ## Fallback para versão antiga
 
@@ -150,7 +163,7 @@ export OPENAI_MODEL='codex-cli-luna'
 qwen
 ```
 
-Esse fallback seleciona um modelo por processo. Use um ID DeepSeek, Codex ou Claude aprovado, por exemplo `OPENAI_MODEL=claude-cli-opus-4.8`. Não é preciso atualizar o Qwen apenas para esta integração.
+Esse fallback seleciona um modelo por processo. Use um ID do upstream, Codex ou Claude aprovado, por exemplo `OPENAI_MODEL=claude-cli-opus-4.8`. Não é preciso atualizar o Qwen apenas para esta integração.
 
 ## Smoke manual em repositório descartável
 
@@ -162,10 +175,10 @@ Depois de ativar o alias:
 4. peça um comando simples e confirme;
 5. valide o retorno de uma tool e a continuação da conversa;
 6. cancele uma execução pendente;
-7. alterne entre Codex, Claude (`low`, `high` e `max`) e um modelo DeepSeek;
+7. alterne entre Codex, Claude (`low`, `high` e `max`) e um modelo do upstream;
 8. confirme no servidor que nenhum arquivo do repositório apareceu no broker.
 
-O resultado correto é alteração somente no computador da VPN. Logs do gateway/broker devem conter metadados, nunca prompt, código, resposta ou argumentos.
+O resultado correto é alteração somente no seu computador. Logs do gateway/broker devem conter metadados, nunca prompt, código, resposta ou argumentos.
 
 ## Referência
 

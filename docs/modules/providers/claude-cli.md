@@ -53,7 +53,7 @@ Assim, a allowlist local publica somente `claude-cli-fable-5`, `claude-cli-sonne
 
 ## Fluxo resumido
 
-Gateway resolve alias/modelo/default -> protocolo v4 -> broker revalida -> Claude roda isolado com `--model`/`--effort` fixos -> structured output é validado -> Qwen recebe somente a decisão.
+Gateway resolve alias/modelo/default -> protocolo v4 -> broker revalida -> Claude roda isolado com `--model`/`--effort` fixos -> structured output é validado -> o agente recebe somente a decisão.
 
 ## Possíveis erros
 

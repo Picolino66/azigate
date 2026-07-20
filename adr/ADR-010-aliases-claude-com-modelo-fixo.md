@@ -6,7 +6,7 @@ Aceita em 18/07/2026. Supersede parcialmente o ADR-009 quanto ao alias único, m
 
 ## Contexto
 
-O alias único `claude-cli` não permitia ao Qwen selecionar de forma determinística uma versão Claude. O Claude Code `2.1.214` reconhece modelos completos por `--model`, mas o cliente não pode controlar argv livremente. Cada modelo também possui uma matriz própria de effort.
+O alias único `claude-cli` não permitia ao agente selecionar de forma determinística uma versão Claude. O Claude Code `2.1.214` reconhece modelos completos por `--model`, mas o cliente não pode controlar argv livremente. Cada modelo também possui uma matriz própria de effort.
 
 ## Alternativas consideradas
 
@@ -33,7 +33,7 @@ O catálogo precisa evoluir quando surgirem modelos ou mudarem capacidades. Os g
 - Gateway e broker v4 devem ser implantados juntos.
 - Alias reprovado no gate permanece reservado, mas fica fora da allowlist e do catálogo publicado.
 - Falha de um modelo não bloqueia outros modelos Claude aprovados.
-- DeepSeek e Codex preservam seus contratos e não existe fallback automático.
+- O upstream e o Codex preservam seus contratos e não existe fallback automático.
 
 ## Evidência inicial de publicação
 

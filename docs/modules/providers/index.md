@@ -2,13 +2,13 @@
 
 ## Descrição
 
-Registry multiprovedor que mantém a DeepSeek e oferece aliases experimentais para CLIs locais sem transferir a execução de ferramentas para o servidor.
+Registry multiprovedor que mantém um upstream OpenAI-compatible (DeepSeek por padrão) e oferece aliases experimentais para CLIs locais sem transferir a execução de ferramentas para o servidor.
 
 ## Localização no código
 
 - `src/providers/`: roteamento, validação, cliente do broker e respostas OpenAI.
 - `src/broker/`: protocolo e serviço host isolado.
-- `src/upstream/`: adaptador DeepSeek.
+- `src/upstream/`: adaptador de upstream (DeepSeek por padrão).
 
 ## Entrada
 
@@ -16,7 +16,7 @@ Registry multiprovedor que mantém a DeepSeek e oferece aliases experimentais pa
 
 ## Saída
 
-Chat Completion JSON, SSE DeepSeek opaco ou SSE CLI sintético. O catálogo expõe modelos DeepSeek e aliases saudáveis.
+Chat Completion JSON, SSE do upstream opaco ou SSE CLI sintético. O catálogo expõe modelos do upstream e aliases saudáveis.
 
 ## Dependências
 
@@ -25,14 +25,14 @@ Fastify, Undici, Unix socket, Bubblewrap e os binários Codex/Claude instalados 
 ## Regras de negócio
 
 - Não há fallback automático.
-- Aliases reservados nunca são enviados à DeepSeek.
-- Qwen Code é o único executor de ferramentas.
+- Aliases reservados nunca são enviados ao upstream.
+- O agente cliente é o único executor de ferramentas.
 - Um alias só é publicado se habilitado e saudável.
 - O broker não aceita localização, comando ou ambiente do cliente.
 
 ## Fluxo resumido
 
-Autenticar -> aplicar allowlists -> resolver provider -> executar o adaptador -> validar/normalizar a resposta -> devolver ao Qwen.
+Autenticar -> aplicar allowlists -> resolver provider -> executar o adaptador -> validar/normalizar a resposta -> devolver ao agente.
 
 ## Possíveis erros
 
@@ -40,6 +40,6 @@ Autenticar -> aplicar allowlists -> resolver provider -> executar o adaptador ->
 
 ## Features
 
-- [DeepSeek](./deepseek.md)
+- [Upstream OpenAI-compatible (DeepSeek por padrão)](./deepseek.md)
 - [Codex CLI](./codex-cli.md)
 - [Claude CLI](./claude-cli.md)

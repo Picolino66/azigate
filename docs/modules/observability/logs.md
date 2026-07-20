@@ -10,7 +10,7 @@ O gateway emite uma linha JSON por requisição concluída. No stdout interativo
 
 ## Entrada
 
-O modelo é o campo público `model`. Para Claude, o `effort` é obtido após a normalização interna. Para DeepSeek, só são registrados os valores seguros conhecidos de `reasoning_effort`.
+O modelo é o campo público `model`. Para Claude, o `effort` é obtido após a normalização interna. Para o upstream, só são registrados os valores seguros conhecidos de `reasoning_effort`.
 
 ## Saída
 
@@ -22,10 +22,10 @@ Fastify, Pino e a normalização do request CLI.
 
 ## Regras de negócio
 
-- `deepseek-v4-flash` permanece verde, `deepseek-v4-pro` azul e `codex-cli` vermelho; cada outro alias conhecido recebe outra cor ANSI estável.
+- IDs conhecidos recebem cores ANSI estáveis (por exemplo `deepseek-v4-flash` verde, `deepseek-v4-pro` azul e `codex-cli` vermelho); cada outro alias conhecido recebe outra cor.
 - Para Claude, o log usa o effort efetivamente enviado ao broker/CLI, já com default ou downgrade aplicados.
 - Para Codex, o log usa `não_aplicável`, pois o broker não envia effort para esse CLI.
-- Para DeepSeek, valores reconhecidos são registrados; ausência ou valor desconhecido vira `não_informado`, sem alterar o payload opaco enviado ao upstream.
+- Para o upstream, valores reconhecidos são registrados; ausência ou valor desconhecido vira `não_informado`, sem alterar o payload opaco enviado ao upstream.
 - Nunca registrar mensagens, prompts, bodies, respostas, tool arguments, headers, credenciais ou stdout/stderr do CLI.
 
 ## Fluxo resumido

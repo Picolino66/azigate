@@ -14,14 +14,20 @@
 ## Módulos
 
 - [Providers](./modules/providers/index.md)
-  - [DeepSeek](./modules/providers/deepseek.md)
+  - [Upstream OpenAI-compatible (DeepSeek por padrão)](./modules/providers/deepseek.md)
   - [Codex CLI](./modules/providers/codex-cli.md)
   - [Claude CLI](./modules/providers/claude-cli.md)
 - [Observabilidade](./modules/observability/index.md)
   - [Logs de requisição](./modules/observability/logs.md)
 
+## Instalação
+
+- [Instalação no Linux](./installation/linux.md)
+- [Instalação no Windows (WSL2)](./installation/windows-wsl2.md)
+
 ## Operação
 
+- [Configurar um agente OpenAI-compatible](./operations/openai-compatible-agents.md)
 - [Instalação e operação do broker](./operations/broker.md)
 - [Configuração do Qwen Code](./operations/qwen-code.md)
 
@@ -40,7 +46,7 @@
 - [ADR-003 — streaming byte a byte](../adr/ADR-003-streaming-byte-a-byte.md)
 - [ADR-004 — segredos e observabilidade](../adr/ADR-004-segredos-e-observabilidade-minima.md)
 - [ADR-005 — registry e broker local](../adr/ADR-005-registro-multiprovedor-e-broker-local.md)
-- [ADR-006 — Qwen como único executor](../adr/ADR-006-qwen-como-unico-executor.md)
+- [ADR-006 — Agente cliente como único executor](../adr/ADR-006-qwen-como-unico-executor.md)
 - [ADR-007 — streaming dividido](../adr/ADR-007-streaming-dividido-por-provedor.md)
 - [ADR-008 — aliases Codex com modelo fixo](../adr/ADR-008-aliases-codex-com-modelo-fixo.md)
 - [ADR-009 — Claude CLI com esforço configurável](../adr/ADR-009-claude-cli-esforco-configuravel.md)

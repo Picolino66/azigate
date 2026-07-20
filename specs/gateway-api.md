@@ -30,25 +30,25 @@ Qualquer outro caminho recebe `404`. Nenhum parâmetro público representa URL, 
 | `claude-cli-sonnet-4.5` | broker/Claude | `claude-sonnet-4-5` |
 | `claude-cli-haiku-4.5` | broker/Claude | `claude-haiku-4-5` |
 | `claude-cli` | broker/Claude | sinônimo legado de `claude-sonnet-4-6` |
-| qualquer outro ID permitido | DeepSeek | passthrough atual |
+| qualquer outro ID permitido | upstream (DeepSeek por padrão) | passthrough atual |
 
 Alias desabilitado retorna `503 cli_unavailable`; nunca há fallback automático. `ALLOWED_MODELS`, quando preenchida, também precisa incluir os aliases desejados.
 
 ## Catálogo
 
-`GET /v1/models` consulta a DeepSeek e o health do broker. A resposta bem-sucedida sempre usa `{ "object": "list", "data": [...] }`:
+`GET /v1/models` consulta o upstream e o health do broker. A resposta bem-sucedida sempre usa `{ "object": "list", "data": [...] }`:
 
-- modelos DeepSeek mantêm os metadados seguros retornados pelo upstream;
+- modelos do upstream mantêm os metadados seguros retornados por ele;
 - aliases locais usam `object: model`, `created: 0` e `owned_by: codex-cli|claude-cli`;
 - falha parcial ainda retorna os providers saudáveis;
 - nenhum provider utilizável retorna `503 providers_unavailable`.
 
-## Chat DeepSeek
+## Chat do upstream (passthrough)
 
 - `Content-Type` JSON, `model` string e `messages` array são obrigatórios.
 - Campos desconhecidos são aceitos e encaminhados de forma opaca.
 - `stream: true` preserva SSE byte a byte.
-- Status/corpos seguros da DeepSeek são preservados na rota de chat.
+- Status/corpos seguros do upstream são preservados na rota de chat.
 
 ## Chat CLI
 
@@ -86,7 +86,7 @@ Falha antes do primeiro byte mantém o status HTTP do erro. Falha depois do hear
 | 415 | `unsupported_media_type` | Content-Type incompatível |
 | 429 | `rate_limit_exceeded` | limite HTTP local |
 | 429 | `cli_busy` | broker ocupado, sem fila |
-| 502 | `upstream_connection_error`, `upstream_protocol_error` | DeepSeek inválida/inacessível |
+| 502 | `upstream_connection_error`, `upstream_protocol_error` | upstream inválido/inacessível |
 | 502 | `invalid_cli_output`, `cli_execution_failed` | saída CLI recusada/falha de processo |
 | 503 | `cli_unavailable` | alias, login, binário ou capacidade indisponível |
 | 503 | `providers_unavailable` | catálogo sem nenhum provider utilizável |

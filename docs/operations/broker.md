@@ -135,15 +135,15 @@ curl --fail http://192.168.2.6:3000/ready
 
 O container monta somente `/run/gateway-ai` como read-only. Nunca monte `~/.codex`, `~/.claude`, `/home`, o repositório ou o socket Docker.
 
-O Compose cria o diretório do bind quando ausente para que o modo somente DeepSeek continue funcionando. Quando o broker inicia, o systemd aplica owner/mode privados ao `RuntimeDirectory`; um diretório vazio nunca torna o alias saudável sem socket e health válidos.
+O Compose cria o diretório do bind quando ausente para que o modo somente passthrough (só o upstream) continue funcionando. Quando o broker inicia, o systemd aplica owner/mode privados ao `RuntimeDirectory`; um diretório vazio nunca torna o alias saudável sem socket e health válidos.
 
 ## Rollback
 
-O rollback não afeta a DeepSeek:
+O rollback não afeta o upstream:
 
 1. defina `ENABLE_CODEX_CLI=false` e `ENABLE_CLAUDE_CLI=false`;
 2. recrie o container;
-3. confirme que `/v1/models` contém somente DeepSeek;
+3. confirme que `/v1/models` contém somente o upstream;
 4. pare o broker se nenhum alias for usado.
 
 ```bash
@@ -154,7 +154,7 @@ sudo systemctl disable --now gateway-ai-broker@USUARIO.service
 ## Troubleshooting
 
 - `cli_unavailable`: consulte `/health` do socket; confirme login, versão, paths e flags.
-- `cli_busy`: existe uma execução ativa; não há fila. Aguarde ou cancele no Qwen.
+- `cli_busy`: existe uma execução ativa; não há fila. Aguarde ou cancele no agente.
 - `cli_timeout`: a execução excedeu 10 minutos; não aumente antes de investigar rede/login.
 - `invalid_cli_output`: schema, tool name, argumentos ou evento local foi recusado; mantenha o alias desligado se for recorrente.
 - `bwrap_unavailable`: valide user namespaces e o smoke de Bubblewrap no mesmo usuário/systemd.

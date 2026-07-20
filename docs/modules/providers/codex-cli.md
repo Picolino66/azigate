@@ -2,7 +2,7 @@
 
 ## Descrição
 
-Aliases experimentais Codex que escolhem um modelo fixo da sessão autenticada. O Codex só produz texto ou uma decisão estruturada de tool calls para o Qwen.
+Aliases experimentais Codex que escolhem um modelo fixo da sessão autenticada. O Codex só produz texto ou uma decisão estruturada de tool calls para o agente cliente.
 
 ## Localização no código
 
@@ -35,7 +35,7 @@ Em 16/07/2026, a versão instalada `codex-cli 0.133.0` passou 20/20 saídas estr
 
 ## Fluxo resumido
 
-Gateway normaliza -> broker cria prompt/schema -> Codex roda isolado -> broker inspeciona JSONL/final -> gateway valida allowlist -> Qwen recebe decisão.
+Gateway normaliza -> broker cria prompt/schema -> Codex roda isolado -> broker inspeciona JSONL/final -> gateway valida allowlist -> o agente recebe a decisão.
 
 ## Possíveis erros
 

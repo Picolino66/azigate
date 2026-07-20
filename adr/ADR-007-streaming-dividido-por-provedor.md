@@ -7,17 +7,17 @@
 
 ## Contexto
 
-A DeepSeek já oferece SSE confiável que deve permanecer opaco. As CLIs, por outro lado, emitem eventos internos e uma decisão final que só pode chegar ao cliente após validação completa.
+O upstream (DeepSeek por padrão) já oferece SSE confiável que deve permanecer opaco. As CLIs, por outro lado, emitem eventos internos e uma decisão final que só pode chegar ao cliente após validação completa.
 
 ## Opções consideradas
 
-- Converter todo provedor para um SSE comum: facilitaria consumidores, mas quebraria a transparência e poderia remover campos futuros da DeepSeek.
+- Converter todo provedor para um SSE comum: facilitaria consumidores, mas quebraria a transparência e poderia remover campos futuros do upstream.
 - Bufferizar todos os provedores: simplificaria validação, mas degradaria o streaming existente.
-- Manter dois regimes explícitos: preserva a DeepSeek e contém a saída experimental das CLIs.
+- Manter dois regimes explícitos: preserva o upstream e contém a saída experimental das CLIs.
 
 ## Decisão
 
-A DeepSeek continua com passthrough byte a byte. Para aliases CLI, o gateway envia heartbeat SSE a cada intervalo configurado enquanto aguarda, valida a decisão inteira e então emite conteúdo ou tool calls atomicamente, usage quando disponível e `[DONE]`.
+O upstream continua com passthrough byte a byte. Para aliases CLI, o gateway envia heartbeat SSE a cada intervalo configurado enquanto aguarda, valida a decisão inteira e então emite conteúdo ou tool calls atomicamente, usage quando disponível e `[DONE]`.
 
 Se uma falha ocorrer antes do primeiro heartbeat, o gateway ainda pode responder com o status HTTP apropriado. Depois de o stream começar, envia um evento `error` sanitizado e encerra sem `[DONE]`. Não há retry de solicitações CLI.
 

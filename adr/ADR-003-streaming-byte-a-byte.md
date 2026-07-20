@@ -6,7 +6,7 @@
 
 ## Contexto
 
-Clientes OpenAI Compatible, incluindo o Qwen Code, dependem de deltas SSE, tool calls fragmentadas, usage final, keep-alive e `[DONE]`.
+Clientes OpenAI-compatible (por exemplo o Qwen Code) dependem de deltas SSE, tool calls fragmentadas, usage final, keep-alive e `[DONE]`.
 
 ## Opções consideradas
 
@@ -23,4 +23,4 @@ Erros após início do stream não podem mudar o status HTTP. A configuração N
 
 ## Reavaliação de 16/07/2026
 
-O ADR-007 substitui esta decisão somente para provedores CLI, cuja saída precisa ser validada integralmente antes de ser publicada. O passthrough byte a byte, o observador passivo de usage e o cancelamento descritos aqui permanecem inalterados para a DeepSeek.
+O ADR-007 substitui esta decisão somente para provedores CLI, cuja saída precisa ser validada integralmente antes de ser publicada. O passthrough byte a byte, o observador passivo de usage e o cancelamento descritos aqui permanecem inalterados para o upstream (DeepSeek por padrão).

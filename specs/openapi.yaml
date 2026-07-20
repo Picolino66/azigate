@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: Gateway AI
   version: 2.0.0
-  description: Gateway OpenAI Compatible para DeepSeek e aliases CLI isolados.
+  description: Gateway OpenAI Compatible para um upstream OpenAI-compatible (DeepSeek por padrão) e aliases CLI isolados.
 paths:
   /health:
     get:

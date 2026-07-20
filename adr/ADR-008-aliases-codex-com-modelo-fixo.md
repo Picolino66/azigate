@@ -19,7 +19,7 @@ O operador precisa escolher a família/modelo usada pela sessão autenticada do 
 
 Publicar `codex-cli-sol`, `codex-cli-terra`, `codex-cli-luna`, `codex-cli-5.5` e `codex-cli-5.4`. Cada alias mapeia respectivamente para `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5` e `gpt-5.4`. O alias legado `codex-cli` permanece como sinônimo de `gpt-5.4`.
 
-O protocolo privado passa para v2 e aceita `model` somente em requisições Codex, validado contra essa allowlist. O broker acrescenta esse valor ao argv fixo como `--model`; o Qwen nunca controla esse campo diretamente.
+O protocolo privado passa para v2 e aceita `model` somente em requisições Codex, validado contra essa allowlist. O broker acrescenta esse valor ao argv fixo como `--model`; o cliente nunca controla esse campo diretamente.
 
 ## Trade-offs e consequências
 
