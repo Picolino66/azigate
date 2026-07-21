@@ -45,6 +45,13 @@ Codex CLI autenticado, Bubblewrap, `~/.codex` privado, broker ativo e `ENABLE_CO
   modelo cria thread nova.
 - Usage usa `thread/tokenUsage/updated.tokenUsage.last`: input já inclui cache,
   cached/reasoning são subconjuntos e não são somados novamente.
+- A partir do `codex-cli 0.144`, o App Server envia `turn/completed` com `items`
+  vazios (`itemsView: "notLoaded"`); a decisão vem do último `item/completed` de
+  tipo `agentMessage` do turno, com o formato antigo mantido como preferência
+  quando `items` vier populado. As notificações `remoteControl/status/changed`
+  (a feature está `removed` e sempre reporta `disabled`) e `warning` são
+  toleradas como metadados; eventos MCP, de shell ou de subagente continuam
+  encerrando a sessão com `invalid_cli_output`.
 
 ## Evidência de viabilidade
 

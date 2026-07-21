@@ -1,7 +1,7 @@
 {
   "orchestration_id": "c16a8ea6-06e8-4ec2-bb2c-7ac4cd272dc5",
   "created_at": "2026-07-14T13:35:00Z",
-  "updated_at": "2026-07-20T16:43:32-03:00",
+  "updated_at": "2026-07-20T23:45:00-03:00",
   "mode": "feature-evolution",
   "current_phase": "F6",
   "snapshot_version": "O5",
@@ -271,6 +271,14 @@
         "cause": "telemetria Claude ignorava parcelas de cache; CLIs efêmeros recebiam novamente transcript/tools e o tool loop Qwen podia gerar 400",
         "evidence": "parsers provider-specific, App Server/stream-json, delta por prefixo, fixture Qwen e testes de sessão/413",
         "record": "docs/operations/incidents/2026-07-20-telemetria-cli-incompleta-e-reenvio-de-contexto.md"
+      },
+      {
+        "id": "INC-2026-07-20-CODEX-APP-SERVER-0144",
+        "severity": "P2",
+        "status": "corrigido-localmente-deploy-do-broker-e-validacao-real-pendentes",
+        "cause": "drift do protocolo App Server no codex-cli 0.144.6: remoteControl/status/changed fora da allowlist e turn/completed com items vazios (decisão movida para item/completed agentMessage)",
+        "evidence": "reprodução manual do protocolo com o argv do broker; correção com allowlist ampliada, fallback da decisão, log broker_execute_failed e regressões em test/broker-memory.test.ts; npm run check verde (163 testes)",
+        "record": "docs/operations/incidents/2026-07-20-codex-app-server-0144-invalid-cli-output.md"
       }
     ]
   },

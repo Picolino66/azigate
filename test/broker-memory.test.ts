@@ -13,7 +13,7 @@ import { InteractiveProcessFactory } from '../src/broker/interactive-process.js'
 import { MemorySessionExecutor } from '../src/broker/memory-executor.js'
 import { BROKER_PROTOCOL_VERSION, type BrokerExecuteRequest } from '../src/broker/protocol.js'
 import { transcriptHashes } from '../src/broker/session-correlation.js'
-import { CliExecutionFailedError } from '../src/providers/errors.js'
+import { CliExecutionFailedError, InvalidCliOutputError } from '../src/providers/errors.js'
 import { ClientAbortedError } from '../src/upstream/errors.js'
 
 const roots: string[] = []
@@ -87,7 +87,11 @@ class FakeInteractiveProcess implements InteractiveProcessLike {
   private turnSequence = 0
   private open = true
 
-  constructor(readonly provider: 'codex' | 'claude') {}
+  constructor(
+    readonly provider: 'codex' | 'claude',
+    private readonly codexStyle: 'legacy' | 'v0144' = 'legacy',
+    private readonly extraTurnNotifications: unknown[] = [],
+  ) {}
 
   private decision(prompt: string): { content: string | null; tool_calls: Array<{ name: string; arguments: string }> } {
     return prompt.includes('usar_tool')
@@ -131,6 +135,12 @@ class FakeInteractiveProcess implements InteractiveProcessLike {
     }
     if (message.method === 'thread/start') {
       this.threadSequence += 1
+      if (this.codexStyle === 'v0144') {
+        this.queue.push({
+          method: 'remoteControl/status/changed',
+          params: { status: 'disabled', serverName: 'host', installationId: 'id', environmentId: null },
+        })
+      }
       this.queue.push({ id: message.id, result: { thread: { id: `thread-${this.threadSequence}` } } })
       return
     }
@@ -141,8 +151,22 @@ class FakeInteractiveProcess implements InteractiveProcessLike {
       const prompt = String(input[0]?.text)
       this.turnPrompts.push(prompt)
       const turnId = `turn-${this.turnSequence}`
+      this.queue.push({ id: message.id, result: { turn: { id: turnId } } })
+      if (this.codexStyle === 'v0144') {
+        this.queue.push(
+          { method: 'warning', params: { threadId: params.threadId, message: 'aviso benigno' } },
+          ...this.extraTurnNotifications,
+          {
+            method: 'item/completed',
+            params: {
+              threadId: params.threadId,
+              turnId,
+              item: { type: 'agentMessage', id: 'message-1', text: JSON.stringify(this.decision(prompt)) },
+            },
+          },
+        )
+      }
       this.queue.push(
-        { id: message.id, result: { turn: { id: turnId } } },
         {
           method: 'thread/tokenUsage/updated',
           params: {
@@ -163,11 +187,13 @@ class FakeInteractiveProcess implements InteractiveProcessLike {
           method: 'turn/completed',
           params: {
             threadId: params.threadId,
-            turn: {
-              id: turnId,
-              status: 'completed',
-              items: [{ type: 'agentMessage', id: 'message-1', text: JSON.stringify(this.decision(prompt)) }],
-            },
+            turn: this.codexStyle === 'v0144'
+              ? { id: turnId, status: 'completed', items: [], itemsView: 'notLoaded' }
+              : {
+                  id: turnId,
+                  status: 'completed',
+                  items: [{ type: 'agentMessage', id: 'message-1', text: JSON.stringify(this.decision(prompt)) }],
+                },
           },
         },
       )
@@ -195,10 +221,15 @@ class FakeInteractiveFactory implements InteractiveProcessFactoryLike {
   readonly processes: FakeInteractiveProcess[] = []
   readonly specs: InteractiveProcessSpec[] = []
 
+  constructor(
+    private readonly codexStyle: 'legacy' | 'v0144' = 'legacy',
+    private readonly extraTurnNotifications: unknown[] = [],
+  ) {}
+
   spawn(spec: InteractiveProcessSpec): InteractiveProcessLike {
     this.specs.push(spec)
     const provider = spec.args.includes('app-server') ? 'codex' : 'claude'
-    const process = new FakeInteractiveProcess(provider)
+    const process = new FakeInteractiveProcess(provider, this.codexStyle, this.extraTurnNotifications)
     this.processes.push(process)
     return process
   }
@@ -272,6 +303,37 @@ describe('sessões CLI em memória', () => {
     expect(factory.processes[0]?.turnPrompts[0]).toContain('primeiro')
     expect(factory.processes[0]?.turnPrompts[1]).not.toContain('primeiro')
     expect(factory.processes[0]?.turnPrompts[1]).toContain('segundo')
+    await executor.shutdown()
+  })
+
+  it('aceita o protocolo do codex 0.144: decisão via item/completed e notificações novas', async () => {
+    const { config, capabilities } = setup()
+    const factory = new FakeInteractiveFactory('v0144')
+    const executor = new MemorySessionExecutor(config, capabilities, factory)
+    const first = await executor.execute(request('codex', [{ role: 'user', content: 'primeiro' }]), 10)
+    const second = await executor.execute(request('codex', [
+      { role: 'user', content: 'primeiro' },
+      { role: 'assistant', content: 'ok' },
+      { role: 'user', content: 'segundo' },
+    ]), 20)
+
+    expect(first.decision).toEqual({ content: 'ok', toolCalls: [] })
+    expect(first.execution.sessionReused).toBe(false)
+    expect(second.execution.sessionReused).toBe(true)
+    expect(second.usage).toMatchObject({ promptTokens: 30, completionTokens: 5, totalTokens: 35 })
+    expect(factory.processes).toHaveLength(1)
+    await executor.shutdown()
+  })
+
+  it('continua encerrando a sessão quando o app-server emite evento MCP', async () => {
+    const { config, capabilities } = setup()
+    const factory = new FakeInteractiveFactory('v0144', [{
+      method: 'mcpServer/startupStatus/updated',
+      params: { threadId: 'thread-1', name: 'codex_apps', status: 'starting', error: null },
+    }])
+    const executor = new MemorySessionExecutor(config, capabilities, factory)
+    await expect(executor.execute(request('codex', [{ role: 'user', content: 'primeiro' }]), 10))
+      .rejects.toBeInstanceOf(InvalidCliOutputError)
     await executor.shutdown()
   })
 

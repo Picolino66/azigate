@@ -207,6 +207,10 @@ sudo systemctl disable --now gateway-ai-broker@USUARIO.service
   erro remoto. Execute um único gate diagnóstico e revise a conta; evite loops de
   retry no agente.
 - socket com permission denied: alinhe UID/GID do container com o usuário da unidade; não relaxe para `0666`.
+- Toda falha de `/execute` emite no journal do broker uma linha
+  `broker_execute_failed` com `requestId`, provider, nome da classe de erro e
+  código sanitizado — sem prompts, respostas ou stderr bruto. Use-a para
+  correlacionar com o log do gateway antes de reproduzir manualmente.
 - Claude indisponível: preserve o login existente e revise política/termos; não introduza API key automaticamente.
 
 ## Benchmark de sessão e cache

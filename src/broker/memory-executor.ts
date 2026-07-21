@@ -179,6 +179,7 @@ class CodexAppServerHost {
     const turnId = turn === undefined ? undefined : stringAt(turn, 'id')
     if (turnId === undefined) throw new CliExecutionFailedError()
     let usage: BrokerUsage | undefined
+    let lastAgentMessageText: string | undefined
     try {
       for (;;) {
         const message = await this.readMessage(process, deadline, signal)
@@ -194,7 +195,18 @@ class CodexAppServerHost {
           continue
         }
         if (message.method === 'item/started' || message.method === 'item/completed' || message.method === 'item/updated') {
-          if (params !== undefined && params.turnId === turnId) assertSafeCodexItem(params.item)
+          if (params !== undefined && params.turnId === turnId) {
+            assertSafeCodexItem(params.item)
+            const item = objectAt(params, 'item')
+            if (
+              message.method === 'item/completed' &&
+              item !== undefined &&
+              item.type === 'agentMessage' &&
+              typeof item.text === 'string'
+            ) {
+              lastAgentMessageText = item.text
+            }
+          }
           continue
         }
         if (message.method === 'turn/completed') {
@@ -203,7 +215,7 @@ class CodexAppServerHost {
           if (completed === undefined || completed.id !== turnId || completed.status !== 'completed') {
             throw new CliExecutionFailedError()
           }
-          const decision = decisionFromCodexTurn(completed)
+          const decision = decisionFromCodexTurn(completed, lastAgentMessageText)
           return { decision, ...(usage === undefined ? {} : { usage }) }
         }
         if (message.method === 'error') throw new CliExecutionFailedError()
@@ -423,6 +435,11 @@ function isBenignCodexNotification(method: string): boolean {
     'item/reasoning/summaryPartAdded',
     'item/reasoning/summaryTextDelta',
     'item/reasoning/textDelta',
+    // Codex >= 0.144 emite status do remote control (sempre "disabled" aqui,
+    // a feature está removed e não aceita --disable) e avisos textuais que não
+    // representam execução local.
+    'remoteControl/status/changed',
+    'warning',
   ].includes(method)
 }
 
@@ -444,14 +461,17 @@ function assertSafeCodexItem(value: unknown): void {
   }
 }
 
-function decisionFromCodexTurn(turn: Record<string, unknown>): BrokerDecision {
+function decisionFromCodexTurn(turn: Record<string, unknown>, fallbackText?: string): BrokerDecision {
   if (!Array.isArray(turn.items)) throw new InvalidCliOutputError()
   for (const item of turn.items) assertSafeCodexItem(item)
   const messages = turn.items.filter((item): item is Record<string, unknown> =>
     isRecord(item) && item.type === 'agentMessage' && typeof item.text === 'string')
   const last = messages.at(-1)
-  if (last === undefined || typeof last.text !== 'string') throw new InvalidCliOutputError()
-  return parseDecisionText(last.text)
+  if (last !== undefined && typeof last.text === 'string') return parseDecisionText(last.text)
+  // Codex >= 0.144 envia turn/completed com items vazios (itemsView "notLoaded");
+  // a decisão passa a vir do último item/completed agentMessage do turno.
+  if (fallbackText !== undefined) return parseDecisionText(fallbackText)
+  throw new InvalidCliOutputError()
 }
 
 export function parseCodexAppUsage(value: unknown): BrokerUsage | undefined {

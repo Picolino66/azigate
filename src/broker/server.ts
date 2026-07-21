@@ -113,9 +113,11 @@ export class BrokerController {
       return
     }
 
+    let requestMeta: { requestId: string; provider: string } | undefined
     try {
       const payload = await readBody(request, this.config.maxRequestBytes)
       if (!isBrokerExecuteRequest(payload)) throw new InvalidBrokerRequestError()
+      requestMeta = { requestId: payload.requestId, provider: payload.provider }
       if (this.busy) throw new CliBusyError()
       this.busy = true
       const controller = new AbortController()
@@ -140,6 +142,15 @@ export class BrokerController {
     } catch (error) {
       if (error instanceof ClientAbortedError) return
       const result = errorResponse(error)
+      // Somente identificadores e nomes de classe de erro; nunca conteúdo.
+      process.stderr.write(`${JSON.stringify({
+        level: 'warn',
+        event: 'broker_execute_failed',
+        ...(requestMeta ?? {}),
+        error: error instanceof Error ? error.name : 'UnknownError',
+        code: result.payload.error.code,
+        status: result.status,
+      })}\n`)
       sendJson(response, result.status, result.payload)
     }
   }

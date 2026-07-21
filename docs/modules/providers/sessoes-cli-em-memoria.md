@@ -53,7 +53,11 @@ coordenadamente no broker/gateway.
 - nenhum transcript ou hash é gravado em disco ou log;
 - transcript acima de 256 KiB recebe `413`, nunca truncamento;
 - qualquer evento local de shell, arquivo, MCP, hook, app ou subagente encerra a
-  sessão com erro seguro.
+  sessão com erro seguro;
+- notificações de metadados do App Server (`remoteControl/status/changed`,
+  `warning`) são ignoradas; no `codex-cli >= 0.144` a decisão do turno é capturada
+  do último `item/completed` `agentMessage`, pois `turn/completed` chega com
+  `items` vazios.
 
 ## Fluxo resumido
 
