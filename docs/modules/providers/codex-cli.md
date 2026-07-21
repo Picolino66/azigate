@@ -36,6 +36,10 @@ Codex CLI autenticado, Bubblewrap, `~/.codex` privado, broker ativo e `ENABLE_CO
 - Configuração e rules do usuário ignoradas; somente `auth.json` entra no home
   efêmero do App Server.
 - Sandbox `read-only`, approval `never` e shell/apps/browser/computer/hooks/multi-agent desabilitados.
+- O prompt canônico neutraliza a autoconsciência de sandbox do modelo: instrui que
+  o ambiente local é descartável, que estado read-only/approval nunca justifica
+  recusa e que ações em arquivos/comandos devem ser delegadas pela function tool
+  correspondente ao executor remoto. Mudanças nesse prompt exigem novo gate.
 - Qualquer evento de ferramenta local invalida a execução.
 - O gate usa 10 cenários duas vezes: 100% estrutural, zero ferramentas locais e 90% de categoria.
 - O startup não faz inferência: interpreta `debug models --bundled` e exige todos
@@ -61,6 +65,13 @@ Em 20/07/2026, após upgrade para `codex-cli 0.144.6`, smokes isolados no effort
 `medium` aprovaram Sol, Terra e Luna com 1/1 estrutura válida, 1/1 categoria e
 zero ferramenta local por modelo. Isso valida o caminho funcional, mas não
 substitui o gate completo de 20 cenários de cada modelo.
+
+Em 21/07/2026, o prompt canônico recebeu instruções anti-recusa de sandbox após
+o `gpt-5.5` responder texto recusando criação de arquivo em vez de delegar. Smoke
+manual com o argv stateless do broker e `gpt-5.4` medium: o cenário que falhava
+retornou `tool_calls` com `write_file` correto, 1/1 estrutura válida e zero
+ferramenta local. O gate completo de 20 cenários por modelo com o prompt novo
+permanece pendente.
 
 ## Fluxo resumido
 

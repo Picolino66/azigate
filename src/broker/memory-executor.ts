@@ -398,12 +398,17 @@ class ClaudeSessionHandle implements SessionHandle {
       parent_tool_use_id: null,
     })
     const deadline = Date.now() + this.config.executionTimeoutMs
+    const structuredOutputToolUseIds = new Set<string>()
     try {
       for (;;) {
         const value = await this.process.readJson(remainingMs(deadline), signal)
         if (!isRecord(value) || typeof value.type !== 'string') throw new CliExecutionFailedError()
         if (value.type === 'assistant') {
-          assertSafeClaudeAssistant(value)
+          assertSafeClaudeAssistant(value, structuredOutputToolUseIds)
+          continue
+        }
+        if (value.type === 'user') {
+          assertClaudeStructuredOutputEcho(value, structuredOutputToolUseIds)
           continue
         }
         if (value.type === 'result') return parseClaudeStreamResult(value)
@@ -484,13 +489,43 @@ export function parseCodexAppUsage(value: unknown): BrokerUsage | undefined {
   })
 }
 
-function assertSafeClaudeAssistant(value: Record<string, unknown>): void {
+// Claude Code >= 2.1.215 materializa --json-schema como um tool call interno
+// StructuredOutput e ecoa o tool_result correspondente como mensagem user.
+// Somente esse par é aceito; qualquer outra ferramenta continua recusada.
+const STRUCTURED_OUTPUT_TOOL_NAME = 'StructuredOutput'
+
+function assertSafeClaudeAssistant(value: Record<string, unknown>, structuredOutputToolUseIds: Set<string>): void {
   const message = objectAt(value, 'message')
   if (message === undefined || !Array.isArray(message.content)) throw new CliExecutionFailedError()
   for (const block of message.content) {
+    if (!isRecord(block)) throw new UnexpectedCliToolEventError()
+    if (block.type === 'text' || block.type === 'thinking' || block.type === 'redacted_thinking') continue
+    if (
+      block.type === 'tool_use' &&
+      block.name === STRUCTURED_OUTPUT_TOOL_NAME &&
+      typeof block.id === 'string'
+    ) {
+      structuredOutputToolUseIds.add(block.id)
+      continue
+    }
+    throw new UnexpectedCliToolEventError()
+  }
+}
+
+function assertClaudeStructuredOutputEcho(
+  value: Record<string, unknown>,
+  structuredOutputToolUseIds: Set<string>,
+): void {
+  const message = objectAt(value, 'message')
+  if (message === undefined || !Array.isArray(message.content) || message.content.length === 0) {
+    throw new UnexpectedCliToolEventError()
+  }
+  for (const block of message.content) {
     if (
       !isRecord(block) ||
-      (block.type !== 'text' && block.type !== 'thinking' && block.type !== 'redacted_thinking')
+      block.type !== 'tool_result' ||
+      typeof block.tool_use_id !== 'string' ||
+      !structuredOutputToolUseIds.has(block.tool_use_id)
     ) {
       throw new UnexpectedCliToolEventError()
     }

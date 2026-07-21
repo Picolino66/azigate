@@ -1,7 +1,7 @@
 {
   "orchestration_id": "c16a8ea6-06e8-4ec2-bb2c-7ac4cd272dc5",
   "created_at": "2026-07-14T13:35:00Z",
-  "updated_at": "2026-07-20T23:45:00-03:00",
+  "updated_at": "2026-07-21T12:30:00-03:00",
   "mode": "feature-evolution",
   "current_phase": "F6",
   "snapshot_version": "O5",
@@ -220,15 +220,18 @@
       "F5-protocolo-v6-cobertura-acima-dos-limiares",
       "F5-protocolo-v6-audit-zero-vulnerabilidades",
       "F6-protocolo-v6-compose-systemd-docker-build-links-42-arquivos",
-      "F6-protocolo-v6-health-sem-inferencia-codex-claude-ready"
+      "F6-protocolo-v6-health-sem-inferencia-codex-claude-ready",
+      "F5-claude-2.1.215-structured-output-memory-check-167-testes",
+      "F5-prompt-anti-recusa-sandbox-check-168-testes",
+      "F6-smoke-codex-5.4-anti-recusa-write-file-1-de-1"
     ],
     "gates_failed": [
       "F5-claude-opus-4.7-estrutura-19-de-20",
       "F5-claude-sonnet-4.6-estrutura-18-de-20",
       "F5-claude-haiku-4.5-estrutura-19-de-20-categoria-11-de-20"
     ],
-    "gates_pending": ["F6-deploy-coordenado-protocolo-v6", "F6-benchmark-multiturn-10-turnos-reducao-60-por-cento", "F6-gate-completo-codex-5.6-por-modelo", "F6-smoke-qwen-codex-5.6-no-pc-da-vpn", "F6-smoke-qwen-efforts-low-medium-max-no-pc-da-vpn", "F6-smoke-claude-multiturn-na-conta", "F6-deploy-tls-lan-real"],
-    "test_results": { "files": 7, "tests_passed": 161, "tests_failed": 0 },
+    "gates_pending": ["F6-deploy-coordenado-protocolo-v6", "F6-benchmark-multiturn-10-turnos-reducao-60-por-cento", "F6-gate-completo-codex-5.6-por-modelo", "F6-smoke-qwen-codex-5.6-no-pc-da-vpn", "F6-smoke-qwen-efforts-low-medium-max-no-pc-da-vpn", "F6-smoke-claude-multiturn-na-conta", "F6-deploy-tls-lan-real", "F6-gate-codex-completo-pos-prompt-anti-recusa"],
+    "test_results": { "files": 7, "tests_passed": 168, "tests_failed": 0 },
     "coverage_report": { "statements": 80.5, "branches": 77.03, "functions": 86.68, "lines": 86.4 },
     "security_report": "docs/security/2026-07-16-security-review.md"
   },
@@ -403,6 +406,14 @@
         "mode": "complementar",
         "phase": "F3-F6",
         "timestamp": "2026-07-20T16:29:14-03:00"
+      },
+      {
+        "skill_name": "autonomous-software-orchestrator",
+        "source": "~/.claude/skills/autonomous-software-orchestrator",
+        "reason": "coordenar a compatibilidade StructuredOutput do Claude Code 2.1.215 no modo memory e o reforço anti-recusa do prompt canônico para o Codex delegar via function tools",
+        "mode": "coordenadora-principal",
+        "phase": "F5-F6",
+        "timestamp": "2026-07-21T12:30:00-03:00"
       }
     ]
   }
