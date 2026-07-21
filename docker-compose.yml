@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: gateway-ai:local
+    image: azigate:local
     restart: unless-stopped
     init: true
     user: "${BROKER_UID:-1000}:${BROKER_GID:-1000}"
@@ -29,7 +29,7 @@ services:
       READY_CHECK_UPSTREAM: ${READY_CHECK_UPSTREAM:-false}
       UPSTREAM_MAX_RETRIES: ${UPSTREAM_MAX_RETRIES:-0}
       RETRY_MAX_DELAY_MS: ${RETRY_MAX_DELAY_MS:-2000}
-      CLI_BROKER_SOCKET_PATH: ${CLI_BROKER_SOCKET_PATH:-/run/gateway-ai/broker.sock}
+      CLI_BROKER_SOCKET_PATH: ${CLI_BROKER_SOCKET_PATH:-/run/azigate/broker.sock}
       ENABLE_CODEX_CLI: ${ENABLE_CODEX_CLI:-false}
       ENABLE_CLAUDE_CLI: ${ENABLE_CLAUDE_CLI:-false}
       CLI_REQUEST_TIMEOUT_MS: ${CLI_REQUEST_TIMEOUT_MS:-600000}
@@ -39,8 +39,8 @@ services:
       TRUST_PROXY: ${TRUST_PROXY:-true}
     volumes:
       - type: bind
-        source: ${BROKER_RUNTIME_DIR:-/run/gateway-ai}
-        target: /run/gateway-ai
+        source: ${BROKER_RUNTIME_DIR:-/run/azigate}
+        target: /run/azigate
         read_only: true
         bind:
           create_host_path: true

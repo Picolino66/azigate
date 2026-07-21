@@ -295,7 +295,7 @@ class CodexAppServerHost {
         maxOutputBytes: this.config.maxOutputBytes,
       })
       await this.rpc('initialize', {
-        clientInfo: { name: 'gateway-ai-broker', version: String(BROKER_PROTOCOL_VERSION) },
+        clientInfo: { name: 'azigate-broker', version: String(BROKER_PROTOCOL_VERSION) },
         capabilities: { experimentalApi: false },
       })
       this.requiredProcess().writeJson({ method: 'initialized', params: {} })

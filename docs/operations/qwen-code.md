@@ -32,9 +32,9 @@ Em `~/.qwen/settings.json`, mescle sem remover outras configurações:
       "models": [
         {
           "id": "deepseek-v4-pro",
-          "name": "DeepSeek V4 Pro via gateway-ai",
+          "name": "DeepSeek V4 Pro via azigate",
           "description": "Passthrough para o upstream (DeepSeek por padrão)",
-          "envKey": "GATEWAY_AI_API_KEY",
+          "envKey": "AZIGATE_API_KEY",
           "baseUrl": "https://ia.meudominio.com/v1",
           "generationConfig": {
             "timeout": 610000,
@@ -43,9 +43,9 @@ Em `~/.qwen/settings.json`, mescle sem remover outras configurações:
         },
         {
           "id": "deepseek-v4-flash",
-          "name": "DeepSeek V4 Flash via gateway-ai",
+          "name": "DeepSeek V4 Flash via azigate",
           "description": "Passthrough para o upstream (DeepSeek por padrão)",
-          "envKey": "GATEWAY_AI_API_KEY",
+          "envKey": "AZIGATE_API_KEY",
           "baseUrl": "https://ia.meudominio.com/v1",
           "generationConfig": {
             "timeout": 610000,
@@ -54,9 +54,9 @@ Em `~/.qwen/settings.json`, mescle sem remover outras configurações:
         },
         {
           "id": "codex-cli-sol",
-          "name": "Codex Sol via gateway-ai",
+          "name": "Codex Sol via azigate",
           "description": "GPT-5.6 Sol remoto; execução local pelo Qwen",
-          "envKey": "GATEWAY_AI_API_KEY",
+          "envKey": "AZIGATE_API_KEY",
           "baseUrl": "https://ia.meudominio.com/v1",
           "generationConfig": {
             "timeout": 610000,
@@ -65,9 +65,9 @@ Em `~/.qwen/settings.json`, mescle sem remover outras configurações:
         },
         {
           "id": "codex-cli-terra",
-          "name": "Codex Terra via gateway-ai",
+          "name": "Codex Terra via azigate",
           "description": "GPT-5.6 Terra remoto; execução local pelo Qwen",
-          "envKey": "GATEWAY_AI_API_KEY",
+          "envKey": "AZIGATE_API_KEY",
           "baseUrl": "https://ia.meudominio.com/v1",
           "generationConfig": {
             "timeout": 610000,
@@ -76,9 +76,9 @@ Em `~/.qwen/settings.json`, mescle sem remover outras configurações:
         },
         {
           "id": "codex-cli-luna",
-          "name": "Codex Luna via gateway-ai",
+          "name": "Codex Luna via azigate",
           "description": "GPT-5.6 Luna remoto; execução local pelo Qwen",
-          "envKey": "GATEWAY_AI_API_KEY",
+          "envKey": "AZIGATE_API_KEY",
           "baseUrl": "https://ia.meudominio.com/v1",
           "generationConfig": {
             "timeout": 610000,
@@ -87,9 +87,9 @@ Em `~/.qwen/settings.json`, mescle sem remover outras configurações:
         },
         {
           "id": "codex-cli-5.5",
-          "name": "Codex GPT-5.5 via gateway-ai",
+          "name": "Codex GPT-5.5 via azigate",
           "description": "GPT-5.5 remoto; execução local pelo Qwen",
-          "envKey": "GATEWAY_AI_API_KEY",
+          "envKey": "AZIGATE_API_KEY",
           "baseUrl": "https://ia.meudominio.com/v1",
           "generationConfig": {
             "timeout": 610000,
@@ -98,9 +98,9 @@ Em `~/.qwen/settings.json`, mescle sem remover outras configurações:
         },
         {
           "id": "codex-cli-5.4",
-          "name": "Codex GPT-5.4 via gateway-ai",
+          "name": "Codex GPT-5.4 via azigate",
           "description": "GPT-5.4 remoto; execução local pelo Qwen",
-          "envKey": "GATEWAY_AI_API_KEY",
+          "envKey": "AZIGATE_API_KEY",
           "baseUrl": "https://ia.meudominio.com/v1",
           "generationConfig": {
             "timeout": 610000,
@@ -109,9 +109,9 @@ Em `~/.qwen/settings.json`, mescle sem remover outras configurações:
         },
         {
           "id": "claude-cli-opus-4.8",
-          "name": "Claude Opus 4.8 via gateway-ai",
+          "name": "Claude Opus 4.8 via azigate",
           "description": "Modelo Claude aprovado no gate real; execução local pelo Qwen",
-          "envKey": "GATEWAY_AI_API_KEY",
+          "envKey": "AZIGATE_API_KEY",
           "baseUrl": "https://ia.meudominio.com/v1",
           "generationConfig": {
             "timeout": 610000,
@@ -175,7 +175,7 @@ Nos aliases Codex, `low`, `medium`, `high` e `xhigh` chegam ao CLI sem mudança,
 Não grave o valor da chave no JSON:
 
 ```bash
-export GATEWAY_AI_API_KEY='CHAVE_DO_GATEWAY'
+export AZIGATE_API_KEY='CHAVE_DO_GATEWAY'
 qwen
 ```
 

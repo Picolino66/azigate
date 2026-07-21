@@ -30,19 +30,19 @@ export function registerHealthRoutes(
   client: DeepSeekClient,
   broker: CliBrokerClientLike,
 ): void {
-  app.get('/health', async () => ({ status: 'ok', service: 'gateway-ai' }))
+  app.get('/health', async () => ({ status: 'ok', service: 'azigate' }))
 
   app.get('/ready', async (_request, reply) => {
     if (config.gatewayApiKeys.length === 0) {
-      return reply.code(503).send({ status: 'not_ready', service: 'gateway-ai' })
+      return reply.code(503).send({ status: 'not_ready', service: 'azigate' })
     }
     const [deepseek, aliases] = await Promise.all([
       deepSeekReady(config, client),
       healthyCliAliases(config, broker),
     ])
     if (!deepseek && aliases.length === 0) {
-      return reply.code(503).send({ status: 'not_ready', service: 'gateway-ai' })
+      return reply.code(503).send({ status: 'not_ready', service: 'azigate' })
     }
-    return { status: 'ready', service: 'gateway-ai' }
+    return { status: 'ready', service: 'azigate' }
   })
 }

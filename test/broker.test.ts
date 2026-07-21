@@ -39,7 +39,7 @@ const directories: string[] = []
 const servers: ReturnType<typeof createBrokerServer>[] = []
 
 function directory(): string {
-  const result = mkdtempSync(join(tmpdir(), 'gateway-ai-broker-test-'))
+  const result = mkdtempSync(join(tmpdir(), 'azigate-broker-test-'))
   directories.push(result)
   return result
 }

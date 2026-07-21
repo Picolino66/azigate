@@ -1,4 +1,4 @@
-# Especificação funcional do gateway-ai
+# Especificação funcional do azigate
 
 ## Rotas
 

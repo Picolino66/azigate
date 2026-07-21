@@ -16,7 +16,7 @@ import { CODEX_CLI_MODELS, CODEX_MODEL_CATALOG } from '../src/cli-catalog.js'
 const roots: string[] = []
 
 function root(): string {
-  const value = mkdtempSync(join(tmpdir(), 'gateway-ai-capabilities-'))
+  const value = mkdtempSync(join(tmpdir(), 'azigate-capabilities-'))
   roots.push(value)
   return value
 }
@@ -142,7 +142,7 @@ describe('configuração e capacidades do broker', () => {
   it('carrega defaults e valida paths, booleanos e inteiros', () => {
     const home = root()
     const config = loadBrokerConfig({ HOME: home })
-    expect(config.socketPath).toBe('/run/gateway-ai/broker.sock')
+    expect(config.socketPath).toBe('/run/azigate/broker.sock')
     expect(config.executionTimeoutMs).toBe(600_000)
     expect(config.enableCodex).toBe(true)
     expect(config.enableClaude).toBe(false)

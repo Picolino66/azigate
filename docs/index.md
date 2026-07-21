@@ -1,6 +1,6 @@
 # Índice de documentação
 
-`/docs` é a fonte primária de contexto do `gateway-ai`. Comece por este arquivo e pelo módulo afetado antes de abrir o código.
+`/docs` é a fonte primária de contexto do `azigate`. Comece por este arquivo e pelo módulo afetado antes de abrir o código.
 
 ## Sistema
 

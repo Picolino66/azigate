@@ -46,16 +46,16 @@ No checkout do projeto:
 ```bash
 npm ci --ignore-scripts
 npm run check
-sudo install -d -m 0755 /opt/gateway-ai
-sudo rsync -a --delete dist/ /opt/gateway-ai/dist/
-sudo install -m 0644 package.json /opt/gateway-ai/package.json
-sudo install -m 0644 config/systemd/gateway-ai-broker@.service /etc/systemd/system/gateway-ai-broker@.service
+sudo install -d -m 0755 /opt/azigate
+sudo rsync -a --delete dist/ /opt/azigate/dist/
+sudo install -m 0644 package.json /opt/azigate/package.json
+sudo install -m 0644 config/systemd/azigate-broker@.service /etc/systemd/system/azigate-broker@.service
 ```
 
-Crie `/etc/gateway-ai/broker.env` com `0600`. Esse arquivo não deve conter `DEEPSEEK_API_KEY` nem `GATEWAY_API_KEYS`:
+Crie `/etc/azigate/broker.env` com `0600`. Esse arquivo não deve conter `DEEPSEEK_API_KEY` nem `GATEWAY_API_KEYS`:
 
 ```dotenv
-BROKER_SOCKET_PATH=/run/gateway-ai/broker.sock
+BROKER_SOCKET_PATH=/run/azigate/broker.sock
 BROKER_ENABLE_CODEX_CLI=true
 BROKER_ENABLE_CLAUDE_CLI=false
 BROKER_EXECUTION_TIMEOUT_MS=600000
@@ -80,14 +80,14 @@ Proteja os diretórios e instale a unidade substituindo `USUARIO`:
 ```bash
 chmod 0700 ~/.codex ~/.claude
 chmod 0600 ~/.codex/auth.json ~/.claude/.credentials.json ~/.claude.json
-sudo install -d -m 0755 /etc/gateway-ai
-sudo chmod 0600 /etc/gateway-ai/broker.env
+sudo install -d -m 0755 /etc/azigate
+sudo chmod 0600 /etc/azigate/broker.env
 sudo systemctl daemon-reload
-sudo systemctl enable --now gateway-ai-broker@USUARIO.service
+sudo systemctl enable --now azigate-broker@USUARIO.service
 ```
 
 O broker também corrige os auth dirs habilitados para `0700` no startup e valida os
-arquivos privados usados pelo modo `memory`. O diretório `/run/gateway-ai` nasce
+arquivos privados usados pelo modo `memory`. O diretório `/run/azigate` nasce
 `0700` e o socket `0600`.
 
 A unidade usa `ProtectHome=tmpfs` e reexpõe somente
@@ -103,10 +103,10 @@ em um override da unidade; não exponha o home inteiro.
 ## Verificação sem inferência
 
 ```bash
-systemctl status gateway-ai-broker@USUARIO.service
-curl --unix-socket /run/gateway-ai/broker.sock http://localhost/health
-stat -c '%a %U:%G %n' /run/gateway-ai /run/gateway-ai/broker.sock ~/.codex ~/.claude ~/.claude.json
-systemd-analyze verify config/systemd/gateway-ai-broker@.service
+systemctl status azigate-broker@USUARIO.service
+curl --unix-socket /run/azigate/broker.sock http://localhost/health
+stat -c '%a %U:%G %n' /run/azigate /run/azigate/broker.sock ~/.codex ~/.claude ~/.claude.json
+systemd-analyze verify config/systemd/azigate-broker@.service
 ```
 
 O health retorna somente disponibilidade e código sanitizado.
@@ -151,9 +151,9 @@ Depois do gate aprovado, ajuste o `.env` usado pelo Compose:
 ```dotenv
 ENABLE_CODEX_CLI=true
 ENABLE_CLAUDE_CLI=true
-CLI_BROKER_SOCKET_PATH=/run/gateway-ai/broker.sock
+CLI_BROKER_SOCKET_PATH=/run/azigate/broker.sock
 CLI_MAX_TRANSCRIPT_BYTES=262144
-BROKER_RUNTIME_DIR=/run/gateway-ai
+BROKER_RUNTIME_DIR=/run/azigate
 BROKER_UID=1000
 BROKER_GID=1000
 ```
@@ -172,7 +172,7 @@ docker compose up -d --build
 curl --fail http://192.168.2.6:3000/ready
 ```
 
-O container monta somente `/run/gateway-ai` como read-only. Nunca monte `~/.codex`, `~/.claude`, `/home`, o repositório ou o socket Docker.
+O container monta somente `/run/azigate` como read-only. Nunca monte `~/.codex`, `~/.claude`, `/home`, o repositório ou o socket Docker.
 
 O Compose cria o diretório do bind quando ausente para que o modo somente passthrough (só o upstream) continue funcionando. Quando o broker inicia, o systemd aplica owner/mode privados ao `RuntimeDirectory`; um diretório vazio nunca torna o alias saudável sem socket e health válidos.
 
@@ -187,7 +187,7 @@ O rollback não afeta o upstream:
 
 ```bash
 docker compose up -d --force-recreate gateway
-sudo systemctl disable --now gateway-ai-broker@USUARIO.service
+sudo systemctl disable --now azigate-broker@USUARIO.service
 ```
 
 ## Troubleshooting

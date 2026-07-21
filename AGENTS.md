@@ -33,7 +33,7 @@ Valide links internos da documentação alterada.
 
 ## Contexto do projeto
 
-Este é o `gateway-ai`, um gateway stateless em Node.js/TypeScript com Fastify e Undici. O agente cliente OpenAI-compatible (por exemplo Qwen Code, GitHub Copilot, Cline ou Continue) escolhe um provedor pelo `model`, mas continua sendo o único processo autorizado a executar ferramentas e alterar os repositórios do computador onde ele roda:
+Este é o `azigate`, um gateway stateless em Node.js/TypeScript com Fastify e Undici. O agente cliente OpenAI-compatible (por exemplo Qwen Code, GitHub Copilot, Cline ou Continue) escolhe um provedor pelo `model`, mas continua sendo o único processo autorizado a executar ferramentas e alterar os repositórios do computador onde ele roda:
 
 ```text
 Agente cliente -> HTTPS/Nginx -> Fastify

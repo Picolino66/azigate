@@ -1,6 +1,6 @@
 # Instalação no Windows (WSL2)
 
-O `gateway-ai` **não roda nativamente no Windows**: ele depende de Docker, systemd,
+O `azigate` **não roda nativamente no Windows**: ele depende de Docker, systemd,
 Bubblewrap e user namespaces, que são recursos do Linux. No Windows, a forma
 suportada é executar todo o stack do servidor dentro do **WSL2** (Windows Subsystem
 for Linux 2), que fornece um kernel Linux real.
@@ -15,7 +15,7 @@ flowchart LR
         IDE["Agente / IDE<br/>(OpenAI-compatible)"]
         subgraph WSL["WSL2 - Ubuntu (kernel Linux)"]
             direction TB
-            GW["gateway-ai<br/>(Docker)"]
+            GW["azigate<br/>(Docker)"]
             BK["broker + Codex/Claude<br/>(systemd + Bubblewrap)"]
         end
     end
@@ -102,7 +102,7 @@ Linux, do início ao fim, no terminal do WSL2:
 - [Instalação no Linux](./linux.md)
 
 Recomenda-se guardar o projeto no sistema de arquivos do próprio WSL2 (por exemplo
-`~/gateway-ai`), e não em `/mnt/c/...`, para ter desempenho e permissões corretas.
+`~/azigate`), e não em `/mnt/c/...`, para ter desempenho e permissões corretas.
 
 ## 5. Notas específicas do WSL2
 

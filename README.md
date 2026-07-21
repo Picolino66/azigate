@@ -1,6 +1,6 @@
-# gateway-ai
+# azigate
 
-`gateway-ai` é um gateway **OpenAI-Compatible** self-hosted. Ele publica um endpoint
+`azigate` é um gateway **OpenAI-Compatible** self-hosted. Ele publica um endpoint
 no formato da API OpenAI (`/v1/...`) que **qualquer agente ou IDE com a opção
 "OpenAI compatible API"** consegue consumir — por exemplo Qwen Code, GitHub Copilot,
 Cline ou Continue.
@@ -35,7 +35,7 @@ flowchart LR
     end
     subgraph SRV["Servidor (onde você quiser)"]
         N["Nginx<br/>(TLS + rotas)"]
-        G["gateway-ai<br/>(Fastify)"]
+        G["azigate<br/>(Fastify)"]
         B["broker<br/>(host, systemd)"]
         C["Codex / Claude CLI<br/>(Bubblewrap)"]
     end
@@ -64,7 +64,7 @@ com o workspace.
 ```mermaid
 sequenceDiagram
     participant Ag as Agente (seu PC)
-    participant Gw as gateway-ai
+    participant Gw as azigate
     participant Cli as Codex/Claude (Bubblewrap)
 
     Ag->>Gw: POST /v1/chat/completions (texto + function tools)

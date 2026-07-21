@@ -1,5 +1,5 @@
 {
-  "name": "gateway-ai",
+  "name": "azigate",
   "version": "1.0.0",
   "private": true,
   "description": "Gateway OpenAI Compatible seguro para DeepSeek e CLIs locais isoladas",

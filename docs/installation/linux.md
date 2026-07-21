@@ -55,8 +55,8 @@ id -g
 Obtenha o projeto e crie o arquivo `.env` a partir do exemplo:
 
 ```bash
-git clone <URL_DO_REPOSITORIO> gateway-ai
-cd gateway-ai
+git clone <URL_DO_REPOSITORIO> azigate
+cd azigate
 cp .env.example .env
 ```
 
@@ -160,7 +160,7 @@ política bloquear a automação, o alias permanece indisponível (fail-closed).
 
 **4.2 Apontar o broker para o binário e o auth dir do Claude**
 
-Na configuração do broker (`/etc/gateway-ai/broker.env`, `0600`), troque `USUARIO`
+Na configuração do broker (`/etc/azigate/broker.env`, `0600`), troque `USUARIO`
 pelo seu usuário e use o caminho retornado por `which claude`:
 
 ```dotenv
@@ -174,7 +174,7 @@ CLAUDE_AUTH_DIR=/home/USUARIO/.claude
 CLAUDE_CONFIG_PATH=/home/USUARIO/.claude.json
 ```
 
-A instalação da unidade `gateway-ai-broker@USUARIO.service` e o `reload` estão no
+A instalação da unidade `azigate-broker@USUARIO.service` e o `reload` estão no
 [runbook do broker](../operations/broker.md).
 
 **4.3 Rodar o gate real para o modelo**

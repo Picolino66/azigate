@@ -1,5 +1,5 @@
 [Unit]
-Description=Gateway AI CLI broker para %i
+Description=AziGate CLI broker para %i
 After=network-online.target
 Wants=network-online.target
 
@@ -7,8 +7,8 @@ Wants=network-online.target
 Type=simple
 User=%i
 Group=%i
-WorkingDirectory=/opt/gateway-ai
-Environment=BROKER_SOCKET_PATH=/run/gateway-ai/broker.sock
+WorkingDirectory=/opt/azigate
+Environment=BROKER_SOCKET_PATH=/run/azigate/broker.sock
 Environment=BROKER_ENABLE_CODEX_CLI=true
 Environment=BROKER_ENABLE_CLAUDE_CLI=false
 Environment=BROKER_CODEX_SESSION_MODE=memory
@@ -16,12 +16,12 @@ Environment=BROKER_CLAUDE_SESSION_MODE=memory
 Environment=BROKER_MAX_ACTIVE_SESSIONS=4
 Environment=BROKER_SESSION_IDLE_MS=1800000
 Environment=BROKER_MAX_TRANSCRIPT_BYTES=262144
-EnvironmentFile=-/etc/gateway-ai/broker.env
-ExecStart=/usr/bin/node /opt/gateway-ai/dist/broker/server.js
+EnvironmentFile=-/etc/azigate/broker.env
+ExecStart=/usr/bin/node /opt/azigate/dist/broker/server.js
 Restart=on-failure
 RestartSec=5s
 UMask=0077
-RuntimeDirectory=gateway-ai
+RuntimeDirectory=azigate
 RuntimeDirectoryMode=0700
 
 NoNewPrivileges=yes
@@ -32,7 +32,7 @@ ProtectSystem=strict
 ProtectHome=tmpfs
 BindPaths=-/home/%i/.codex -/home/%i/.claude
 BindReadOnlyPaths=-/home/%i/.claude.json -/home/%i/.local/bin/claude -/home/%i/.local/share/claude
-ReadWritePaths=/run/gateway-ai
+ReadWritePaths=/run/azigate
 ProtectKernelModules=yes
 # ProtectKernelTunables, ProtectKernelLogs e ProtectHostname conflitam com
 # namespaces aninhados do Bubblewrap em Ubuntu/AppArmor.

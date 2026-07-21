@@ -1,6 +1,6 @@
 # Configurar um agente OpenAI-compatible
 
-O `gateway-ai` expõe um endpoint no formato da API OpenAI. Qualquer agente ou IDE
+O `azigate` expõe um endpoint no formato da API OpenAI. Qualquer agente ou IDE
 que ofereça a opção "OpenAI compatible API" (ou "custom OpenAI endpoint",
 "OpenAI-compatible provider", "BYOK") consegue usá-lo. Este guia mostra o padrão
 genérico e depois exemplos concretos para Qwen Code, GitHub Copilot, Cline e
@@ -16,7 +16,7 @@ flowchart LR
         Ag["Agente OpenAI-compatible"]
         Repo["Repositórios + shell"]
     end
-    Gw["gateway-ai /v1"]
+    Gw["azigate /v1"]
 
     Ag -- "Base URL + API Key + model" --> Gw
     Gw -- "texto OU tool call" --> Ag
@@ -186,7 +186,7 @@ o gateway:
 {
   "models": [
     {
-      "title": "gateway-ai — Opus 4.8",
+      "title": "azigate — Opus 4.8",
       "provider": "openai",
       "model": "claude-cli-opus-4.8",
       "apiBase": "https://ia.meudominio.com/v1",

@@ -4,7 +4,7 @@
 
 | Campo | Valor |
 |---|---|
-| Projeto | `gateway-ai` |
+| Projeto | `azigate` |
 | Data | 16/07/2026 |
 | Escopo | gateway, broker host, Codex/Claude isolados, Compose, systemd e documentação |
 | Auditoria | orquestrador + `defensive-security-auditor` |
@@ -36,7 +36,7 @@ Os gates reais do Codex e Claude passaram, mas isso não autoriza habilitação 
 | Bubblewrap/Unix | smoke real aprovado; DNS usa bind do `resolv.conf` resolvido e `/etc` completo fica ausente |
 | `docker compose config --quiet` | aprovado com secrets fictícios |
 | `systemd-analyze verify` | unidade aprovada; aviso do `getty` do host é externo ao projeto |
-| `docker build -t gateway-ai:validation .` | aprovado |
+| `docker build -t azigate:validation .` | aprovado |
 | smoke do container/Compose | `/health`, usuário não root e modo DeepSeek-only sem broker aprovados |
 
 Testes automatizados usam upstream, broker e executáveis falsos; somente os dois gates de viabilidade explicitamente invocados consumiram os CLIs reais. Os relatórios dos gates contêm apenas contagens, sem prompts, respostas ou dados de autenticação.
@@ -51,7 +51,7 @@ Testes automatizados usam upstream, broker e executáveis falsos; somente os doi
 - `src/broker/executor.ts`: argv fixo, inspeção de eventos e schema final fail-closed.
 - `src/broker/server.ts`: socket privado, concorrência global 1 e health sanitizado.
 - `docker-compose.yml`: somente o diretório do socket é montado no container, como read-only.
-- `config/systemd/gateway-ai-broker@.service`: hardening, limites, home oculto e reexposição somente de auth/binário necessários.
+- `config/systemd/azigate-broker@.service`: hardening, limites, home oculto e reexposição somente de auth/binário necessários.
 
 ## Achados
 

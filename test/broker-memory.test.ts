@@ -21,7 +21,7 @@ const roots: string[] = []
 afterEach(() => roots.splice(0).forEach((root) => rmSync(root, { recursive: true, force: true })))
 
 function setup(): { config: BrokerConfig; capabilities: ProviderCapabilities } {
-  const root = mkdtempSync(join(tmpdir(), 'gateway-ai-memory-'))
+  const root = mkdtempSync(join(tmpdir(), 'azigate-memory-'))
   roots.push(root)
   const codexAuth = join(root, 'codex-auth')
   const claudeAuth = join(root, 'claude-auth')

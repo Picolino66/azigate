@@ -10,7 +10,7 @@ Evoluir o monólito Fastify existente sem alterar suas quatro rotas públicas. A
 |---|---|---|
 | 1. ADRs | concluída | ADR-005 a ADR-013 |
 | 2. Contrato/prompt | evoluída | protocolo v6, modelos/efforts fechados, usage provider-specific e testes fail-closed |
-| 3. Núcleo multiprovedor | concluída | registry, catálogo/readiness e rename `gateway-ai` |
+| 3. Núcleo multiprovedor | concluída | registry, catálogo/readiness e rename `azigate` |
 | 4. Cliente/respostas CLI | concluída | Unix socket, JSON/SSE, erros e cancelamento |
 | 5. Broker isolado | concluída | Bubblewrap, systemd, socket privado e limites |
 | 6. Codex/Claude | concluída localmente | cinco modelos Claude aprovados; três reprovados individualmente no gate real 2.1.214 |
@@ -43,7 +43,7 @@ O5 continua sendo o último snapshot estável até o smoke Qwen e o deploy LAN/T
 
 3. **Extrair o núcleo multiprovedor**
    - Objetivo: rotear aliases reservados sem regressão no adaptador DeepSeek.
-   - Escopo: registry, catálogo combinado, readiness e rename operacional para `gateway-ai`.
+   - Escopo: registry, catálogo combinado, readiness e rename operacional para `azigate`.
    - Aceite: modelos DeepSeek seguem opacos; alias desabilitado não cai na DeepSeek; nenhum provedor utilizável produz `503`.
    - Dependências: tarefa 2.
 

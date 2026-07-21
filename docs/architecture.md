@@ -1,4 +1,4 @@
-# Arquitetura do gateway-ai
+# Arquitetura do azigate
 
 ## Contexto
 
@@ -13,7 +13,7 @@ Computador do agente cliente
              │ HTTPS/rede
              ▼
 Servidor (self-hosted, onde você quiser)
-  Nginx -> container gateway-ai
+  Nginx -> container azigate
               ├── adaptador de upstream -> HTTPS (upstream OpenAI-compatible,
               │                                     DeepSeek por padrão)
               └── adaptador CLI -> Unix socket 0600 -> broker host

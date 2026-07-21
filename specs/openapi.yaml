@@ -1,6 +1,6 @@
 openapi: 3.1.0
 info:
-  title: Gateway AI
+  title: AziGate
   version: 2.0.0
   description: Gateway OpenAI Compatible para um upstream OpenAI-compatible (DeepSeek por padrão) e aliases CLI isolados.
 paths:
@@ -122,13 +122,13 @@ components:
       required: [status, service]
       properties:
         status: { const: ok }
-        service: { const: gateway-ai }
+        service: { const: azigate }
     Ready:
       type: object
       required: [status, service]
       properties:
         status: { const: ready }
-        service: { const: gateway-ai }
+        service: { const: azigate }
     Error:
       type: object
       required: [error]

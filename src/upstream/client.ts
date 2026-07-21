@@ -88,7 +88,7 @@ export class DeepSeekClient {
             authorization: `Bearer ${this.config.deepseekApiKey}`,
             accept: input.accept,
             ...(input.body === undefined ? {} : { 'content-type': 'application/json' }),
-            'user-agent': 'gateway-ai',
+            'user-agent': 'azigate',
             'x-request-id': input.requestId,
           },
           ...(input.body === undefined ? {} : { body: input.body }),

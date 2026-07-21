@@ -2,7 +2,7 @@
 
 | Campo | Valor |
 |---|---|
-| Projeto | `gateway-ai` |
+| Projeto | `azigate` |
 | Data | 16/07/2026 |
 | Relatório | [2026-07-16-security-review.md](./2026-07-16-security-review.md) |
 
@@ -44,9 +44,9 @@ Se qualquer critério falhar:
 npm run check
 npm run test:coverage
 npm audit --omit=dev --audit-level=high
-docker build -t gateway-ai:validation .
+docker build -t azigate:validation .
 DEEPSEEK_API_KEY=ficticia GATEWAY_API_KEYS=ficticia docker compose config --quiet
-systemd-analyze verify config/systemd/gateway-ai-broker@.service
+systemd-analyze verify config/systemd/azigate-broker@.service
 npm run gate:codex
 # somente na segunda fase:
 npm run gate:claude

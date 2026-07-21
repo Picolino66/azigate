@@ -54,9 +54,9 @@ function absolutePath(value: string, name: string): string {
 export function loadBrokerConfig(env: NodeJS.ProcessEnv = process.env): BrokerConfig {
   const home = env.HOME?.trim() || homedir()
   return {
-    socketPath: absolutePath(env.BROKER_SOCKET_PATH?.trim() || '/run/gateway-ai/broker.sock', 'BROKER_SOCKET_PATH'),
+    socketPath: absolutePath(env.BROKER_SOCKET_PATH?.trim() || '/run/azigate/broker.sock', 'BROKER_SOCKET_PATH'),
     workRoot: absolutePath(
-      env.BROKER_WORK_ROOT?.trim() || join(tmpdir(), 'gateway-ai-broker'),
+      env.BROKER_WORK_ROOT?.trim() || join(tmpdir(), 'azigate-broker'),
       'BROKER_WORK_ROOT',
     ),
     enableCodex: boolean(env, 'BROKER_ENABLE_CODEX_CLI', true),
