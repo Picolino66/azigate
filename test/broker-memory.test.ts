@@ -35,6 +35,9 @@ function setup(): { config: BrokerConfig; capabilities: ProviderCapabilities } {
     config: {
       socketPath: join(root, 'broker.sock'),
       workRoot: join(root, 'work'),
+      executionLogDir: join(root, 'logs'),
+      executionLogMaxBytes: 65_536,
+      executionLogMaxFiles: 2,
       enableCodex: true,
       enableClaude: true,
       executionTimeoutMs: 1000,
@@ -91,6 +94,7 @@ class FakeInteractiveProcess implements InteractiveProcessLike {
     readonly provider: 'codex' | 'claude',
     private readonly codexStyle: 'legacy' | 'v0144' = 'legacy',
     private readonly extraTurnNotifications: unknown[] = [],
+    private readonly claudeTurnEvents?: unknown[],
   ) {}
 
   private decision(prompt: string): { content: string | null; tool_calls: Array<{ name: string; arguments: string }> } {
@@ -111,7 +115,7 @@ class FakeInteractiveProcess implements InteractiveProcessLike {
       const prompt = String(nested.content)
       this.turnPrompts.push(prompt)
       this.queue.push(
-        { type: 'assistant', message: { content: [{ type: 'text', text: 'ok' }] } },
+        ...(this.claudeTurnEvents ?? [{ type: 'assistant', message: { content: [{ type: 'text', text: 'ok' }] } }]),
         {
           type: 'result',
           subtype: 'success',
@@ -224,12 +228,18 @@ class FakeInteractiveFactory implements InteractiveProcessFactoryLike {
   constructor(
     private readonly codexStyle: 'legacy' | 'v0144' = 'legacy',
     private readonly extraTurnNotifications: unknown[] = [],
+    private readonly claudeTurnEvents?: unknown[],
   ) {}
 
   spawn(spec: InteractiveProcessSpec): InteractiveProcessLike {
     this.specs.push(spec)
     const provider = spec.args.includes('app-server') ? 'codex' : 'claude'
-    const process = new FakeInteractiveProcess(provider, this.codexStyle, this.extraTurnNotifications)
+    const process = new FakeInteractiveProcess(
+      provider,
+      this.codexStyle,
+      this.extraTurnNotifications,
+      this.claudeTurnEvents,
+    )
     this.processes.push(process)
     return process
   }
@@ -362,6 +372,71 @@ describe('sessões CLI em memória', () => {
     expect(factory.specs[0]?.args).toContain('--input-format')
     expect(factory.specs[0]?.args).toContain('stream-json')
     expect(factory.processes[0]?.turnPrompts[1]).not.toContain('primeiro')
+    await executor.shutdown()
+  })
+
+  it('aceita o structured output via tool interno da Claude CLI >= 2.1.215', async () => {
+    const { config, capabilities } = setup()
+    const factory = new FakeInteractiveFactory('legacy', [], [
+      {
+        type: 'assistant',
+        message: {
+          content: [{ type: 'tool_use', id: 'structured-1', name: 'StructuredOutput', input: {} }],
+        },
+      },
+      {
+        type: 'user',
+        message: { content: [{ type: 'tool_result', tool_use_id: 'structured-1', content: 'ok' }] },
+      },
+    ])
+    const executor = new MemorySessionExecutor(config, capabilities, factory)
+    const result = await executor.execute(request('claude', [{ role: 'user', content: 'primeiro' }]), 10)
+    expect(result.decision).toEqual({ content: 'ok', toolCalls: [] })
+    await executor.shutdown()
+  })
+
+  it('recusa tool_use do assistant Claude com nome diferente de StructuredOutput', async () => {
+    const { config, capabilities } = setup()
+    const factory = new FakeInteractiveFactory('legacy', [], [
+      {
+        type: 'assistant',
+        message: { content: [{ type: 'tool_use', id: 'tool-1', name: 'Bash', input: {} }] },
+      },
+    ])
+    const executor = new MemorySessionExecutor(config, capabilities, factory)
+    await expect(executor.execute(request('claude', [{ role: 'user', content: 'primeiro' }]), 10))
+      .rejects.toBeInstanceOf(InvalidCliOutputError)
+    await executor.shutdown()
+  })
+
+  it('recusa eco user com tool_result sem tool_use StructuredOutput correspondente', async () => {
+    const { config, capabilities } = setup()
+    const factory = new FakeInteractiveFactory('legacy', [], [
+      {
+        type: 'user',
+        message: { content: [{ type: 'tool_result', tool_use_id: 'desconhecido', content: 'ok' }] },
+      },
+    ])
+    const executor = new MemorySessionExecutor(config, capabilities, factory)
+    await expect(executor.execute(request('claude', [{ role: 'user', content: 'primeiro' }]), 10))
+      .rejects.toBeInstanceOf(InvalidCliOutputError)
+    await executor.shutdown()
+  })
+
+  it('recusa eco user com bloco que não seja tool_result', async () => {
+    const { config, capabilities } = setup()
+    const factory = new FakeInteractiveFactory('legacy', [], [
+      {
+        type: 'assistant',
+        message: {
+          content: [{ type: 'tool_use', id: 'structured-1', name: 'StructuredOutput', input: {} }],
+        },
+      },
+      { type: 'user', message: { content: [{ type: 'text', text: 'injetado' }] } },
+    ])
+    const executor = new MemorySessionExecutor(config, capabilities, factory)
+    await expect(executor.execute(request('claude', [{ role: 'user', content: 'primeiro' }]), 10))
+      .rejects.toBeInstanceOf(InvalidCliOutputError)
     await executor.shutdown()
   })
 

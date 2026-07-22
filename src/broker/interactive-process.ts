@@ -57,7 +57,7 @@ export class InteractiveProcess implements InteractiveProcessLike {
       child.once('close', () => {
         this.closed = true
         if (this.forceTimer) clearTimeout(this.forceTimer)
-        this.rejectReaders(new CliExecutionFailedError())
+        this.rejectReaders(new CliExecutionFailedError('cli_process_closed'))
         resolve()
       })
     })
@@ -66,12 +66,14 @@ export class InteractiveProcess implements InteractiveProcessLike {
     child.stdin.on('error', () => undefined)
     child.once('error', () => {
       this.closed = true
-      this.rejectReaders(new CliExecutionFailedError())
+      this.rejectReaders(new CliExecutionFailedError('cli_process_closed'))
     })
   }
 
   writeJson(value: unknown): void {
-    if (this.closed || this.terminating || !this.child.stdin.writable) throw new CliExecutionFailedError()
+    if (this.closed || this.terminating || !this.child.stdin.writable) {
+      throw new CliExecutionFailedError('cli_process_closed')
+    }
     const line = `${JSON.stringify(value)}\n`
     this.child.stdin.write(line)
   }
@@ -83,7 +85,7 @@ export class InteractiveProcess implements InteractiveProcessLike {
   readJson(timeoutMs: number, signal?: AbortSignal): Promise<unknown> {
     const queued = this.lines.shift()
     if (queued !== undefined) return Promise.resolve(queued)
-    if (this.closed || this.terminating) return Promise.reject(new CliExecutionFailedError())
+    if (this.closed || this.terminating) return Promise.reject(new CliExecutionFailedError('cli_process_closed'))
     if (signal?.aborted) return Promise.reject(new ClientAbortedError())
     return new Promise((resolve, reject) => {
       const reader: PendingReader = {
@@ -133,7 +135,7 @@ export class InteractiveProcess implements InteractiveProcessLike {
         parsed = JSON.parse(line)
       } catch {
         void this.terminate()
-        this.rejectReaders(new CliExecutionFailedError())
+        this.rejectReaders(new CliExecutionFailedError('cli_process_closed'))
         return
       }
       const reader = this.readers.shift()
@@ -149,7 +151,7 @@ export class InteractiveProcess implements InteractiveProcessLike {
     this.outputBytes += bytes
     if (this.outputBytes <= this.spec.maxOutputBytes) return true
     void this.terminate()
-    this.rejectReaders(new CliExecutionFailedError())
+    this.rejectReaders(new CliExecutionFailedError('cli_output_limit'))
     return false
   }
 

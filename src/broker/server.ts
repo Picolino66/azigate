@@ -8,6 +8,7 @@ import { BrokerExecutor } from './executor.js'
 import { ProcessRunner, type ProcessRunnerLike } from './process-runner.js'
 import { InteractiveProcessFactory, type InteractiveProcessFactoryLike } from './interactive-process.js'
 import { MemorySessionExecutor } from './memory-executor.js'
+import { ExecutionLogWriter } from './execution-log.js'
 import { BROKER_PROTOCOL_VERSION, type BrokerErrorResponse } from './protocol.js'
 import { isBrokerExecuteRequest } from './protocol-validation.js'
 import { CliBusyError } from '../providers/errors.js'
@@ -114,12 +115,17 @@ export class BrokerController {
     }
 
     let requestMeta: { requestId: string; provider: string } | undefined
+    let executionLog: ExecutionLogWriter | undefined
     try {
       const payload = await readBody(request, this.config.maxRequestBytes)
       if (!isBrokerExecuteRequest(payload)) throw new InvalidBrokerRequestError()
       requestMeta = { requestId: payload.requestId, provider: payload.provider }
       if (this.busy) throw new CliBusyError()
       this.busy = true
+      const transcriptBytes = Buffer.byteLength(JSON.stringify({ messages: payload.messages, tools: payload.tools }))
+      const sessionMode = payload.provider === 'codex' ? this.config.codexSessionMode : this.config.claudeSessionMode
+      executionLog = new ExecutionLogWriter(this.config, payload, sessionMode, transcriptBytes)
+      await executionLog.start()
       const controller = new AbortController()
       this.active = controller
       let finished = false
@@ -129,8 +135,9 @@ export class BrokerController {
       request.once('aborted', abort)
       response.once('close', abort)
       try {
-        const result = await this.executor.execute(payload, controller.signal)
+        const result = await this.executor.execute(payload, controller.signal, executionLog)
         finished = true
+        await executionLog.complete(result.execution.sessionReused)
         sendJson(response, 200, result)
       } finally {
         finished = true
@@ -141,6 +148,7 @@ export class BrokerController {
       }
     } catch (error) {
       if (error instanceof ClientAbortedError) return
+      await executionLog?.fail(error)
       const result = errorResponse(error)
       // Somente identificadores e nomes de classe de erro; nunca conteúdo.
       process.stderr.write(`${JSON.stringify({

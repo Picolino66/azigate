@@ -1,14 +1,14 @@
 {
   "orchestration_id": "c16a8ea6-06e8-4ec2-bb2c-7ac4cd272dc5",
   "created_at": "2026-07-14T13:35:00Z",
-  "updated_at": "2026-07-20T23:45:00-03:00",
+  "updated_at": "2026-07-22T11:44:00-03:00",
   "mode": "feature-evolution",
   "current_phase": "F6",
   "snapshot_version": "O5",
   "last_stable_snapshot": "O5",
   "evolution_cycle": {
     "name": "multiprovider-cli-broker",
-    "status": "protocol-v6-local-gates-passed-deploy-and-benchmark-pending",
+    "status": "correcao-confiabilidade-cli-localmente-validada-gates-reais-e-deploy-pendentes",
     "reassessed_phases": ["F2", "F3", "F5", "F6", "F7"],
     "next_snapshot": "pending-remote-qwen-smoke"
   },
@@ -132,7 +132,7 @@
       "ssrf": "DeepSeek e paths fixos; protocolo broker sem URL/path",
       "execution": "Qwen único executor; CLIs sem ferramentas locais"
     },
-    "adrs": ["ADR-001", "ADR-002", "ADR-003", "ADR-004", "ADR-005", "ADR-006", "ADR-007", "ADR-008", "ADR-009", "ADR-010", "ADR-011", "ADR-012", "ADR-013", "ADR-014"]
+    "adrs": ["ADR-001", "ADR-002", "ADR-003", "ADR-004", "ADR-005", "ADR-006", "ADR-007", "ADR-008", "ADR-009", "ADR-010", "ADR-011", "ADR-012", "ADR-013", "ADR-014", "ADR-015"]
   },
   "contracts": {
     "api_version": "v1",
@@ -142,7 +142,7 @@
     "schemas": [
       "payload DeepSeek aberto com validação mínima",
       "payload CLI textual/function tool reconstruído",
-      "decisão CLI content xor tool_calls",
+      "decisão CLI content xor tool_calls com schema gerado por request",
       "lista OpenAI de modelos combinada"
     ]
   },
@@ -220,22 +220,28 @@
       "F5-protocolo-v6-cobertura-acima-dos-limiares",
       "F5-protocolo-v6-audit-zero-vulnerabilidades",
       "F6-protocolo-v6-compose-systemd-docker-build-links-42-arquivos",
-      "F6-protocolo-v6-health-sem-inferencia-codex-claude-ready"
+      "F6-protocolo-v6-health-sem-inferencia-codex-claude-ready",
+      "F5-claude-2.1.215-structured-output-memory-check-167-testes",
+      "F5-prompt-anti-recusa-sandbox-check-168-testes",
+      "F6-smoke-codex-5.4-anti-recusa-write-file-1-de-1",
+      "F5-confiabilidade-cli-lint-typecheck-175-testes-build",
+      "F5-confiabilidade-cli-cobertura-acima-dos-limiares",
+      "F5-confiabilidade-cli-audit-zero-vulnerabilidades"
     ],
     "gates_failed": [
       "F5-claude-opus-4.7-estrutura-19-de-20",
       "F5-claude-sonnet-4.6-estrutura-18-de-20",
       "F5-claude-haiku-4.5-estrutura-19-de-20-categoria-11-de-20"
     ],
-    "gates_pending": ["F6-deploy-coordenado-protocolo-v6", "F6-benchmark-multiturn-10-turnos-reducao-60-por-cento", "F6-gate-completo-codex-5.6-por-modelo", "F6-smoke-qwen-codex-5.6-no-pc-da-vpn", "F6-smoke-qwen-efforts-low-medium-max-no-pc-da-vpn", "F6-smoke-claude-multiturn-na-conta", "F6-deploy-tls-lan-real"],
-    "test_results": { "files": 7, "tests_passed": 161, "tests_failed": 0 },
-    "coverage_report": { "statements": 80.5, "branches": 77.03, "functions": 86.68, "lines": 86.4 },
+    "gates_pending": ["F6-deploy-coordenado-protocolo-v6", "F6-benchmark-multiturn-10-turnos-reducao-60-por-cento", "F6-gate-completo-codex-5.6-por-modelo", "F6-smoke-qwen-codex-5.6-no-pc-da-vpn", "F6-smoke-qwen-efforts-low-medium-max-no-pc-da-vpn", "F6-smoke-claude-multiturn-na-conta", "F6-deploy-tls-lan-real", "F6-gate-codex-completo-pos-prompt-anti-recusa"],
+    "test_results": { "files": 9, "tests_passed": 175, "tests_failed": 0 },
+    "coverage_report": { "statements": 82.06, "branches": 78.54, "functions": 87.96, "lines": 87.47 },
     "security_report": "docs/security/2026-07-16-security-review.md"
   },
   "operations": {
     "deployment_record": "broker e gateway v5 implantados pelo operador em 20/07/2026 às 11:11 BRT; Codex atualizou para 0.144.6 às 11:43 e o novo check de catálogo aguarda instalação antes do próximo restart",
     "smoke_test_results": "DeepSeek respondeu 200; no Codex 0.144.6 Sol, Terra e Luna passaram individualmente no Bubblewrap com medium, além dos smokes anteriores 5.5/5.4; Claude alcançou o provider e recebeu rate_limit",
-    "observability_config": "stdout mantém cor distinta por alias; logs v6 incluem effort efetivo, usage/cache provider-specific, cacheHitPercent, sessionMode/sessionReused e transcriptBytes, nunca conteúdo",
+    "observability_config": "stdout mantém cor distinta por alias; logs v6 incluem effort efetivo, usage/cache provider-specific, cacheHitPercent, sessionMode/sessionReused e transcriptBytes, nunca conteúdo; JSONL privado registra fases e reasons fechadas em /run/azigate/logs na unidade, com rotação e sem conteúdo CLI",
     "candidate_v6": "código e dist locais aprovados; broker efêmero v6 publicou Codex e Claude como ready sem inferência; deploy coordenado e benchmark real não executados",
     "local_activation": {
       "gateway_env": "ENABLE_CLAUDE_CLI e BROKER_ENABLE_CLAUDE_CLI preparados como true no .env local; secrets preservados e não lidos",
@@ -279,6 +285,14 @@
         "cause": "drift do protocolo App Server no codex-cli 0.144.6: remoteControl/status/changed fora da allowlist e turn/completed com items vazios (decisão movida para item/completed agentMessage)",
         "evidence": "reprodução manual do protocolo com o argv do broker; correção com allowlist ampliada, fallback da decisão, log broker_execute_failed e regressões em test/broker-memory.test.ts; npm run check verde (163 testes)",
         "record": "docs/operations/incidents/2026-07-20-codex-app-server-0144-invalid-cli-output.md"
+      },
+      {
+        "id": "INC-2026-07-22-CLI-DECISION-RELIABILITY",
+        "severity": "P2",
+        "status": "correcao-local-validada-gates-reais-e-deploy-pendentes",
+        "cause": "Codex e Claude colapsavam falhas de decisão/resultado em erros públicos genéricos; o schema estático permitia combinações que a validação posterior recusava e o Claude 2.1.215 não classificava subtypes finais",
+        "evidence": "reasons sanitizadas, JSONL 0700/0600 rotacionado, schema por request, 175 testes, cobertura acima dos limiares e audit sem vulnerabilidades altas",
+        "record": "docs/operations/incidents/2026-07-22-confiabilidade-decisao-cli.md"
       }
     ]
   },
@@ -403,6 +417,38 @@
         "mode": "complementar",
         "phase": "F3-F6",
         "timestamp": "2026-07-20T16:29:14-03:00"
+      },
+      {
+        "skill_name": "autonomous-software-orchestrator",
+        "source": "~/.claude/skills/autonomous-software-orchestrator",
+        "reason": "coordenar a compatibilidade StructuredOutput do Claude Code 2.1.215 no modo memory e o reforço anti-recusa do prompt canônico para o Codex delegar via function tools",
+        "mode": "coordenadora-principal",
+        "phase": "F5-F6",
+        "timestamp": "2026-07-21T12:30:00-03:00"
+      },
+      {
+        "skill_name": "autonomous-software-orchestrator",
+        "source": "~/.agents/skills/autonomous-software-orchestrator",
+        "reason": "coordenar a correção do incidente multi-provider, ADR-015, quality gates e rastreabilidade",
+        "mode": "coordenadora-principal",
+        "phase": "F7",
+        "timestamp": "2026-07-22T11:44:00-03:00"
+      },
+      {
+        "skill_name": "defensive-security-auditor",
+        "source": "~/.agents/skills/defensive-security-auditor",
+        "reason": "garantir que logs de execução preservem a proibição de conteúdo sensível e o fail-closed",
+        "mode": "complementar",
+        "phase": "F7",
+        "timestamp": "2026-07-22T11:44:00-03:00"
+      },
+      {
+        "skill_name": "ai-docs-self-healing",
+        "source": "~/.agents/skills/ai-docs-self-healing",
+        "reason": "sincronizar módulos, operação, threat model, ADR e índices com a correção",
+        "mode": "complementar",
+        "phase": "F6-F7",
+        "timestamp": "2026-07-22T11:44:00-03:00"
       }
     ]
   }

@@ -7,7 +7,8 @@ O gateway emite uma linha JSON por requisição concluída. No stdout interativo
 ## Localização no código
 
 `src/app.ts`, `src/routes/chat.ts`, `src/providers/openai-response.ts`,
-`src/observability/log-colors.ts`, `src/observability/metrics.ts` e `src/types.ts`.
+`src/observability/log-colors.ts`, `src/observability/metrics.ts`, `src/types.ts`
+e `src/broker/execution-log.ts`.
 
 ## Entrada
 
@@ -19,6 +20,11 @@ O evento final pode incluir `requestId`, método, rota, status, duração,
 `stream`, `model`, `effort`, status upstream, usage padrão, detalhes de cache,
 `cacheHitPercent`, `sessionMode`, `sessionReused`, `transcriptBytes` e códigos
 sanitizados. A cor ANSI é uma apresentação do stdout: não altera a semântica.
+
+O broker também escreve `executions.jsonl` durante a execução em
+`BROKER_EXECUTION_LOG_DIR` (por padrão em `runtime/logs/`; `/run/azigate/logs` na unidade
+systemd). Cada execução registra as fases `received`, despacho, preparação, turno,
+validação e conclusão/falha, permitindo acompanhar o arquivo com `tail -f`.
 
 ## Dependências
 
@@ -42,6 +48,11 @@ Fastify, Pino e a normalização do request CLI.
 - Erros de validação podem registrar códigos seguros como
   `invalid_content_shape`, `invalid_tool_schema` e `invalid_historical_tool_calls`.
 - Nunca registrar mensagens, prompts, bodies, respostas, tool arguments, headers, credenciais ou stdout/stderr do CLI.
+- O diretório de execução é `0700`, os arquivos JSONL são `0600` e a rotação usa
+  `BROKER_EXECUTION_LOG_MAX_BYTES` e `BROKER_EXECUTION_LOG_MAX_FILES`.
+- Falhas registram somente uma reason interna fechada (por exemplo,
+  `claude_result_error_max_structured_output_retries` ou
+  `decision_tool_not_offered`); a resposta HTTP continua sanitizada.
 
 ## Fluxo resumido
 

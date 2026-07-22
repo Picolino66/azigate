@@ -10,6 +10,7 @@
 - [OpenAPI](../specs/openapi.yaml)
 - [Protocolo privado do broker](../specs/broker-api.md)
 - [Plano rastreável](../tasks/implementation-plan.md)
+- [Plano de confiabilidade de execução CLI](../tasks/cli-execution-reliability-plan.md)
 
 ## Módulos
 
@@ -58,6 +59,7 @@
 - [ADR-012 — configuração Claude em home efêmero](../adr/ADR-012-configuracao-claude-em-home-efemero.md)
 - [ADR-013 — check Codex por catálogo estruturado](../adr/ADR-013-check-de-capacidade-codex-por-catalogo.md)
 - [ADR-014 — sessões CLI efêmeras em memória e usage por provider](../adr/ADR-014-sessoes-cli-efemeras-em-memoria-e-usage-por-provider.md)
+- [ADR-015 — telemetria segura e schema de decisão CLI](../adr/ADR-015-telemetria-segura-e-schema-decisao-cli.md)
 
 ## Regra de sincronização
 

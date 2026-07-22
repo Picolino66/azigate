@@ -57,7 +57,16 @@ coordenadamente no broker/gateway.
 - notificações de metadados do App Server (`remoteControl/status/changed`,
   `warning`) são ignoradas; no `codex-cli >= 0.144` a decisão do turno é capturada
   do último `item/completed` `agentMessage`, pois `turn/completed` chega com
-  `items` vazios.
+  `items` vazios;
+- no Claude Code `>= 2.1.215`, o `--json-schema` é materializado pela CLI como um
+  tool call interno `StructuredOutput`: o assistant emite o `tool_use` e a CLI
+  ecoa uma mensagem `user` com o `tool_result` correspondente. Somente esse par é
+  aceito, com `tool_use_id` casado ao `tool_use` do mesmo turno; qualquer outra
+  ferramenta ou eco divergente encerra a sessão com `invalid_cli_output`.
+- O schema é gerado para cada request e impõe texto XOR tools, nomes oferecidos,
+  `tool_choice` e o limite de paralelismo; a validação final local permanece ativa.
+- O broker registra fases e reasons sanitizados em JSONL privado durante cada turno,
+  sem persistir transcript, resposta, tool arguments ou saída bruta.
 
 ## Fluxo resumido
 

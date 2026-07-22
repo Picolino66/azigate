@@ -41,7 +41,7 @@ host auxiliar privado e pode manter sessões efêmeras somente em RAM:
 - `broker`: capacidade, protocolo, prompt estável, correlação semântica, sessões em
   memória, isolamento, subprocessos e servidor host;
 - `models`: catálogo do upstream cacheado combinado com aliases CLI saudáveis;
-- `observability`: métricas e logs somente de metadados; cada alias conhecido recebe uma cor ANSI
+- `observability`: métricas, stdout e JSONL privado somente de metadados; cada alias conhecido recebe uma cor ANSI
   própria no campo `model`, e o `effort` registrado para Claude é o valor normalizado efetivamente usado.
 
 Não há banco, fila, frontend, proxy genérico nem persistência de conversa. As
@@ -84,7 +84,7 @@ Cada request:
 6. usa um App Server Codex com threads efêmeras ou um processo Claude `stream-json`
    persistente; o primeiro turno recebe tudo e os seguintes somente o delta;
 7. limita a saída de cada turno a 4 MiB e o tempo a 10 minutos, recusa eventos de
-   ferramenta local e valida a decisão final;
+   ferramenta local, registra fases/reasons sanitizados e valida a decisão final;
 8. cancelamento interrompe o turno Codex ou encerra o grupo Claude; TTL, eviction,
    crash e restart eliminam a sessão.
 
@@ -120,6 +120,8 @@ preserva o isolamento anterior.
 6. Auth dirs/config -> CLI: credenciais necessárias, nunca montadas no container
    nem registradas; a configuração Claude é somente leitura no serviço e efêmera
    na sandbox.
+7. Broker -> log de execução: JSONL privado com enum fechada de fases/reasons; não
+   contém conteúdo de conversa, saída CLI, argumentos, stderr ou paths privados.
 
 ## Decisões
 
@@ -133,6 +135,7 @@ preserva o isolamento anterior.
 - [ADR-012](../adr/ADR-012-configuracao-claude-em-home-efemero.md): configuração Claude em home efêmero.
 - [ADR-013](../adr/ADR-013-check-de-capacidade-codex-por-catalogo.md): check Codex por catálogo estruturado.
 - [ADR-014](../adr/ADR-014-sessoes-cli-efemeras-em-memoria-e-usage-por-provider.md): sessões efêmeras e contabilização provider-specific.
+- [ADR-015](../adr/ADR-015-telemetria-segura-e-schema-decisao-cli.md): telemetria sanitizada e schema por request.
 
 ## Referências de integração
 

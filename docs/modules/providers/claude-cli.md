@@ -30,6 +30,9 @@ habilitação.
   e MCP estrito vazio. `stateless` preserva o modo JSON de uma chamada.
 - Slash commands, Chrome, persistência e fontes de settings são desabilitados.
 - Prompt suggestions são desabilitadas para evitar chamadas auxiliares.
+- O prompt canônico compartilhado instrui que a sandbox local é descartável e que
+  ações em arquivos/comandos devem ser delegadas pela function tool ao executor
+  remoto, nunca recusadas por falta de permissão local.
 - `dontAsk` não concede ferramentas; a lista de tools continua vazia.
 - Cada alias mapeia para um único nome completo enviado por `--model`; `claude-cli` equivale a Sonnet 4.6.
 - Omissão ou effort incompatível aplica o padrão do catálogo. Sonnet 4.5 e Haiku 4.5 não recebem `--effort`.
@@ -43,6 +46,16 @@ habilitação.
   arquivo original nunca é montado na sandbox.
 - A correlação em RAM reutiliza o processo somente com um prefixo semântico exato.
   Mudança de effort cria sessão nova porque `--effort` pertence à inicialização.
+- No Claude Code `>= 2.1.215`, o structured output do modo memory chega como tool
+  call interno `StructuredOutput` seguido do eco `user`/`tool_result`; o broker
+  aceita apenas esse par casado por `tool_use_id` e continua recusando qualquer
+  outra ferramenta.
+- O schema de structured output é específico do request e impõe texto XOR tools,
+  nomes oferecidos, `tool_choice` e paralelismo. A validação posterior local
+  continua obrigatória.
+- Resultado final diferente de `success` é classificado por reason sanitizada;
+  `error_max_structured_output_retries` e `error_during_execution` permanecem
+  `cli_execution_failed` no contrato público, sem publicar dados do provider.
 - Usage soma input novo, criação de cache e leitura de cache. O custo do CLI é
   registrado como estimativa, não como porcentagem da cota.
 - Bloqueio de autenticação/política mantém o alias indisponível; nenhuma API key é introduzida.
