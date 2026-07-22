@@ -10,6 +10,7 @@ import {
   CliEventProtocolError,
   CliFinalSchemaError,
   CliOutputLimitError,
+  ClaudeResultError,
   CliProcessExitError,
   CliTurnFailedError,
   parseClaudeUsage,
@@ -55,6 +56,9 @@ function config(root: string): BrokerConfig {
   return {
     socketPath: join(socketDirectory, 'broker.sock'),
     workRoot: work,
+    executionLogDir: join(root, 'logs'),
+    executionLogMaxBytes: 65_536,
+    executionLogMaxFiles: 2,
     enableCodex: true,
     enableClaude: false,
     executionTimeoutMs: 1000,
@@ -495,6 +499,29 @@ describe('broker local', () => {
       },
     })
     await expect(executor.execute(claudeBrokerRequest())).rejects.toBeInstanceOf(ErrorType)
+  })
+
+  it.each([
+    ['error_during_execution', 'claude_result_error_during_execution'],
+    ['error_max_structured_output_retries', 'claude_result_error_max_structured_output_retries'],
+    ['error_max_turns', 'claude_result_error_max_turns'],
+  ] as const)('classifica resultado final Claude: %s', async (subtype, reason) => {
+    const root = directory()
+    const runner: ProcessRunnerLike = { run: async () => completed(JSON.stringify({ subtype, is_error: true })) }
+    const executor = new BrokerExecutor(config(root), runner, {
+      codex: { available: false, code: 'disabled' },
+      claude: {
+        available: true,
+        binaryPath: process.execPath,
+        authDir: join(root, 'auth'),
+        configPath: join(root, '.claude.json'),
+      },
+    })
+    await expect(executor.execute(claudeBrokerRequest())).rejects.toMatchObject({
+      executionReason: reason,
+    })
+    await expect(executor.execute({ ...claudeBrokerRequest(), requestId: `${subtype}-2` }))
+      .rejects.toBeInstanceOf(ClaudeResultError)
   })
 
   it('ProcessRunner limita saída, aplica timeout e propaga cancelamento sem shell', async () => {

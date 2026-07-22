@@ -4,6 +4,9 @@ import { isAbsolute, join } from 'node:path'
 export interface BrokerConfig {
   socketPath: string
   workRoot: string
+  executionLogDir: string
+  executionLogMaxBytes: number
+  executionLogMaxFiles: number
   enableCodex: boolean
   enableClaude: boolean
   executionTimeoutMs: number
@@ -59,6 +62,12 @@ export function loadBrokerConfig(env: NodeJS.ProcessEnv = process.env): BrokerCo
       env.BROKER_WORK_ROOT?.trim() || join(tmpdir(), 'azigate-broker'),
       'BROKER_WORK_ROOT',
     ),
+    executionLogDir: absolutePath(
+      env.BROKER_EXECUTION_LOG_DIR?.trim() || join(process.cwd(), 'runtime', 'logs'),
+      'BROKER_EXECUTION_LOG_DIR',
+    ),
+    executionLogMaxBytes: integer(env, 'BROKER_EXECUTION_LOG_MAX_BYTES', 4_194_304, 65_536, 67_108_864),
+    executionLogMaxFiles: integer(env, 'BROKER_EXECUTION_LOG_MAX_FILES', 7, 1, 30),
     enableCodex: boolean(env, 'BROKER_ENABLE_CODEX_CLI', true),
     enableClaude: boolean(env, 'BROKER_ENABLE_CLAUDE_CLI', false),
     executionTimeoutMs: integer(env, 'BROKER_EXECUTION_TIMEOUT_MS', 600_000, 1000, 3_600_000),

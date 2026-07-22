@@ -9,6 +9,7 @@ User=%i
 Group=%i
 WorkingDirectory=/opt/azigate
 Environment=BROKER_SOCKET_PATH=/run/azigate/broker.sock
+Environment=BROKER_EXECUTION_LOG_DIR=/run/azigate/logs
 Environment=BROKER_ENABLE_CODEX_CLI=true
 Environment=BROKER_ENABLE_CLAUDE_CLI=false
 Environment=BROKER_CODEX_SESSION_MODE=memory

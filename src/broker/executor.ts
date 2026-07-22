@@ -7,8 +7,9 @@ import { buildIsolationCommand } from './isolation.js'
 import type { ProcessRunResult, ProcessRunnerLike } from './process-runner.js'
 import type { BrokerDecision, BrokerExecuteRequest, BrokerExecuteResponse, BrokerUsage } from './protocol.js'
 import { BROKER_PROTOCOL_VERSION, isClaudeCliModel, isCodexCliModel } from './protocol.js'
-import { canonicalPrompt, DECISION_JSON_SCHEMA } from './prompt.js'
+import { canonicalPrompt, decisionJsonSchema } from './prompt.js'
 import type { MemorySessionExecutorLike } from './memory-executor.js'
+import type { ExecutionProgressReporter } from './execution-log.js'
 import { validateCliDecision } from '../providers/cli-request.js'
 import {
   CliExecutionFailedError,
@@ -25,11 +26,23 @@ const CLAUDE_SYSTEM_PROMPT = [
   'Retorne exatamente o objeto exigido pelo JSON Schema.',
 ].join(' ')
 
-export class CliFinalSchemaError extends InvalidCliOutputError {}
+export class CliFinalSchemaError extends InvalidCliOutputError {
+  constructor(reason = 'decision_shape_invalid') {
+    super(reason)
+  }
+}
 
-export class CliEventProtocolError extends InvalidCliOutputError {}
+export class CliEventProtocolError extends InvalidCliOutputError {
+  constructor() {
+    super('codex_event_protocol_invalid')
+  }
+}
 
-export class UnexpectedCliToolEventError extends InvalidCliOutputError {}
+export class UnexpectedCliToolEventError extends InvalidCliOutputError {
+  constructor() {
+    super('unexpected_local_tool_event')
+  }
+}
 
 export class CliProcessExitError extends CliExecutionFailedError {
   constructor(exitCode: number | null, category: string) {
@@ -45,7 +58,26 @@ export class CliTurnFailedError extends CliExecutionFailedError {
   }
 }
 
-export class CliOutputLimitError extends CliExecutionFailedError {}
+export class CliOutputLimitError extends CliExecutionFailedError {
+  constructor() {
+    super('cli_output_limit')
+  }
+}
+
+export class ClaudeResultError extends CliExecutionFailedError {
+  constructor(subtype: unknown) {
+    const reason = subtype === 'error_during_execution'
+      ? 'claude_result_error_during_execution'
+      : subtype === 'error_max_structured_output_retries'
+        ? 'claude_result_error_max_structured_output_retries'
+        : subtype === 'error_max_turns'
+          ? 'claude_result_error_max_turns'
+          : subtype === 'error_max_budget_usd'
+            ? 'claude_result_error_max_budget_usd'
+            : 'claude_result_error_unknown'
+    super(reason)
+  }
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -53,15 +85,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function rawDecision(value: unknown): BrokerDecision {
   if (!isRecord(value) || (typeof value.content !== 'string' && value.content !== null)) {
-    throw new CliFinalSchemaError()
+    throw new CliFinalSchemaError('decision_shape_invalid')
   }
   const calls = value.tool_calls
-  if (!Array.isArray(calls)) throw new CliFinalSchemaError()
+  if (!Array.isArray(calls)) throw new CliFinalSchemaError('decision_shape_invalid')
   return {
     content: value.content,
     toolCalls: calls.map((call) => {
       if (!isRecord(call) || typeof call.name !== 'string' || typeof call.arguments !== 'string') {
-        throw new CliFinalSchemaError()
+        throw new CliFinalSchemaError('decision_shape_invalid')
       }
       return { name: call.name, arguments: call.arguments }
     }),
@@ -169,7 +201,7 @@ async function boundedJsonFile(path: string, maxBytes: number): Promise<unknown>
   try {
     return JSON.parse(await readFile(path, 'utf8'))
   } catch {
-    throw new CliFinalSchemaError()
+    throw new CliFinalSchemaError('decision_json_invalid')
   }
 }
 
@@ -178,9 +210,12 @@ function parseClaude(stdout: string): { decision: BrokerDecision; usage?: Broker
   try {
     payload = JSON.parse(stdout)
   } catch {
-    throw new CliFinalSchemaError()
+    throw new CliFinalSchemaError('decision_json_invalid')
   }
-  if (!isRecord(payload) || payload.is_error === true) throw new CliExecutionFailedError()
+  if (!isRecord(payload)) throw new CliFinalSchemaError('decision_shape_invalid')
+  if (payload.is_error === true || (typeof payload.subtype === 'string' && payload.subtype !== 'success')) {
+    throw new ClaudeResultError(payload.subtype)
+  }
   if (Array.isArray(payload.permission_denials) && payload.permission_denials.length > 0) {
     throw new UnexpectedCliToolEventError()
   }
@@ -189,7 +224,7 @@ function parseClaude(stdout: string): { decision: BrokerDecision; usage?: Broker
     try {
       structured = JSON.parse(payload.result)
     } catch {
-      throw new CliFinalSchemaError()
+      throw new CliFinalSchemaError('decision_json_invalid')
     }
   }
   if (structured === undefined && 'content' in payload && 'tool_calls' in payload) structured = payload
@@ -258,7 +293,11 @@ export class BrokerExecutor {
     private readonly memoryExecutor?: MemorySessionExecutorLike,
   ) {}
 
-  async execute(request: BrokerExecuteRequest, signal?: AbortSignal): Promise<BrokerExecuteResponse> {
+  async execute(
+    request: BrokerExecuteRequest,
+    signal?: AbortSignal,
+    progress?: ExecutionProgressReporter,
+  ): Promise<BrokerExecuteResponse> {
     const transcriptBytes = Buffer.byteLength(JSON.stringify({ messages: request.messages, tools: request.tools }))
     if (transcriptBytes > this.config.maxTranscriptBytes) throw new CliContextTooLargeError()
     const capability = this.capabilities[request.provider]
@@ -268,14 +307,16 @@ export class BrokerExecutor {
       : this.config.claudeSessionMode
     if (sessionMode === 'memory') {
       if (this.memoryExecutor === undefined) throw new CliUnavailableError()
-      return this.memoryExecutor.execute(request, transcriptBytes, signal)
+      await progress?.report({ phase: 'provider_dispatch_started' })
+      return this.memoryExecutor.execute(request, transcriptBytes, signal, progress)
     }
     await mkdir(this.config.workRoot, { recursive: true, mode: 0o700 })
     await chmod(this.config.workRoot, 0o700)
     const workspace = await mkdtemp(join(this.config.workRoot, 'request-'))
     try {
+      await progress?.report({ phase: 'workspace_prepared' })
       await chmod(workspace, 0o700)
-      await writeFile(join(workspace, 'decision.schema.json'), JSON.stringify(DECISION_JSON_SCHEMA), { mode: 0o600 })
+      await writeFile(join(workspace, 'decision.schema.json'), JSON.stringify(decisionJsonSchema(request)), { mode: 0o600 })
       await writeFile(join(workspace, 'empty-mcp.json'), '{"mcpServers":{}}', { mode: 0o600 })
       await writeFile(
         join(workspace, 'claude-settings.json'),
@@ -293,7 +334,7 @@ export class BrokerExecutor {
       }
       const cliArgs = request.provider === 'codex'
         ? this.codexArgs(request.model, request.effort)
-        : this.claudeArgs(request.model, request.effort)
+        : this.claudeArgs(request)
       const isolated = buildIsolationCommand(
         this.config,
         request.provider,
@@ -303,6 +344,7 @@ export class BrokerExecutor {
         cliArgs,
         ephemeralHome,
       )
+      await progress?.report({ phase: 'provider_turn_started' })
       const result = await this.runner.run({
         command: isolated.command,
         args: isolated.args,
@@ -314,6 +356,7 @@ export class BrokerExecutor {
         maxOutputBytes: this.config.maxOutputBytes,
         ...(signal ? { signal } : {}),
       })
+      await progress?.report({ phase: 'provider_turn_finished' })
       assertProcessState(result)
       const codexUsage = request.provider === 'codex' ? inspectCodexEvents(result.stdout) : undefined
       assertProcessExit(result)
@@ -326,6 +369,7 @@ export class BrokerExecutor {
           }
         : parseClaude(result.stdout)
       const decision = validateCliDecision(parsed.decision, request)
+      await progress?.report({ phase: 'decision_validated' })
       return {
         version: BROKER_PROTOCOL_VERSION,
         requestId: request.requestId,
@@ -371,16 +415,16 @@ export class BrokerExecutor {
     ]
   }
 
-  private claudeArgs(model: BrokerExecuteRequest['model'], effort: BrokerExecuteRequest['effort']): string[] {
-    if (!isClaudeCliModel(model)) throw new CliUnavailableError()
+  private claudeArgs(request: BrokerExecuteRequest): string[] {
+    if (!isClaudeCliModel(request.model)) throw new CliUnavailableError()
     return [
       '--print',
       '--prompt-suggestions', 'false',
-      '--model', model,
-      ...(effort === undefined ? [] : ['--effort', effort]),
+      '--model', request.model,
+      ...(request.effort === undefined ? [] : ['--effort', request.effort]),
       '--input-format', 'text',
       '--output-format', 'json',
-      '--json-schema', JSON.stringify(DECISION_JSON_SCHEMA),
+      '--json-schema', JSON.stringify(decisionJsonSchema(request)),
       '--tools', '',
       '--strict-mcp-config',
       '--mcp-config', '/work/empty-mcp.json',

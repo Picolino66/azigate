@@ -1,4 +1,4 @@
-import type { BrokerExecuteRequest } from './protocol.js'
+import type { BrokerExecuteRequest, BrokerToolChoice } from './protocol.js'
 
 export const DECISION_JSON_SCHEMA = {
   type: 'object',
@@ -20,6 +20,62 @@ export const DECISION_JSON_SCHEMA = {
     },
   },
 } as const
+
+function allowedToolNames(request: Pick<BrokerExecuteRequest, 'tools' | 'toolChoice'>): string[] {
+  const names = request.tools.map((tool) => tool.name)
+  return typeof request.toolChoice === 'object' ? [request.toolChoice.name] : names
+}
+
+function allowsText(choice: BrokerToolChoice): boolean {
+  return choice !== 'required' && typeof choice !== 'object'
+}
+
+function allowsTools(choice: BrokerToolChoice): boolean {
+  return choice !== 'none'
+}
+
+export function decisionJsonSchema(
+  request: Pick<BrokerExecuteRequest, 'tools' | 'toolChoice' | 'parallelToolCalls'>,
+): Record<string, unknown> {
+  const branches: Record<string, unknown>[] = []
+  if (allowsText(request.toolChoice)) {
+    branches.push({
+      type: 'object',
+      additionalProperties: false,
+      required: ['content', 'tool_calls'],
+      properties: {
+        content: { type: 'string' },
+        tool_calls: { type: 'array', maxItems: 0 },
+      },
+    })
+  }
+  const names = allowedToolNames(request)
+  if (allowsTools(request.toolChoice) && names.length > 0) {
+    branches.push({
+      type: 'object',
+      additionalProperties: false,
+      required: ['content', 'tool_calls'],
+      properties: {
+        content: { type: 'null' },
+        tool_calls: {
+          type: 'array',
+          minItems: 1,
+          ...(request.parallelToolCalls ? {} : { maxItems: 1 }),
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['name', 'arguments'],
+            properties: {
+              name: { type: 'string', enum: names },
+              arguments: { type: 'string' },
+            },
+          },
+        },
+      },
+    })
+  }
+  return branches.length === 1 ? branches[0] ?? DECISION_JSON_SCHEMA : { oneOf: branches }
+}
 
 function stableValue(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(stableValue)

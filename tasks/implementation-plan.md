@@ -25,6 +25,9 @@ Evoluir o monólito Fastify existente sem alterar suas quatro rotas públicas. A
 
 O5 continua sendo o último snapshot estável até o smoke Qwen e o deploy LAN/TLS reais. Os aliases permanecem desligados por padrão; a aprovação dos gates não os publica automaticamente.
 
+O plano específico para os incidentes de decisão/execução CLI de 22/07/2026 está em
+[Plano de confiabilidade de execução CLI](./cli-execution-reliability-plan.md).
+
 ## Arquitetura e contratos
 
 1. **Registrar decisões multiprovedor**

@@ -56,6 +56,9 @@ Crie `/etc/azigate/broker.env` com `0600`. Esse arquivo não deve conter `DEEPSE
 
 ```dotenv
 BROKER_SOCKET_PATH=/run/azigate/broker.sock
+BROKER_EXECUTION_LOG_DIR=/run/azigate/logs
+BROKER_EXECUTION_LOG_MAX_BYTES=4194304
+BROKER_EXECUTION_LOG_MAX_FILES=7
 BROKER_ENABLE_CODEX_CLI=true
 BROKER_ENABLE_CLAUDE_CLI=false
 BROKER_EXECUTION_TIMEOUT_MS=600000
@@ -89,6 +92,25 @@ sudo systemctl enable --now azigate-broker@USUARIO.service
 O broker também corrige os auth dirs habilitados para `0700` no startup e valida os
 arquivos privados usados pelo modo `memory`. O diretório `/run/azigate` nasce
 `0700` e o socket `0600`.
+
+## Logs de execução sanitizados
+
+O broker cria `executions.jsonl` durante cada chamada em
+`BROKER_EXECUTION_LOG_DIR`. Na unidade fornecida, o diretório é
+`/run/azigate/logs`, com modo `0700`; os arquivos são `0600`. Acompanhe uma
+execução em curso sem conteúdo da conversa:
+
+```bash
+sudo tail -f /run/azigate/logs/executions.jsonl
+```
+
+Cada linha contém somente timestamp, request ID, provider/model/effort permitidos,
+modo de sessão, bytes do transcript, fase, duração, reuso e reason sanitizada. Não
+copie nem tente adicionar prompts, respostas, `structured_output`, argumentos de
+tools, stdout/stderr, headers, credenciais ou paths privados. A retenção local é
+controlada por `BROKER_EXECUTION_LOG_MAX_BYTES` e
+`BROKER_EXECUTION_LOG_MAX_FILES`; o diretório fica fora do Git e não é montado no
+container.
 
 A unidade usa `ProtectHome=tmpfs` e reexpõe somente
 `/home/USUARIO/.codex`, `/home/USUARIO/.claude`, o arquivo
@@ -197,15 +219,16 @@ sudo systemctl disable --now azigate-broker@USUARIO.service
 - `cli_timeout`: a execução excedeu 10 minutos; não aumente antes de investigar rede/login.
 - `cli_context_too_large`: use compactação ou `/clear`; o gateway nunca trunca o
   transcript automaticamente.
-- `invalid_cli_output`: schema, tool name, argumentos ou evento local foi recusado; mantenha o alias desligado se for recorrente.
+- `invalid_cli_output`: schema, tool name, argumentos ou evento local foi recusado; consulte a reason sanitizada no JSONL antes de reproduzir e mantenha o alias desligado se for recorrente.
 - `bwrap_unavailable`: valide user namespaces e o smoke de Bubblewrap no mesmo usuário/systemd.
 - `config_file_unavailable`: confirme que `CLAUDE_CONFIG_PATH` aponta para um
   arquivo regular, de no máximo 1 MiB, pertencente ao usuário do serviço e com
   modo `0600`; não aponte para um diretório nem relaxe as permissões.
-- `cli_execution_failed` após cerca de dois segundos, com o health saudável: o
-  CLI chegou ao provedor, mas pode ter recebido limite de conta (`429`) ou outro
-  erro remoto. Execute um único gate diagnóstico e revise a conta; evite loops de
-  retry no agente.
+- `cli_execution_failed` com health saudável: consulte a reason sanitizada no JSONL.
+  Para Claude, `claude_result_error_max_structured_output_retries` indica que o
+  provider não concluiu o schema após as próprias tentativas; não faça loop de retry
+  no agente. `claude_result_error_during_execution` pode indicar falha remota;
+  execute um único gate diagnóstico e revise a conta.
 - socket com permission denied: alinhe UID/GID do container com o usuário da unidade; não relaxe para `0666`.
 - Toda falha de `/execute` emite no journal do broker uma linha
   `broker_execute_failed` com `requestId`, provider, nome da classe de erro e

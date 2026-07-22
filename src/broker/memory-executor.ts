@@ -13,7 +13,8 @@ import type {
   CliEffortLevel,
 } from './protocol.js'
 import { BROKER_PROTOCOL_VERSION, isClaudeCliModel, isCodexCliModel } from './protocol.js'
-import { canonicalSystemPrompt, canonicalTurnPrompt, DECISION_JSON_SCHEMA } from './prompt.js'
+import { canonicalSystemPrompt, canonicalTurnPrompt, decisionJsonSchema } from './prompt.js'
+import type { ExecutionProgressReporter } from './execution-log.js'
 import {
   hashesStartWith,
   sessionKey,
@@ -28,7 +29,12 @@ import {
   InvalidCliOutputError,
 } from '../providers/errors.js'
 import { ClientAbortedError } from '../upstream/errors.js'
-import { parseClaudeUsage, parseCodexUsage, UnexpectedCliToolEventError } from './executor.js'
+import {
+  ClaudeResultError,
+  parseClaudeUsage,
+  parseCodexUsage,
+  UnexpectedCliToolEventError,
+} from './executor.js'
 
 interface SessionTurnResult {
   decision: BrokerDecision
@@ -53,6 +59,7 @@ export interface MemorySessionExecutorLike {
     request: BrokerExecuteRequest,
     transcriptBytes: number,
     signal?: AbortSignal,
+    progress?: ExecutionProgressReporter,
   ): Promise<BrokerExecuteResponse>
   shutdown(): Promise<void>
 }
@@ -73,14 +80,14 @@ function stringAt(record: Record<string, unknown>, key: string): string | undefi
 
 function parseDecision(value: unknown): BrokerDecision {
   if (!isRecord(value) || (typeof value.content !== 'string' && value.content !== null)) {
-    throw new InvalidCliOutputError()
+    throw new InvalidCliOutputError('decision_shape_invalid')
   }
-  if (!Array.isArray(value.tool_calls)) throw new InvalidCliOutputError()
+  if (!Array.isArray(value.tool_calls)) throw new InvalidCliOutputError('decision_shape_invalid')
   return {
     content: value.content,
     toolCalls: value.tool_calls.map((call) => {
       if (!isRecord(call) || typeof call.name !== 'string' || typeof call.arguments !== 'string') {
-        throw new InvalidCliOutputError()
+        throw new InvalidCliOutputError('decision_shape_invalid')
       }
       return { name: call.name, arguments: call.arguments }
     }),
@@ -92,7 +99,7 @@ function parseDecisionText(text: string): BrokerDecision {
     return parseDecision(JSON.parse(text))
   } catch (error) {
     if (error instanceof InvalidCliOutputError) throw error
-    throw new InvalidCliOutputError()
+    throw new InvalidCliOutputError('decision_json_invalid')
   }
 }
 
@@ -153,13 +160,14 @@ class CodexAppServerHost {
     const thread = isRecord(result) ? objectAt(result, 'thread') : undefined
     const threadId = thread === undefined ? undefined : stringAt(thread, 'id')
     if (threadId === undefined) throw new CliExecutionFailedError()
-    return new CodexThreadHandle(this, threadId)
+    return new CodexThreadHandle(this, threadId, decisionJsonSchema(request))
   }
 
   async turn(
     threadId: string,
     prompt: string,
     effort: CliEffortLevel | undefined,
+    outputSchema: Record<string, unknown>,
     signal?: AbortSignal,
   ): Promise<SessionTurnResult> {
     if (effort === undefined) throw new CliUnavailableError()
@@ -172,7 +180,7 @@ class CodexAppServerHost {
       effort,
       approvalPolicy: 'never',
       cwd: '/work',
-      outputSchema: DECISION_JSON_SCHEMA,
+      outputSchema,
       sandboxPolicy: { type: 'readOnly' },
     }, signal, deadline)
     const turn = isRecord(start) ? objectAt(start, 'turn') : undefined
@@ -358,7 +366,11 @@ class CodexAppServerHost {
 class CodexThreadHandle implements SessionHandle {
   private open = true
 
-  constructor(private readonly host: CodexAppServerHost, private readonly threadId: string) {}
+  constructor(
+    private readonly host: CodexAppServerHost,
+    private readonly threadId: string,
+    private readonly outputSchema: Record<string, unknown>,
+  ) {}
 
   get alive(): boolean {
     return this.open && this.host.alive
@@ -366,7 +378,7 @@ class CodexThreadHandle implements SessionHandle {
 
   execute(prompt: string, effort: CliEffortLevel | undefined, signal?: AbortSignal): Promise<SessionTurnResult> {
     if (!this.alive) return Promise.reject(new CliExecutionFailedError())
-    return this.host.turn(this.threadId, prompt, effort, signal)
+    return this.host.turn(this.threadId, prompt, effort, this.outputSchema, signal)
   }
 
   async close(): Promise<void> {
@@ -467,7 +479,7 @@ function assertSafeCodexItem(value: unknown): void {
 }
 
 function decisionFromCodexTurn(turn: Record<string, unknown>, fallbackText?: string): BrokerDecision {
-  if (!Array.isArray(turn.items)) throw new InvalidCliOutputError()
+  if (!Array.isArray(turn.items)) throw new InvalidCliOutputError('codex_decision_missing')
   for (const item of turn.items) assertSafeCodexItem(item)
   const messages = turn.items.filter((item): item is Record<string, unknown> =>
     isRecord(item) && item.type === 'agentMessage' && typeof item.text === 'string')
@@ -476,7 +488,7 @@ function decisionFromCodexTurn(turn: Record<string, unknown>, fallbackText?: str
   // Codex >= 0.144 envia turn/completed com items vazios (itemsView "notLoaded");
   // a decisão passa a vir do último item/completed agentMessage do turno.
   if (fallbackText !== undefined) return parseDecisionText(fallbackText)
-  throw new InvalidCliOutputError()
+  throw new InvalidCliOutputError('codex_decision_missing')
 }
 
 export function parseCodexAppUsage(value: unknown): BrokerUsage | undefined {
@@ -534,7 +546,7 @@ function assertClaudeStructuredOutputEcho(
 
 function parseClaudeStreamResult(value: Record<string, unknown>): SessionTurnResult {
   if (value.is_error === true || (typeof value.subtype === 'string' && value.subtype !== 'success')) {
-    throw new CliExecutionFailedError()
+    throw new ClaudeResultError(value.subtype)
   }
   if (Array.isArray(value.permission_denials) && value.permission_denials.length > 0) {
     throw new UnexpectedCliToolEventError()
@@ -544,7 +556,7 @@ function parseClaudeStreamResult(value: Record<string, unknown>): SessionTurnRes
     try {
       structured = JSON.parse(value.result)
     } catch {
-      throw new InvalidCliOutputError()
+      throw new InvalidCliOutputError('decision_json_invalid')
     }
   }
   const decision = parseDecision(structured)
@@ -569,6 +581,7 @@ export class MemorySessionExecutor implements MemorySessionExecutorLike {
     request: BrokerExecuteRequest,
     transcriptBytes: number,
     signal?: AbortSignal,
+    progress?: ExecutionProgressReporter,
   ): Promise<BrokerExecuteResponse> {
     await this.purgeExpired()
     const key = sessionKey(request)
@@ -580,6 +593,7 @@ export class MemorySessionExecutor implements MemorySessionExecutorLike {
     const deltaStart = session?.hashes.length ?? 0
     if (session === undefined) {
       await this.ensureCapacity()
+      await progress?.report({ phase: 'workspace_prepared' })
       session = {
         key,
         hashes: [],
@@ -593,8 +607,11 @@ export class MemorySessionExecutor implements MemorySessionExecutorLike {
       messages: request.messages.slice(deltaStart),
     }
     try {
+      await progress?.report({ phase: 'provider_turn_started' })
       const result = await session.handle.execute(canonicalTurnPrompt(turnRequest), request.effort, signal)
+      await progress?.report({ phase: 'provider_turn_finished' })
       const decision = validateCliDecision(result.decision, request)
+      await progress?.report({ phase: 'decision_validated' })
       session.hashes = transcriptHashes(transcriptWithDecision(request.messages, decision))
       session.lastUsedAt = this.now()
       return {
@@ -644,7 +661,7 @@ export class MemorySessionExecutor implements MemorySessionExecutorLike {
         '--input-format', 'stream-json',
         '--output-format', 'stream-json',
         '--verbose',
-        '--json-schema', JSON.stringify(DECISION_JSON_SCHEMA),
+        '--json-schema', JSON.stringify(decisionJsonSchema(request)),
         '--tools', '',
         '--strict-mcp-config',
         '--mcp-config', '/work/empty-mcp.json',

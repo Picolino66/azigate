@@ -38,6 +38,7 @@ Data da revisão: 20/07/2026. Escopo: gateway, adaptador de upstream, broker hos
 | Persistência indevida de transcript | exposição após restart | somente RAM; threads Codex efêmeras; Claude sem session persistence; work/home removidos em TTL, LRU, crash ou shutdown | testes com CLIs falsos e inspeção de artefatos |
 | Telemetria de usage incorreta | diagnóstico/custo enganoso | parsers separados; cache/reasoning tratados como parcelas ou subconjuntos conforme provider | fixtures Claude/Codex e incidente documentado |
 | Vazamento em logs/erros | exposição de secrets e código | sem bodies/stdout/stderr/prompts; modelo e effort usam allowlists/normalização; erros e health sanitizados | testes e revisão de observabilidade |
+| Log privado de execução | retenção de conteúdo ou acesso local indevido | JSONL somente com enum de fases/reasons e metadados permitidos; diretório `0700`, arquivos `0600`, rotação limitada e fora do container/Git | testes de sanitização, permissões e rotação |
 | Buffering/SSE inconsistente | cliente travado ou resposta inválida | upstream byte a byte; CLI heartbeat e decisão atômica validada | testes dos dois regimes SSE |
 | Mudança de flags/versionamento CLI | perda silenciosa de isolamento | checks de startup e gate por versão; alias omitido quando incapaz | gate real e testes de capacidades |
 | Supply chain/container | execução vulnerável | lockfile, `npm ci`, imagem pinada, processo não root e audit | build, audit e smoke local |

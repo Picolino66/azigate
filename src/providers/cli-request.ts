@@ -233,24 +233,35 @@ export function cliTranscriptBytes(request: Pick<BrokerExecuteRequest, 'messages
 
 export function validateCliDecision(decision: BrokerDecision, request: BrokerExecuteRequest): BrokerDecision {
   if (!isRecord(decision) || (typeof decision.content !== 'string' && decision.content !== null)) {
-    throw new InvalidCliOutputError()
+    throw new InvalidCliOutputError('decision_shape_invalid')
   }
-  if (!Array.isArray(decision.toolCalls)) throw new InvalidCliOutputError()
+  if (!Array.isArray(decision.toolCalls)) throw new InvalidCliOutputError('decision_shape_invalid')
   const offeredNames = new Set(request.tools.map((tool) => tool.name))
   const toolCalls = decision.toolCalls.map((call) => {
     if (!isRecord(call) || typeof call.name !== 'string' || typeof call.arguments !== 'string') {
-      throw new InvalidCliOutputError()
+      throw new InvalidCliOutputError('decision_shape_invalid')
     }
-    if (!offeredNames.has(call.name) || !validJsonObject(call.arguments)) throw new InvalidCliOutputError()
+    if (!offeredNames.has(call.name)) throw new InvalidCliOutputError('decision_tool_not_offered')
+    if (!validJsonObject(call.arguments)) throw new InvalidCliOutputError('decision_arguments_invalid')
     return { name: call.name, arguments: call.arguments }
   })
-  if ((decision.content === null) === (toolCalls.length === 0)) throw new InvalidCliOutputError()
-  if (request.toolChoice === 'none' && toolCalls.length > 0) throw new InvalidCliOutputError()
-  if (request.toolChoice === 'required' && toolCalls.length === 0) throw new InvalidCliOutputError()
+  if ((decision.content === null) === (toolCalls.length === 0)) {
+    throw new InvalidCliOutputError('decision_content_tool_calls_conflict')
+  }
+  if (request.toolChoice === 'none' && toolCalls.length > 0) {
+    throw new InvalidCliOutputError('decision_tool_choice_conflict')
+  }
+  if (request.toolChoice === 'required' && toolCalls.length === 0) {
+    throw new InvalidCliOutputError('decision_tool_choice_conflict')
+  }
   if (typeof request.toolChoice === 'object') {
     const selectedName = request.toolChoice.name
-    if (toolCalls.some((call) => call.name !== selectedName)) throw new InvalidCliOutputError()
+    if (toolCalls.length === 0 || toolCalls.some((call) => call.name !== selectedName)) {
+      throw new InvalidCliOutputError('decision_tool_choice_conflict')
+    }
   }
-  if (!request.parallelToolCalls && toolCalls.length > 1) throw new InvalidCliOutputError()
+  if (!request.parallelToolCalls && toolCalls.length > 1) {
+    throw new InvalidCliOutputError('decision_parallel_calls_conflict')
+  }
   return { content: decision.content, toolCalls }
 }

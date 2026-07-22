@@ -50,6 +50,12 @@ habilitação.
   call interno `StructuredOutput` seguido do eco `user`/`tool_result`; o broker
   aceita apenas esse par casado por `tool_use_id` e continua recusando qualquer
   outra ferramenta.
+- O schema de structured output é específico do request e impõe texto XOR tools,
+  nomes oferecidos, `tool_choice` e paralelismo. A validação posterior local
+  continua obrigatória.
+- Resultado final diferente de `success` é classificado por reason sanitizada;
+  `error_max_structured_output_retries` e `error_during_execution` permanecem
+  `cli_execution_failed` no contrato público, sem publicar dados do provider.
 - Usage soma input novo, criação de cache e leitura de cache. O custo do CLI é
   registrado como estimativa, não como porcentagem da cota.
 - Bloqueio de autenticação/política mantém o alias indisponível; nenhuma API key é introduzida.

@@ -32,6 +32,8 @@ Fastify, Undici, Unix socket, Bubblewrap e os binários Codex/Claude instalados 
 - O broker pode reutilizar sessões somente em RAM quando houver um único prefixo
   exato; o gateway HTTP permanece stateless.
 - Transcript CLI acima do limite recebe `413`, sem truncamento.
+- Falhas CLI possuem reason interno sanitizado no log privado; a resposta pública
+  preserva somente os códigos de erro do contrato.
 
 ## Fluxo resumido
 

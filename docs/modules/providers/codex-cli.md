@@ -56,6 +56,11 @@ Codex CLI autenticado, Bubblewrap, `~/.codex` privado, broker ativo e `ENABLE_CO
   (a feature está `removed` e sempre reporta `disabled`) e `warning` são
   toleradas como metadados; eventos MCP, de shell ou de subagente continuam
   encerrando a sessão com `invalid_cli_output`.
+- O `outputSchema` é específico do request: impõe texto XOR tools, os nomes
+  oferecidos, `tool_choice` e o limite de paralelismo. A validação do gateway é
+  mantida como defesa em profundidade.
+- Durante a execução, o broker registra somente fases e reasons sanitizados em
+  JSONL privado; decisão, item, argumentos e saída bruta nunca entram no log.
 
 ## Evidência de viabilidade
 

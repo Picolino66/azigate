@@ -35,6 +35,9 @@ function setup(): { config: BrokerConfig; capabilities: ProviderCapabilities } {
     config: {
       socketPath: join(root, 'broker.sock'),
       workRoot: join(root, 'work'),
+      executionLogDir: join(root, 'logs'),
+      executionLogMaxBytes: 65_536,
+      executionLogMaxFiles: 2,
       enableCodex: true,
       enableClaude: true,
       executionTimeoutMs: 1000,

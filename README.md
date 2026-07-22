@@ -91,7 +91,8 @@ sequenceDiagram
   allowlists de IP e de modelo, rate limit local.
 - **Logs mínimos:** nenhum prompt, código, body, resposta, tool argument ou secret
   é registrado. O stdout apenas colore cada alias conhecido e registra o `effort`
-  seguro efetivamente usado.
+  seguro efetivamente usado; o broker mantém JSONL privado de fases/reasons para
+  acompanhar a execução sem gravar conteúdo.
 
 ## Onde rodar (casos de uso)
 

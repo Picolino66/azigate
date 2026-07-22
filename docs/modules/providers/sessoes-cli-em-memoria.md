@@ -63,6 +63,10 @@ coordenadamente no broker/gateway.
   ecoa uma mensagem `user` com o `tool_result` correspondente. Somente esse par é
   aceito, com `tool_use_id` casado ao `tool_use` do mesmo turno; qualquer outra
   ferramenta ou eco divergente encerra a sessão com `invalid_cli_output`.
+- O schema é gerado para cada request e impõe texto XOR tools, nomes oferecidos,
+  `tool_choice` e o limite de paralelismo; a validação final local permanece ativa.
+- O broker registra fases e reasons sanitizados em JSONL privado durante cada turno,
+  sem persistir transcript, resposta, tool arguments ou saída bruta.
 
 ## Fluxo resumido
 

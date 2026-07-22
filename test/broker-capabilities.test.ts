@@ -118,6 +118,9 @@ function brokerConfig(directory: string): BrokerConfig {
   return {
     socketPath: join(directory, 'run', 'broker.sock'),
     workRoot: join(directory, 'work'),
+    executionLogDir: join(directory, 'logs'),
+    executionLogMaxBytes: 65_536,
+    executionLogMaxFiles: 2,
     enableCodex: true,
     enableClaude: true,
     executionTimeoutMs: 1000,
@@ -151,11 +154,13 @@ describe('configuração e capacidades do broker', () => {
     expect(config.claudeSessionMode).toBe('memory')
     expect(config.maxActiveSessions).toBe(4)
     expect(config.sessionIdleMs).toBe(1_800_000)
+    expect(config.executionLogDir).toBe(join(process.cwd(), 'runtime', 'logs'))
     expect(config.claudeConfigPath).toBe(join(home, '.claude.json'))
     expect(() => loadBrokerConfig({ HOME: home, BROKER_SOCKET_PATH: 'relativo' })).toThrow(/absoluto/u)
     expect(() => loadBrokerConfig({ HOME: home, BROKER_ENABLE_CODEX_CLI: 'sim' })).toThrow(/true ou false/u)
     expect(() => loadBrokerConfig({ HOME: home, BROKER_MAX_OUTPUT_BYTES: '1' })).toThrow(/inteiro/u)
     expect(() => loadBrokerConfig({ HOME: home, CLAUDE_CONFIG_PATH: 'relativo' })).toThrow(/absoluto/u)
+    expect(() => loadBrokerConfig({ HOME: home, BROKER_EXECUTION_LOG_DIR: 'relativo' })).toThrow(/absoluto/u)
     expect(() => loadBrokerConfig({ HOME: home, BROKER_CODEX_SESSION_MODE: 'disco' })).toThrow(/stateless ou memory/u)
   })
 
