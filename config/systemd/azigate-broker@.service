@@ -18,12 +18,17 @@ Environment=BROKER_MAX_ACTIVE_SESSIONS=4
 Environment=BROKER_SESSION_IDLE_MS=1800000
 Environment=BROKER_MAX_TRANSCRIPT_BYTES=262144
 EnvironmentFile=-/etc/azigate/broker.env
+StandardOutput=journal
+StandardError=journal
 ExecStart=/usr/bin/node /opt/azigate/dist/broker/server.js
 Restart=on-failure
 RestartSec=5s
 UMask=0077
 RuntimeDirectory=azigate
 RuntimeDirectoryMode=0700
+# Preserva o inode de /run/azigate entre restarts; sem isso, o bind mount do
+# container do gateway fica órfão e todo alias CLI responde 503 cli_unavailable.
+RuntimeDirectoryPreserve=yes
 
 NoNewPrivileges=yes
 CapabilityBoundingSet=

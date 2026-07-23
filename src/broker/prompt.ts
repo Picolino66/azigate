@@ -1,26 +1,5 @@
 import type { BrokerExecuteRequest, BrokerToolChoice } from './protocol.js'
 
-export const DECISION_JSON_SCHEMA = {
-  type: 'object',
-  additionalProperties: false,
-  required: ['content', 'tool_calls'],
-  properties: {
-    content: { type: ['string', 'null'] },
-    tool_calls: {
-      type: 'array',
-      items: {
-        type: 'object',
-        additionalProperties: false,
-        required: ['name', 'arguments'],
-        properties: {
-          name: { type: 'string', minLength: 1, maxLength: 64 },
-          arguments: { type: 'string' },
-        },
-      },
-    },
-  },
-} as const
-
 function allowedToolNames(request: Pick<BrokerExecuteRequest, 'tools' | 'toolChoice'>): string[] {
   const names = request.tools.map((tool) => tool.name)
   return typeof request.toolChoice === 'object' ? [request.toolChoice.name] : names
@@ -37,44 +16,41 @@ function allowsTools(choice: BrokerToolChoice): boolean {
 export function decisionJsonSchema(
   request: Pick<BrokerExecuteRequest, 'tools' | 'toolChoice' | 'parallelToolCalls'>,
 ): Record<string, unknown> {
-  const branches: Record<string, unknown>[] = []
-  if (allowsText(request.toolChoice)) {
-    branches.push({
-      type: 'object',
-      additionalProperties: false,
-      required: ['content', 'tool_calls'],
-      properties: {
-        content: { type: 'string' },
-        tool_calls: { type: 'array', maxItems: 0 },
-      },
-    })
-  }
+  // O validador de structured outputs da OpenAI exige raiz `type: "object"`
+  // (rejeita oneOf/anyOf na raiz) e `items` em todo schema de array. O XOR
+  // texto/tools e o tool_choice continuam garantidos por validateCliDecision
+  // no broker e no gateway.
   const names = allowedToolNames(request)
-  if (allowsTools(request.toolChoice) && names.length > 0) {
-    branches.push({
+  const textAllowed = allowsText(request.toolChoice)
+  const toolsAllowed = allowsTools(request.toolChoice) && names.length > 0
+  const toolCalls: Record<string, unknown> = {
+    type: 'array',
+    items: {
       type: 'object',
       additionalProperties: false,
-      required: ['content', 'tool_calls'],
+      required: ['name', 'arguments'],
       properties: {
-        content: { type: 'null' },
-        tool_calls: {
-          type: 'array',
-          minItems: 1,
-          ...(request.parallelToolCalls ? {} : { maxItems: 1 }),
-          items: {
-            type: 'object',
-            additionalProperties: false,
-            required: ['name', 'arguments'],
-            properties: {
-              name: { type: 'string', enum: names },
-              arguments: { type: 'string' },
-            },
-          },
-        },
+        name: names.length > 0 ? { type: 'string', enum: names } : { type: 'string' },
+        arguments: { type: 'string' },
       },
-    })
+    },
   }
-  return branches.length === 1 ? branches[0] ?? DECISION_JSON_SCHEMA : { oneOf: branches }
+  if (!toolsAllowed) {
+    toolCalls.maxItems = 0
+  } else {
+    if (!textAllowed) toolCalls.minItems = 1
+    if (!request.parallelToolCalls) toolCalls.maxItems = 1
+  }
+  const contentType = !toolsAllowed ? 'string' : textAllowed ? ['string', 'null'] : 'null'
+  return {
+    type: 'object',
+    additionalProperties: false,
+    required: ['content', 'tool_calls'],
+    properties: {
+      content: { type: contentType },
+      tool_calls: toolCalls,
+    },
+  }
 }
 
 function stableValue(value: unknown): unknown {

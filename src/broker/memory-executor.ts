@@ -14,7 +14,7 @@ import type {
 } from './protocol.js'
 import { BROKER_PROTOCOL_VERSION, isClaudeCliModel, isCodexCliModel } from './protocol.js'
 import { canonicalSystemPrompt, canonicalTurnPrompt, decisionJsonSchema } from './prompt.js'
-import type { ExecutionProgressReporter } from './execution-log.js'
+import type { CodexSanitizedErrorCode, ExecutionProgressReporter } from './execution-log.js'
 import {
   hashesStartWith,
   sessionKey,
@@ -52,6 +52,64 @@ interface MemorySession {
   hashes: string[]
   lastUsedAt: number
   handle: SessionHandle
+}
+
+type CodexRpcMethod = 'initialize' | 'thread/start' | 'turn/start' | 'thread/delete' | 'turn/interrupt'
+
+const CODEX_RPC_FAILURE_REASONS: Record<CodexRpcMethod, string> = {
+  initialize: 'codex_rpc_initialize_failed',
+  'thread/start': 'codex_rpc_thread_start_failed',
+  'turn/start': 'codex_rpc_turn_start_failed',
+  'thread/delete': 'codex_rpc_thread_delete_failed',
+  'turn/interrupt': 'codex_rpc_turn_interrupt_failed',
+}
+
+export class CodexAppServerRpcError extends CliExecutionFailedError {
+  constructor(method: CodexRpcMethod) {
+    super(CODEX_RPC_FAILURE_REASONS[method])
+    this.name = `CodexAppServerRpcError_${method.replace('/', '_')}`
+  }
+}
+
+const CODEX_ERROR_INFO_CODES: Record<string, CodexSanitizedErrorCode> = {
+  contextWindowExceeded: 'context_window_exceeded',
+  sessionBudgetExceeded: 'session_budget_exceeded',
+  usageLimitExceeded: 'usage_limit_exceeded',
+  serverOverloaded: 'server_overloaded',
+  cyberPolicy: 'cyber_policy',
+  httpConnectionFailed: 'http_connection_failed',
+  responseStreamConnectionFailed: 'response_stream_connection_failed',
+  responseStreamDisconnected: 'response_stream_disconnected',
+  responseTooManyFailedAttempts: 'response_too_many_failed_attempts',
+  activeTurnNotSteerable: 'active_turn_not_steerable',
+  internalServerError: 'internal_server_error',
+  unauthorized: 'unauthorized',
+  badRequest: 'bad_request',
+  threadRollbackFailed: 'thread_rollback_failed',
+  sandboxError: 'sandbox_error',
+  other: 'other',
+}
+
+export function sanitizedCodexErrorCode(params: Record<string, unknown> | undefined): CodexSanitizedErrorCode {
+  const info = params === undefined ? undefined : objectAt(params, 'error')?.codexErrorInfo
+  const variant = typeof info === 'string'
+    ? info
+    : isRecord(info)
+      ? Object.keys(info)[0]
+      : undefined
+  return (variant !== undefined ? CODEX_ERROR_INFO_CODES[variant] : undefined) ?? 'other'
+}
+
+export class CodexTurnStateError extends CliExecutionFailedError {
+  readonly sanitizedErrorCode: CodexSanitizedErrorCode | undefined
+
+  constructor(reason: 'codex_turn_not_completed' | 'codex_turn_error_event', errorCode?: CodexSanitizedErrorCode) {
+    super(reason)
+    this.sanitizedErrorCode = errorCode
+    this.name = errorCode === undefined
+      ? `CodexTurnStateError_${reason}`
+      : `CodexTurnStateError_${reason}_${errorCode}`
+  }
 }
 
 export interface MemorySessionExecutorLike {
@@ -221,12 +279,17 @@ class CodexAppServerHost {
           if (params === undefined || params.threadId !== threadId) continue
           const completed = objectAt(params, 'turn')
           if (completed === undefined || completed.id !== turnId || completed.status !== 'completed') {
-            throw new CliExecutionFailedError()
+            throw new CodexTurnStateError('codex_turn_not_completed')
           }
           const decision = decisionFromCodexTurn(completed, lastAgentMessageText)
           return { decision, ...(usage === undefined ? {} : { usage }) }
         }
-        if (message.method === 'error') throw new CliExecutionFailedError()
+        if (message.method === 'error') {
+          // O protocolo do App Server expõe `willRetry` na notificação de erro.
+          // Não interrompa um turno que o próprio Codex ainda vai recuperar.
+          if (params?.threadId === threadId && params.turnId === turnId && params.willRetry === true) continue
+          throw new CodexTurnStateError('codex_turn_error_event', sanitizedCodexErrorCode(params))
+        }
         assertBenignCodexNotification(message)
       }
     } catch (error) {
@@ -314,7 +377,7 @@ class CodexAppServerHost {
   }
 
   private async rpc(
-    method: string,
+    method: CodexRpcMethod,
     params: Record<string, unknown>,
     signal?: AbortSignal,
     deadline = Date.now() + this.config.executionTimeoutMs,
@@ -326,9 +389,9 @@ class CodexAppServerHost {
     const deferred: unknown[] = []
     for (;;) {
       const message = await process.readJson(remainingMs(deadline), signal)
-      if (!isRecord(message)) throw new CliExecutionFailedError()
+      if (!isRecord(message)) throw new CodexAppServerRpcError(method)
       if (message.id === id) {
-        if ('error' in message) throw new CliExecutionFailedError()
+        if ('error' in message) throw new CodexAppServerRpcError(method)
         this.pendingNotifications.push(...deferred)
         return message.result
       }

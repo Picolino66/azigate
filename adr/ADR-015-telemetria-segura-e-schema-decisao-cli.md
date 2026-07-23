@@ -48,3 +48,15 @@ O operador pode acompanhar execução com `tail` do JSONL sem acessar conteúdo 
 conversa. Upgrades de CLI exigem gate real por versão/modelo/modo; o modo
 `stateless` permanece como rollback explícito. A decisão final continua sendo
 validada pelo gateway, pois schema de provider não substitui a defesa local.
+
+## Adendo de 23/07/2026
+
+O validador de structured outputs da OpenAI rejeita `oneOf`/`anyOf` na raiz e
+arrays sem `items`, o que invalidava o schema em dois ramos sempre que o request
+tinha tools com `tool_choice` auto. O schema por request passou a ser um único
+objeto plano; o XOR texto/tools deixa de ser imposto pelo schema e fica
+integralmente sob `validateCliDecision`, que já executava no broker e no
+gateway. Complementarmente, o `codexErrorInfo` da notificação terminal do App
+Server é classificado em enum fechado e gravado como `errorCode` no JSONL — a
+mensagem do provedor continua nunca sendo registrada. Evidência e reprodução em
+`docs/operations/incidents/2026-07-23-output-schema-rejeitado-structured-outputs.md`.

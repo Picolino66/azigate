@@ -95,6 +95,7 @@ class FakeInteractiveProcess implements InteractiveProcessLike {
     private readonly codexStyle: 'legacy' | 'v0144' = 'legacy',
     private readonly extraTurnNotifications: unknown[] = [],
     private readonly claudeTurnEvents?: unknown[],
+    private readonly codexTurnStartFails = false,
   ) {}
 
   private decision(prompt: string): { content: string | null; tool_calls: Array<{ name: string; arguments: string }> } {
@@ -149,6 +150,10 @@ class FakeInteractiveProcess implements InteractiveProcessLike {
       return
     }
     if (message.method === 'turn/start') {
+      if (this.codexTurnStartFails) {
+        this.queue.push({ id: message.id, error: { code: -32602 } })
+        return
+      }
       this.turnSequence += 1
       const params = message.params as Record<string, unknown>
       const input = params.input as Array<Record<string, unknown>>
@@ -229,6 +234,7 @@ class FakeInteractiveFactory implements InteractiveProcessFactoryLike {
     private readonly codexStyle: 'legacy' | 'v0144' = 'legacy',
     private readonly extraTurnNotifications: unknown[] = [],
     private readonly claudeTurnEvents?: unknown[],
+    private readonly codexTurnStartFails = false,
   ) {}
 
   spawn(spec: InteractiveProcessSpec): InteractiveProcessLike {
@@ -239,6 +245,7 @@ class FakeInteractiveFactory implements InteractiveProcessFactoryLike {
       this.codexStyle,
       this.extraTurnNotifications,
       this.claudeTurnEvents,
+      this.codexTurnStartFails,
     )
     this.processes.push(process)
     return process
@@ -332,6 +339,107 @@ describe('sessões CLI em memória', () => {
     expect(second.execution.sessionReused).toBe(true)
     expect(second.usage).toMatchObject({ promptTokens: 30, completionTokens: 5, totalTokens: 35 })
     expect(factory.processes).toHaveLength(1)
+    await executor.shutdown()
+  })
+
+  it('aguarda a tentativa automática após notificação recuperável do App Server', async () => {
+    const { config, capabilities } = setup()
+    const factory = new FakeInteractiveFactory('v0144', [{
+      method: 'error',
+      params: {
+        threadId: 'thread-1',
+        turnId: 'turn-1',
+        willRetry: true,
+        error: { message: 'erro recuperável' },
+      },
+    }])
+    const executor = new MemorySessionExecutor(config, capabilities, factory)
+
+    await expect(executor.execute(request('codex', [{ role: 'user', content: 'primeiro' }]), 10))
+      .resolves.toMatchObject({ decision: { content: 'ok', toolCalls: [] } })
+    await executor.shutdown()
+  })
+
+  it('mantém o bloqueio para erro não recuperável do App Server', async () => {
+    const { config, capabilities } = setup()
+    const factory = new FakeInteractiveFactory('v0144', [{
+      method: 'error',
+      params: {
+        threadId: 'thread-1',
+        turnId: 'turn-1',
+        willRetry: false,
+        error: { message: 'erro terminal' },
+      },
+    }])
+    const executor = new MemorySessionExecutor(config, capabilities, factory)
+
+    await expect(executor.execute(request('codex', [{ role: 'user', content: 'primeiro' }]), 10))
+      .rejects.toMatchObject({
+        executionReason: 'codex_turn_error_event',
+        sanitizedErrorCode: 'other',
+        name: 'CodexTurnStateError_codex_turn_error_event_other',
+      })
+    await executor.shutdown()
+  })
+
+  it('classifica o codexErrorInfo terminal sem registrar a mensagem do erro', async () => {
+    const { config, capabilities } = setup()
+    const factory = new FakeInteractiveFactory('v0144', [{
+      method: 'error',
+      params: {
+        threadId: 'thread-1',
+        turnId: 'turn-1',
+        willRetry: false,
+        error: {
+          message: 'Invalid schema for response_format: oneOf is not permitted.',
+          codexErrorInfo: 'badRequest',
+          additionalDetails: null,
+        },
+      },
+    }])
+    const executor = new MemorySessionExecutor(config, capabilities, factory)
+
+    await expect(executor.execute(request('codex', [{ role: 'user', content: 'primeiro' }]), 10))
+      .rejects.toMatchObject({
+        executionReason: 'codex_turn_error_event',
+        sanitizedErrorCode: 'bad_request',
+        name: 'CodexTurnStateError_codex_turn_error_event_bad_request',
+      })
+    await executor.shutdown()
+  })
+
+  it('classifica variantes objeto do codexErrorInfo pelo nome fechado', async () => {
+    const { config, capabilities } = setup()
+    const factory = new FakeInteractiveFactory('v0144', [{
+      method: 'error',
+      params: {
+        threadId: 'thread-1',
+        turnId: 'turn-1',
+        willRetry: false,
+        error: {
+          message: 'stream interrompido',
+          codexErrorInfo: { responseStreamDisconnected: { httpStatusCode: 502 } },
+          additionalDetails: null,
+        },
+      },
+    }])
+    const executor = new MemorySessionExecutor(config, capabilities, factory)
+
+    await expect(executor.execute(request('codex', [{ role: 'user', content: 'primeiro' }]), 10))
+      .rejects.toMatchObject({ sanitizedErrorCode: 'response_stream_disconnected' })
+    await executor.shutdown()
+  })
+
+  it('classifica sem conteúdo o erro RPC em turn/start do App Server', async () => {
+    const { config, capabilities } = setup()
+    const factory = new FakeInteractiveFactory('legacy', [], undefined, true)
+    const executor = new MemorySessionExecutor(config, capabilities, factory)
+
+    await expect(executor.execute(request('codex', [{ role: 'user', content: 'primeiro' }]), 10))
+      .rejects.toMatchObject({
+        name: 'CodexAppServerRpcError_turn_start',
+        executionReason: 'codex_rpc_turn_start_failed',
+      })
     await executor.shutdown()
   })
 

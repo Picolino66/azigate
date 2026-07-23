@@ -33,6 +33,7 @@
 - [Instalação e operação do broker](./operations/broker.md)
 - [Configuração do Qwen Code](./operations/qwen-code.md)
 - [Incidentes operacionais](./operations/incidents/index.md)
+- [Execução limpa do broker e gateway Docker](./operations/execution-clean.md)
 
 ## Segurança
 
