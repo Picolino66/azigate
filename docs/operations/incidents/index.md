@@ -1,5 +1,8 @@
 # Incidentes operacionais
 
+- [23/07/2026 — outputSchema do broker rejeitado pelo structured outputs](./2026-07-23-output-schema-rejeitado-structured-outputs.md)
+- [23/07/2026 — bind mount órfão do socket após restart do broker](./2026-07-23-bind-mount-orfao-do-socket.md)
+- [23/07/2026 — broker interrompe retry do App Server Codex](./2026-07-23-codex-app-server-retry.md)
 - [22/07/2026 — confiabilidade de decisão Codex e Claude](./2026-07-22-confiabilidade-decisao-cli.md)
 - [20/07/2026 — aliases Codex com `invalid_cli_output` no modo memory após upgrade 0.144.6](./2026-07-20-codex-app-server-0144-invalid-cli-output.md)
 - [20/07/2026 — telemetria CLI incompleta e reenvio de contexto](./2026-07-20-telemetria-cli-incompleta-e-reenvio-de-contexto.md)

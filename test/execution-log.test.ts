@@ -4,8 +4,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { ExecutionLogWriter } from '../src/broker/execution-log.js'
+import { CodexTurnStateError } from '../src/broker/memory-executor.js'
 import type { BrokerExecuteRequest } from '../src/broker/protocol.js'
-import { InvalidCliOutputError } from '../src/providers/errors.js'
+import { CliExecutionFailedError, InvalidCliOutputError } from '../src/providers/errors.js'
 
 const roots: string[] = []
 
@@ -71,5 +72,39 @@ describe('logs de execução do broker', () => {
 
     expect(readFileSync(join(directory, 'executions.1.jsonl'), 'utf8')).toContain('request-safe')
     expect(readFileSync(join(directory, 'executions.jsonl'), 'utf8')).toContain('request-next')
+  })
+
+  it('aceita a classificação sanitizada de falha RPC do Codex', async () => {
+    const directory = join(root(), 'logs')
+    const writer = new ExecutionLogWriter({
+      executionLogDir: directory,
+      executionLogMaxBytes: 65_536,
+      executionLogMaxFiles: 2,
+    }, request(), 'memory', 512)
+
+    await writer.fail(new CliExecutionFailedError('codex_rpc_turn_start_failed'))
+
+    const body = readFileSync(join(directory, 'executions.jsonl'), 'utf8')
+    expect(body).toContain('codex_rpc_turn_start_failed')
+    expect(body).not.toContain('PROMPT_ULTRASSECRETO')
+  })
+
+  it('registra o errorCode sanitizado somente quando pertence à allowlist', async () => {
+    const directory = join(root(), 'logs')
+    const configuration = { executionLogDir: directory, executionLogMaxBytes: 65_536, executionLogMaxFiles: 2 }
+    const writer = new ExecutionLogWriter(configuration, request(), 'memory', 512)
+    const classified = new CodexTurnStateError('codex_turn_error_event', 'bad_request')
+    await writer.fail(classified)
+
+    const forged = new CliExecutionFailedError('codex_turn_error_event') as CliExecutionFailedError & {
+      sanitizedErrorCode?: string
+    }
+    forged.sanitizedErrorCode = 'MENSAGEM_ULTRASSECRETA'
+    await writer.fail(forged)
+
+    const lines = readFileSync(join(directory, 'executions.jsonl'), 'utf8').trim().split('\n')
+    expect(JSON.parse(lines[0] ?? '{}')).toMatchObject({ reason: 'codex_turn_error_event', errorCode: 'bad_request' })
+    expect(JSON.parse(lines[1] ?? '{}')).not.toHaveProperty('errorCode')
+    expect(lines[1]).not.toContain('MENSAGEM_ULTRASSECRETA')
   })
 })

@@ -28,6 +28,13 @@ export type ExecutionFailureReason =
   | 'unexpected_local_tool_event'
   | 'codex_decision_missing'
   | 'codex_event_protocol_invalid'
+  | 'codex_rpc_initialize_failed'
+  | 'codex_rpc_thread_start_failed'
+  | 'codex_rpc_turn_start_failed'
+  | 'codex_rpc_thread_delete_failed'
+  | 'codex_rpc_turn_interrupt_failed'
+  | 'codex_turn_not_completed'
+  | 'codex_turn_error_event'
   | 'claude_result_error_during_execution'
   | 'claude_result_error_max_structured_output_retries'
   | 'claude_result_error_max_turns'
@@ -38,6 +45,27 @@ export type ExecutionFailureReason =
   | 'cli_timeout'
   | 'cli_context_too_large'
   | 'cli_execution_failed'
+
+export const CODEX_SANITIZED_ERROR_CODES = [
+  'context_window_exceeded',
+  'session_budget_exceeded',
+  'usage_limit_exceeded',
+  'server_overloaded',
+  'cyber_policy',
+  'http_connection_failed',
+  'response_stream_connection_failed',
+  'response_stream_disconnected',
+  'response_too_many_failed_attempts',
+  'active_turn_not_steerable',
+  'internal_server_error',
+  'unauthorized',
+  'bad_request',
+  'thread_rollback_failed',
+  'sandbox_error',
+  'other',
+] as const
+
+export type CodexSanitizedErrorCode = typeof CODEX_SANITIZED_ERROR_CODES[number]
 
 export interface ExecutionProgress {
   phase: Exclude<ExecutionLogPhase, 'received' | 'completed' | 'failed'>
@@ -59,6 +87,7 @@ interface ExecutionLogEvent {
   durationMs?: number
   sessionReused?: boolean
   reason?: ExecutionFailureReason
+  errorCode?: CodexSanitizedErrorCode
 }
 
 function isReason(value: unknown): value is ExecutionFailureReason {
@@ -74,6 +103,13 @@ function isReason(value: unknown): value is ExecutionFailureReason {
     'unexpected_local_tool_event',
     'codex_decision_missing',
     'codex_event_protocol_invalid',
+    'codex_rpc_initialize_failed',
+    'codex_rpc_thread_start_failed',
+    'codex_rpc_turn_start_failed',
+    'codex_rpc_thread_delete_failed',
+    'codex_rpc_turn_interrupt_failed',
+    'codex_turn_not_completed',
+    'codex_turn_error_event',
     'claude_result_error_during_execution',
     'claude_result_error_max_structured_output_retries',
     'claude_result_error_max_turns',
@@ -92,6 +128,14 @@ export function executionFailureReason(error: unknown): ExecutionFailureReason {
     return (error as { executionReason: ExecutionFailureReason }).executionReason
   }
   return 'unknown'
+}
+
+export function executionFailureErrorCode(error: unknown): CodexSanitizedErrorCode | undefined {
+  if (error === null || typeof error !== 'object') return undefined
+  const code = (error as { sanitizedErrorCode?: unknown }).sanitizedErrorCode
+  return CODEX_SANITIZED_ERROR_CODES.includes(code as CodexSanitizedErrorCode)
+    ? (code as CodexSanitizedErrorCode)
+    : undefined
 }
 
 export class ExecutionLogWriter implements ExecutionProgressReporter {
@@ -121,12 +165,16 @@ export class ExecutionLogWriter implements ExecutionProgressReporter {
   }
 
   async fail(error: unknown): Promise<void> {
-    await this.write('failed', { reason: executionFailureReason(error) })
+    const errorCode = executionFailureErrorCode(error)
+    await this.write('failed', {
+      reason: executionFailureReason(error),
+      ...(errorCode === undefined ? {} : { errorCode }),
+    })
   }
 
   private async write(
     phase: ExecutionLogPhase,
-    extra: Pick<ExecutionLogEvent, 'reason' | 'sessionReused'> = {},
+    extra: Pick<ExecutionLogEvent, 'reason' | 'sessionReused' | 'errorCode'> = {},
   ): Promise<void> {
     try {
       await this.ensureReady()

@@ -56,11 +56,19 @@ Codex CLI autenticado, Bubblewrap, `~/.codex` privado, broker ativo e `ENABLE_CO
   (a feature está `removed` e sempre reporta `disabled`) e `warning` são
   toleradas como metadados; eventos MCP, de shell ou de subagente continuam
   encerrando a sessão com `invalid_cli_output`.
-- O `outputSchema` é específico do request: impõe texto XOR tools, os nomes
-  oferecidos, `tool_choice` e o limite de paralelismo. A validação do gateway é
-  mantida como defesa em profundidade.
+- O `outputSchema` é específico do request e obrigatoriamente um único objeto
+  plano: o validador de structured outputs da OpenAI rejeita `oneOf`/`anyOf` na
+  raiz e arrays sem `items`. O schema restringe `content` (`string|null`
+  conforme `tool_choice`), o `enum` dos nomes oferecidos, `minItems` quando
+  tools são obrigatórias e `maxItems` conforme `parallel_tool_calls`. O XOR
+  texto/tools e as demais regras são garantidos por `validateCliDecision` no
+  broker e no gateway, como defesa em profundidade.
 - Durante a execução, o broker registra somente fases e reasons sanitizados em
   JSONL privado; decisão, item, argumentos e saída bruta nunca entram no log.
+  A notificação `error` do App Server só encerra o turno quando `willRetry` não
+  é verdadeiro; o broker aguarda a recuperação automática do Codex sem registrar
+  a resposta RPC. No erro terminal, o `codexErrorInfo` é classificado em um enum
+  fechado e gravado como `errorCode` no JSONL, sem a mensagem do provedor.
 
 ## Evidência de viabilidade
 

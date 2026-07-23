@@ -1,16 +1,16 @@
 {
   "orchestration_id": "c16a8ea6-06e8-4ec2-bb2c-7ac4cd272dc5",
   "created_at": "2026-07-14T13:35:00Z",
-  "updated_at": "2026-07-22T11:44:00-03:00",
-  "mode": "feature-evolution",
+  "updated_at": "2026-07-23T15:15:00-03:00",
+  "mode": "incident-response",
   "current_phase": "F6",
   "snapshot_version": "O5",
   "last_stable_snapshot": "O5",
   "evolution_cycle": {
     "name": "multiprovider-cli-broker",
-    "status": "correcao-confiabilidade-cli-localmente-validada-gates-reais-e-deploy-pendentes",
+    "status": "output-schema-plano-validado-na-api-real-deploy-do-broker-e-smoke-qwen-pendentes",
     "reassessed_phases": ["F2", "F3", "F5", "F6", "F7"],
-    "next_snapshot": "pending-remote-qwen-smoke"
+    "next_snapshot": "pending-qwen-tools-smoke-output-schema-plano"
   },
   "product": {
     "name": "azigate",
@@ -226,22 +226,31 @@
       "F6-smoke-codex-5.4-anti-recusa-write-file-1-de-1",
       "F5-confiabilidade-cli-lint-typecheck-175-testes-build",
       "F5-confiabilidade-cli-cobertura-acima-dos-limiares",
-      "F5-confiabilidade-cli-audit-zero-vulnerabilidades"
+      "F5-confiabilidade-cli-audit-zero-vulnerabilidades",
+      "F5-app-server-retry-lint-typecheck-179-testes-build",
+      "F5-app-server-retry-cobertura-acima-dos-limiares",
+      "F5-app-server-retry-audit-zero-vulnerabilidades",
+      "F6-app-server-retry-systemd-verify-e-links",
+      "F5-output-schema-plano-check-185-testes",
+      "F5-output-schema-plano-cobertura-acima-dos-limiares",
+      "F5-output-schema-plano-audit-zero-vulnerabilidades",
+      "F6-output-schema-plano-systemd-verify-json-e-links",
+      "F6-probe-real-output-schema-3-variantes-e-tool-call-valida"
     ],
     "gates_failed": [
       "F5-claude-opus-4.7-estrutura-19-de-20",
       "F5-claude-sonnet-4.6-estrutura-18-de-20",
       "F5-claude-haiku-4.5-estrutura-19-de-20-categoria-11-de-20"
     ],
-    "gates_pending": ["F6-deploy-coordenado-protocolo-v6", "F6-benchmark-multiturn-10-turnos-reducao-60-por-cento", "F6-gate-completo-codex-5.6-por-modelo", "F6-smoke-qwen-codex-5.6-no-pc-da-vpn", "F6-smoke-qwen-efforts-low-medium-max-no-pc-da-vpn", "F6-smoke-claude-multiturn-na-conta", "F6-deploy-tls-lan-real", "F6-gate-codex-completo-pos-prompt-anti-recusa"],
-    "test_results": { "files": 9, "tests_passed": 175, "tests_failed": 0 },
-    "coverage_report": { "statements": 82.06, "branches": 78.54, "functions": 87.96, "lines": 87.47 },
+    "gates_pending": ["F6-deploy-coordenado-protocolo-v6", "F6-benchmark-multiturn-10-turnos-reducao-60-por-cento", "F6-gate-completo-codex-5.6-por-modelo", "F6-smoke-qwen-codex-5.6-no-pc-da-vpn", "F6-smoke-qwen-efforts-low-medium-max-no-pc-da-vpn", "F6-smoke-claude-multiturn-na-conta", "F6-deploy-tls-lan-real", "F6-gate-codex-completo-pos-prompt-anti-recusa", "F6-smoke-qwen-tools-output-schema-plano"],
+    "test_results": { "files": 9, "tests_passed": 185, "tests_failed": 0 },
+    "coverage_report": { "statements": 82.31, "branches": 78.94, "functions": 88.09, "lines": 87.61 },
     "security_report": "docs/security/2026-07-16-security-review.md"
   },
   "operations": {
     "deployment_record": "broker e gateway v5 implantados pelo operador em 20/07/2026 às 11:11 BRT; Codex atualizou para 0.144.6 às 11:43 e o novo check de catálogo aguarda instalação antes do próximo restart",
     "smoke_test_results": "DeepSeek respondeu 200; no Codex 0.144.6 Sol, Terra e Luna passaram individualmente no Bubblewrap com medium, além dos smokes anteriores 5.5/5.4; Claude alcançou o provider e recebeu rate_limit",
-    "observability_config": "stdout mantém cor distinta por alias; logs v6 incluem effort efetivo, usage/cache provider-specific, cacheHitPercent, sessionMode/sessionReused e transcriptBytes, nunca conteúdo; JSONL privado registra fases e reasons fechadas em /run/azigate/logs na unidade, com rotação e sem conteúdo CLI",
+    "observability_config": "stdout mantém cor distinta por alias; logs v6 incluem effort efetivo, usage/cache provider-specific, cacheHitPercent, sessionMode/sessionReused e transcriptBytes, nunca conteúdo; JSONL privado registra fases, reasons fechadas e errorCode do codexErrorInfo em enum fechado em /run/azigate/logs na unidade, com rotação e sem conteúdo CLI; o App Server continua o turno quando a notificação error traz willRetry=true; a unidade declara explicitamente StandardOutput/StandardError no journal e preserva /run/azigate entre restarts",
     "candidate_v6": "código e dist locais aprovados; broker efêmero v6 publicou Codex e Claude como ready sem inferência; deploy coordenado e benchmark real não executados",
     "local_activation": {
       "gateway_env": "ENABLE_CLAUDE_CLI e BROKER_ENABLE_CLAUDE_CLI preparados como true no .env local; secrets preservados e não lidos",
@@ -249,7 +258,7 @@
       "broker": "serviço v5 ativo; subprocessos já usam Codex 0.144.6, mas o dist com check de catálogo precisa ser instalado antes de reiniciar",
       "gateway_restart": "container v5 recriado e DeepSeek validada; Sol/Terra/Luna podem permanecer na allowlist"
     },
-    "runbooks": ["docs/operations/broker.md", "docs/operations/qwen-code.md"],
+    "runbooks": ["docs/operations/broker.md", "docs/operations/qwen-code.md", "docs/operations/execution-clean.md"],
     "rollback": "desabilitar aliases e recriar o gateway preserva DeepSeek",
     "slos": [],
     "alerts": [],
@@ -293,6 +302,30 @@
         "cause": "Codex e Claude colapsavam falhas de decisão/resultado em erros públicos genéricos; o schema estático permitia combinações que a validação posterior recusava e o Claude 2.1.215 não classificava subtypes finais",
         "evidence": "reasons sanitizadas, JSONL 0700/0600 rotacionado, schema por request, 175 testes, cobertura acima dos limiares e audit sem vulnerabilidades altas",
         "record": "docs/operations/incidents/2026-07-22-confiabilidade-decisao-cli.md"
+      },
+      {
+        "id": "INC-2026-07-23-CODEX-APP-SERVER-RETRY",
+        "severity": "P2",
+        "status": "correcao-valida-porem-insuficiente-causa-de-fundo-no-output-schema",
+        "cause": "o broker tratava qualquer notificação error do App Server como terminal e ignorava willRetry=true",
+        "evidence": "schema TypeScript gerado pelo codex-cli 0.144.6 declara willRetry; telemetria de produção chegou a provider_turn_started e falhou em cerca de dois segundos; correção preserva retry do App Server e aprovou 179 testes/cobertura/audit",
+        "record": "docs/operations/incidents/2026-07-23-codex-app-server-retry.md"
+      },
+      {
+        "id": "INC-2026-07-23-BIND-MOUNT-ORFAO",
+        "severity": "P2",
+        "status": "corrigido-com-RuntimeDirectoryPreserve-instalacao-da-unit-pendente",
+        "cause": "RuntimeDirectory recriado a cada restart do broker deixava o bind mount de /run/azigate órfão no container; toda chamada CLI virava 503 cli_unavailable sem chegar ao broker",
+        "evidence": "inode de /run/azigate divergente entre host e container; health do socket saudável no host; journal sem broker_execute_failed; recreate do gateway restabeleceu o socket",
+        "record": "docs/operations/incidents/2026-07-23-bind-mount-orfao-do-socket.md"
+      },
+      {
+        "id": "INC-2026-07-23-OUTPUT-SCHEMA-STRUCTURED-OUTPUTS",
+        "severity": "P2",
+        "status": "correcao-local-validada-com-probe-real-deploy-e-smoke-qwen-pendentes",
+        "cause": "decisionJsonSchema gerava oneOf na raiz com tools + tool_choice auto; o structured outputs da OpenAI rejeita oneOf/anyOf na raiz e arrays sem items, gerando erro terminal willRetry=false em toda requisição do Qwen",
+        "evidence": "reprodução manual do turn/start retornou invalid_json_schema oneOf is not permitted; schema plano aceito pela API real nas três variantes com decisão de tool call válida; 185 testes verdes; errorCode sanitizado adicionado ao JSONL",
+        "record": "docs/operations/incidents/2026-07-23-output-schema-rejeitado-structured-outputs.md"
       }
     ]
   },
@@ -449,6 +482,30 @@
         "mode": "complementar",
         "phase": "F6-F7",
         "timestamp": "2026-07-22T11:44:00-03:00"
+      },
+      {
+        "skill_name": "ai-docs-self-healing",
+        "source": "~/.agents/skills/ai-docs-self-healing",
+        "reason": "sincronizar a correção do retry do App Server, o runbook, o incidente e o contexto canônico sem registrar conteúdo CLI",
+        "mode": "complementar",
+        "phase": "F6-F7",
+        "timestamp": "2026-07-23T12:59:50-03:00"
+      },
+      {
+        "skill_name": "ai-docs-self-healing",
+        "source": "~/.agents/skills/ai-docs-self-healing",
+        "reason": "criar runbook de execução limpa e sincronizar o índice e os runbooks operacionais",
+        "mode": "complementar",
+        "phase": "F6-F7",
+        "timestamp": "2026-07-23T12:53:35-03:00"
+      },
+      {
+        "skill_name": "autonomous-software-orchestrator",
+        "source": "~/.claude/skills/autonomous-software-orchestrator",
+        "reason": "coordenar a investigação do 503/502 pós-deploy, o schema plano compatível com structured outputs, o errorCode sanitizado e o RuntimeDirectoryPreserve da unidade",
+        "mode": "coordenadora-principal",
+        "phase": "F7",
+        "timestamp": "2026-07-23T15:15:00-03:00"
       }
     ]
   }

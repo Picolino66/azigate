@@ -105,7 +105,9 @@ sudo tail -f /run/azigate/logs/executions.jsonl
 ```
 
 Cada linha contém somente timestamp, request ID, provider/model/effort permitidos,
-modo de sessão, bytes do transcript, fase, duração, reuso e reason sanitizada. Não
+modo de sessão, bytes do transcript, fase, duração, reuso, reason sanitizada e,
+em erro terminal do App Server, um `errorCode` de enum fechado derivado do
+`codexErrorInfo` (por exemplo `usage_limit_exceeded` ou `bad_request`). Não
 copie nem tente adicionar prompts, respostas, `structured_output`, argumentos de
 tools, stdout/stderr, headers, credenciais ou paths privados. A retenção local é
 controlada por `BROKER_EXECUTION_LOG_MAX_BYTES` e
@@ -225,11 +227,22 @@ sudo systemctl disable --now azigate-broker@USUARIO.service
   arquivo regular, de no máximo 1 MiB, pertencente ao usuário do serviço e com
   modo `0600`; não aponte para um diretório nem relaxe as permissões.
 - `cli_execution_failed` com health saudável: consulte a reason sanitizada no JSONL.
+  `codex_turn_error_event` indica erro final do App Server, depois de ele não
+  sinalizar `willRetry`; não faça retry no gateway/Qwen nem registre a resposta
+  RPC. O campo `errorCode` da mesma linha aponta a categoria terminal
+  (`usage_limit_exceeded`, `unauthorized`, `bad_request`, `server_overloaded`
+  etc.) sem expor a mensagem. `codex_turn_not_completed` indica encerramento
+  anormal do turno. Ambos permanecem sanitizados.
   Para Claude, `claude_result_error_max_structured_output_retries` indica que o
   provider não concluiu o schema após as próprias tentativas; não faça loop de retry
   no agente. `claude_result_error_during_execution` pode indicar falha remota;
   execute um único gate diagnóstico e revise a conta.
 - socket com permission denied: alinhe UID/GID do container com o usuário da unidade; não relaxe para `0666`.
+- `cli_unavailable` em todas as chamadas logo após um restart do broker, com
+  health do socket saudável no host: o bind mount do container pode ter ficado
+  órfão. A unidade atual usa `RuntimeDirectoryPreserve=yes` para preservar o
+  inode de `/run/azigate`; se o restart ocorreu com a unidade antiga, execute
+  `docker compose up -d --force-recreate gateway`.
 - Toda falha de `/execute` emite no journal do broker uma linha
   `broker_execute_failed` com `requestId`, provider, nome da classe de erro e
   código sanitizado — sem prompts, respostas ou stderr bruto. Use-a para
