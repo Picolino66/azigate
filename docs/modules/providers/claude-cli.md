@@ -2,93 +2,68 @@
 
 ## Descrição
 
-Provider experimental com oito aliases versionados e o sinônimo legado `claude-cli`. Usa o login existente e nunca migra silenciosamente para API key.
+Aliases Claude que falam diretamente com a **Messages API** da Anthropic
+(`https://api.anthropic.com/v1/messages`), autenticados pela assinatura do
+operador via OAuth — não por API key. Oito modelos versionados mais o sinônimo
+legado `claude-cli`.
 
 ## Localização no código
 
-`src/providers/`, `src/broker/executor.ts`, `src/broker/memory-executor.ts`,
-`src/broker/session-correlation.ts`, `src/broker/capabilities.ts` e
-`src/broker/viability-gate.ts`.
+`src/providers/anthropic-client.ts`, `src/providers/oauth/claude-oauth.ts`,
+`src/providers/oauth/login-claude.ts`, `src/translation/openai-to-anthropic.ts`,
+`src/translation/anthropic-to-openai.ts` e `src/providers/reasoning-effort.ts`.
 
 ## Entrada
 
-O mesmo subconjunto textual/function tool do Codex. Conteúdo multimodal é rejeitado. O campo público `model` seleciona apenas um alias fechado; `reasoning_effort` ou `reasoning.effort` aceita `low`, `medium`, `high`, `xhigh` ou `max`.
+Mensagens textuais ou multimodais (imagem, documento), function tools,
+`tool_choice` e `parallel_tool_calls`. O campo público `model` seleciona apenas um
+alias fechado; `reasoning_effort` ou `reasoning.effort` aceita `low`, `medium`,
+`high`, `xhigh` ou `max`.
 
 ## Saída
 
-Decisão validada e normalizada para Chat Completions JSON/SSE.
+Chat Completion com `content`/`tool_calls`, em JSON (buffer) ou SSE incremental
+real, conforme o `stream` do pedido.
 
 ## Dependências
 
-Claude CLI autenticado, Bubblewrap, `~/.claude` com modo `0700`,
-`~/.claude.json` regular com modo `0600`, broker ativo e dois flags explícitos de
-habilitação.
+Token OAuth da assinatura salvo em `CLAUDE_TOKEN_FILE` (obtido uma vez com
+`npm run login:claude`) e `ENABLE_CLAUDE_CLI=true`.
 
 ## Regras de negócio
 
-- Print mode persistente com input/output `stream-json`, JSON schema, tools vazias
-  e MCP estrito vazio. `stateless` preserva o modo JSON de uma chamada.
-- Slash commands, Chrome, persistência e fontes de settings são desabilitados.
-- Prompt suggestions são desabilitadas para evitar chamadas auxiliares.
-- O prompt canônico compartilhado instrui que a sandbox local é descartável e que
-  ações em arquivos/comandos devem ser delegadas pela function tool ao executor
-  remoto, nunca recusadas por falta de permissão local.
-- `dontAsk` não concede ferramentas; a lista de tools continua vazia.
-- Cada alias mapeia para um único nome completo enviado por `--model`; `claude-cli` equivale a Sonnet 4.6.
-- Omissão ou effort incompatível aplica o padrão do catálogo. Sonnet 4.5 e Haiku 4.5 não recebem `--effort`.
-- O formato plano tem precedência sobre o aninhado; `reasoning: false` usa o default do modelo.
-- O protocolo v6 e o broker validam novamente provider, modelo e matriz de effort.
-- Thinking permanece privado ao CLI e não é publicado em Chat Completions ou SSE.
-- A versão instalada deve oferecer todos os flags.
-- O startup valida proprietário, tipo, tamanho máximo de 1 MiB e permissões do
-  `CLAUDE_CONFIG_PATH` e de `.claude/.credentials.json`. Cada sessão recebe uma
-  cópia `0600` da configuração e monta somente a credencial no home efêmero; o
-  arquivo original nunca é montado na sandbox.
-- A correlação em RAM reutiliza o processo somente com um prefixo semântico exato.
-  Mudança de effort cria sessão nova porque `--effort` pertence à inicialização.
-- No Claude Code `>= 2.1.215`, o structured output do modo memory chega como tool
-  call interno `StructuredOutput` seguido do eco `user`/`tool_result`; o broker
-  aceita apenas esse par casado por `tool_use_id` e continua recusando qualquer
-  outra ferramenta.
-- O schema de structured output é específico do request e impõe texto XOR tools,
-  nomes oferecidos, `tool_choice` e paralelismo. A validação posterior local
-  continua obrigatória.
-- Resultado final diferente de `success` é classificado por reason sanitizada;
-  `error_max_structured_output_retries` e `error_during_execution` permanecem
-  `cli_execution_failed` no contrato público, sem publicar dados do provider.
-- Usage soma input novo, criação de cache e leitura de cache. O custo do CLI é
-  registrado como estimativa, não como porcentagem da cota.
-- Bloqueio de autenticação/política mantém o alias indisponível; nenhuma API key é introduzida.
-
-## Evidência de viabilidade
-
-A evidência anterior do modelo padrão no protocolo v3 não certifica os oito modelos versionados. Cada modelo do protocolo v4 precisa passar 20/20 estruturas, zero ferramenta local, ao menos 18/20 categorias e seus smokes de effort. Falha individual omite somente o alias correspondente da allowlist.
-
-Gate real executado com Claude Code `2.1.214` em 18/07/2026:
-
-| Modelo | Estrutura | Categoria | Ferramenta local | Efforts | Publicação |
-|---|---:|---:|---:|---:|---|
-| Fable 5 | 20/20 | 20/20 | 0 | 4/4 | aprovada |
-| Sonnet 5 | 20/20 | 20/20 | 0 | 4/4 | aprovada |
-| Opus 4.8 | 20/20 | 20/20 | 0 | 4/4 | aprovada |
-| Opus 4.7 | 19/20 | 19/20 | 0 | 4/4 | reprovada |
-| Opus 4.6 | 20/20 | 20/20 | 0 | 3/3 | aprovada |
-| Sonnet 4.6 | 18/20 | 18/20 | 0 | 3/3 | reprovada; inclui `claude-cli` |
-| Sonnet 4.5 | 20/20 | 20/20 | 0 | não aplicável | aprovada |
-| Haiku 4.5 | 19/20 | 11/20 | 0 | não aplicável | reprovada |
-
-Assim, a allowlist local publica somente `claude-cli-fable-5`, `claude-cli-sonnet-5`, `claude-cli-opus-4.8`, `claude-cli-opus-4.6` e `claude-cli-sonnet-4.5`. Os demais aliases continuam reservados e recebem `403 model_not_allowed`.
+- `max_tokens` é obrigatório na Messages API; o gateway aplica um default fixo
+  quando o cliente não o envia.
+- Cada alias mapeia para um único `model` completo enviado à API;
+  `claude-cli` equivale a Sonnet 4.6.
+- Omissão ou effort incompatível aplica o padrão do catálogo. Sonnet 4.5 e
+  Haiku 4.5 nunca recebem `thinking`. Quando `thinking` está ativo, `temperature`
+  e `top_p` são omitidos (a API rejeita a combinação em alguns modelos).
+- O formato plano (`reasoning_effort`) tem precedência sobre o aninhado
+  (`reasoning.effort`); `reasoning: false` usa o default do modelo.
+- Ferramentas nativas não-`function` (ex.: `web_search_*`) são preservadas de
+  forma opaca; `allowed_domains`/`blocked_domains` vazios são removidos porque a
+  API rejeita array vazio nesses campos.
+- Streaming é incremental real: cada evento SSE (`content_block_delta`,
+  `message_delta`, etc.) vira um chunk OpenAI assim que chega, sem heartbeat nem
+  buffer da resposta inteira.
+- Erro antes do primeiro byte vira status HTTP (`anthropic_upstream_error`,
+  `anthropic_timeout`, `anthropic_connection_error`); erro depois do início do
+  stream vira evento `error` sanitizado, sem `[DONE]`.
+- Autenticação sem técnicas de "cloaking"/fingerprint do cliente oficial — risco
+  aceito e documentado no adendo do [ADR-018](../../../adr/ADR-018-credencial-oauth-da-assinatura.md).
 
 ## Fluxo resumido
 
-Gateway resolve alias/modelo/default -> protocolo v6 -> broker correlaciona o
-prefixo -> Claude recebe transcript completo ou delta -> structured output é
-validado -> o agente recebe somente a decisão.
+Gateway resolve alias/modelo/effort -> traduz o corpo OpenAI para o corpo Messages
+-> `AnthropicClient` injeta o token OAuth e chama a API -> SSE nativo é traduzido
+evento a evento -> gateway devolve streaming incremental ou `chat.completion`
+acumulado.
 
 ## Possíveis erros
 
-Os mesmos erros CLI. Falha no gate ou no login resulta em `cli_unavailable` e
-omissão do catálogo. Arquivo `~/.claude.json` ausente, permissivo, grande demais ou
-com proprietário divergente produz o código sanitizado `config_file_unavailable`.
-Limite da conta/provedor encerra a execução como `cli_execution_failed`, sem
-registrar a resposta bruta.
+`invalid_reasoning_effort`, `cli_unavailable`, `oauth_not_logged_in`,
+`oauth_refresh_failed`, `anthropic_upstream_error`, `anthropic_timeout` e
+`anthropic_connection_error`. Bloqueio de detecção de cliente não-oficial pela
+Anthropic aparece como `anthropic_upstream_error` com status `403`/`429` —
+consulte o risco residual no threat model.

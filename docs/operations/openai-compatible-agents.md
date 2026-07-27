@@ -101,9 +101,9 @@ Em ambos os providers CLI, o campo plano tem precedência sobre o aninhado. `rea
 | `claude-cli-haiku-4.5` | Haiku 4.5 | nenhum | omitir |
 
 > Importante: nem todo alias fica publicado. Um alias só aparece em `/v1/models` se
-> estiver habilitado, saudável, aprovado no gate real e presente em
-> `ALLOWED_MODELS`. O status de gate por modelo (e quais configurar) está em
-> [qwen-code.md](qwen-code.md) e no [runbook do broker](../operations/broker.md).
+> estiver habilitado, aprovado no gate real, com o login OAuth feito
+> (`npm run login:codex`/`npm run login:claude`) e presente em `ALLOWED_MODELS`.
+> O status de gate por modelo (e quais configurar) está em [qwen-code.md](qwen-code.md).
 > Configure no agente apenas os modelos que aparecem no seu `GET /v1/models`.
 
 ## Compatibilidade e segurança
@@ -114,12 +114,13 @@ Em ambos os providers CLI, o campo plano tem precedência sobre o aninhado. `rea
   tools no formato OpenAI (`type: function`) e seja o executor. O suporte a tools
   varia por agente e por versão; se o seu cliente não envia function tools, os
   aliases ainda respondem em modo texto.
-- **Contrato restrito dos aliases CLI:** mensagens devem ser texto (blocos
-  `{ "type": "text" }`); conteúdo multimodal recebe `400`. Parâmetros de sampling
-  não aplicáveis são ignorados. Detalhes no [contrato público](../../specs/gateway-api.md).
-- **Sessão e contexto:** o broker pode reaproveitar um prefixo exato somente em RAM
-  e enviar apenas o delta. Contexto normalizado acima de 256 KiB recebe `413`; use
-  compactação e limpe tarefas sem relação.
+- **Aliases CLI suportam multimodal:** imagens e documentos são traduzidos para o
+  formato nativo de cada provedor (ver [camada de tradução](../modules/translation/index.md)).
+  Parâmetros de sampling não aplicáveis ao provedor são ignorados. Detalhes no
+  [contrato público](../../specs/gateway-api.md).
+- **Sem sessão no servidor:** cada requisição é traduzida e enviada de forma
+  independente; use `/clear` ou equivalente no agente para controlar o tamanho do
+  contexto enviado.
 - **Usage:** `prompt_tokens` Claude inclui input novo, criação e leitura de cache.
   No Codex, cache já está dentro do input. Esses tokens não correspondem diretamente
   à porcentagem de cota mostrada pelo plano.
@@ -212,15 +213,13 @@ em [qwen-code.md](qwen-code.md), e vale para qualquer agente):
 6. cancele uma execução pendente;
 7. alterne entre um alias Codex, um alias Claude (`low`, `high`, `max`) e um modelo
    do upstream;
-8. confirme no servidor que nenhum arquivo do repositório apareceu no broker.
+8. confirme no servidor que nenhum arquivo do repositório apareceu no gateway.
 
-O resultado correto é: alterações **somente no seu computador**; logs do
-gateway/broker contêm apenas metadados, nunca prompt, código, resposta ou
-argumentos.
+O resultado correto é: alterações **somente no seu computador**; logs do gateway
+contêm apenas metadados, nunca prompt, código, resposta ou argumentos.
 
 ## Referências
 
 - [Configuração do Qwen Code](qwen-code.md)
 - [Contrato público](../../specs/gateway-api.md)
 - [Arquitetura](../architecture.md)
-- [Instalação e operação do broker](../operations/broker.md)

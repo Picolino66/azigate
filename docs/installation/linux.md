@@ -5,10 +5,9 @@ dois modos:
 
 - **Modo passthrough (recomendado para começar):** apenas o gateway em container,
   encaminhando para o upstream OpenAI-compatible escolhido (DeepSeek por padrão;
-  pode ser OpenAI, OpenRouter, Ollama, etc.). Não precisa de broker, Bubblewrap nem
-  systemd.
-- **Modo completo:** o modo passthrough somado ao broker no host, que habilita os
-  aliases `codex-cli-*` e `claude-cli-*`.
+  pode ser OpenAI, OpenRouter, Ollama, etc.).
+- **Modo completo:** o modo passthrough somado ao login OAuth do Codex/Claude, que
+  habilita os aliases `codex-cli-*` e `claude-cli-*` como adaptadores HTTP nativos.
 
 Comece sempre pelo modo passthrough e só depois habilite os aliases.
 
@@ -22,8 +21,8 @@ flowchart TD
     Trouble --> Up
     Check -- "sim" --> Mode{"Quer Codex/Claude?"}
     Mode -- "não" --> AgentCfg[Configurar o agente]
-    Mode -- "sim" --> Broker[4. Broker + gate<br/>ver runbook]
-    Broker --> Nginx[5. Nginx / TLS]
+    Mode -- "sim" --> Login[4. Login OAuth Codex/Claude]
+    Login --> Nginx[5. Nginx / TLS]
     AgentCfg --> Done([Pronto])
     Nginx --> AgentCfg
 ```
@@ -36,18 +35,18 @@ Para o **modo passthrough** você precisa de:
 - uma chave do upstream escolhido (DeepSeek por padrão; ou OpenAI, OpenRouter, etc.);
 - opcionalmente Node.js `>=20.18.1`, caso queira rodar os testes/gates localmente.
 
-Para o **modo completo** você também precisa, no host:
+Para o **modo completo** você também precisa:
 
-- Linux com `systemd`, Bubblewrap e user namespaces habilitados;
-- Codex CLI e/ou Claude CLI já instalados e autenticados pelo usuário do serviço;
-- o gateway e o broker rodando com o **mesmo UID** para acessar o socket `0600`.
+- uma assinatura ativa do provedor que quer habilitar (ChatGPT Plus/Pro/Team para
+  Codex, Claude Pro/Max/Team para Claude);
+- Node.js `>=20.18.1` disponível no host para rodar o login OAuth uma única vez
+  (`npm run login:codex`/`npm run login:claude`), que abre um navegador local.
 
 Verifique o básico:
 
 ```bash
 docker compose version
-id -u
-id -g
+node --version
 ```
 
 ## 2. Código e variáveis de ambiente
@@ -119,105 +118,56 @@ Se tudo respondeu, pule para o
 
 ## 4. Modo completo: habilitar Codex/Claude (opcional)
 
-Os aliases `codex-cli-*` e `claude-cli-*` dependem do broker host, que isola os CLIs
-com Bubblewrap. A instalação completa do broker (unidade `systemd`, Bubblewrap,
-AppArmor e permissões) está no runbook — a fonte única:
+Os aliases `codex-cli-*` e `claude-cli-*` falam HTTP diretamente com a Responses
+API (Codex) e a Messages API (Claude), autenticados pela **assinatura** do
+operador via OAuth — não por API key paga por token (ver
+[ADR-018](../../adr/ADR-018-credencial-oauth-da-assinatura.md)). Não há mais
+broker, systemd, Bubblewrap ou socket para instalar.
 
-- [Instalação e operação do broker](../operations/broker.md)
+### 4.1 Fazer login uma vez por provedor
 
-Abaixo, um **exemplo real** de ponta a ponta habilitando um modelo Claude. Ele mostra
-os comandos concretos; os detalhes de systemd/Bubblewrap ficam no runbook acima.
-
-### Exemplo real: publicar o alias `claude-cli-opus-4.8`
-
-Faça tudo com o **usuário do serviço** (o mesmo UID do container). O objetivo é
-publicar o alias `claude-cli-opus-4.8`, que mapeia para o modelo interno
-`claude-opus-4-8`.
-
-**4.1 Instalar e autenticar o Claude CLI (Claude Code) no host**
+Rode localmente (fora do container, com Node.js instalado):
 
 ```bash
-# Opção A - instalador nativo (vai para ~/.local/bin/claude, que casa com o .env.example)
-curl -fsSL https://claude.ai/install.sh | bash
-# Opção B - via npm
-npm install -g @anthropic-ai/claude-code
-
-# Confirme o caminho real e a versão
-which claude
-claude --version
-
-# Faça login uma vez (interativo) e verifique
-claude
-claude auth status
-
-# Proteja o diretório, a credencial e o arquivo de configuração top-level
-chmod 0700 ~/.claude
-chmod 0600 ~/.claude/.credentials.json ~/.claude.json
+npm ci --ignore-scripts
+npm run login:codex -- secrets/codex-oauth.json
+npm run login:claude -- secrets/claude-oauth.json
 ```
 
-Nenhuma API key nova é criada: o broker usa o login existente. Se o login ou a
-política bloquear a automação, o alias permanece indisponível (fail-closed).
+Cada comando imprime uma URL de autorização. Abra-a no navegador, autentique-se
+com a conta que tem a assinatura ativa, e o comando grava o token localmente
+(diretório `0700`, arquivo `0600`) assim que o navegador for redirecionado de
+volta. Nenhuma API key nova é criada. Se o login falhar ou a conta não tiver
+assinatura ativa, o alias permanece indisponível (fail-closed, `cli_unavailable`).
 
-**4.2 Apontar o broker para o binário e o auth dir do Claude**
+O diretório `secrets/` já está no `.gitignore` — nunca versione esses arquivos.
 
-Na configuração do broker (`/etc/azigate/broker.env`, `0600`), troque `USUARIO`
-pelo seu usuário e use o caminho retornado por `which claude`:
+### 4.2 Habilitar no `.env`
 
 ```dotenv
-BROKER_ENABLE_CLAUDE_CLI=true
-BROKER_CLAUDE_SESSION_MODE=memory
-BROKER_MAX_TRANSCRIPT_BYTES=262144
-BROKER_MAX_ACTIVE_SESSIONS=4
-BROKER_SESSION_IDLE_MS=1800000
-CLAUDE_CLI_PATH=/home/USUARIO/.local/bin/claude
-CLAUDE_AUTH_DIR=/home/USUARIO/.claude
-CLAUDE_CONFIG_PATH=/home/USUARIO/.claude.json
-```
-
-A instalação da unidade `azigate-broker@USUARIO.service` e o `reload` estão no
-[runbook do broker](../operations/broker.md).
-
-**4.3 Rodar o gate real para o modelo**
-
-O gate valida a viabilidade do modelo com cenários sintéticos (nunca aponta para um
-repositório). Para `claude-opus-4-8`:
-
-```bash
-GATE_CLAUDE_MODEL=claude-opus-4-8 npm run gate:claude
-GATE_CLAUDE_MODEL=claude-opus-4-8 npm run gate:claude-efforts
-```
-
-Aprovação exige 20/20 decisões estruturalmente válidas, zero evento de ferramenta
-local e ao menos 18/20 categorias corretas. Só continue se o modelo for aprovado.
-
-**4.4 Publicar o alias no gateway**
-
-No `.env` usado pelo Compose:
-
-```dotenv
+ENABLE_CODEX_CLI=true
 ENABLE_CLAUDE_CLI=true
+CODEX_TOKEN_FILE=secrets/codex-oauth.json
+CLAUDE_TOKEN_FILE=secrets/claude-oauth.json
 # ATENÇÃO: ALLOWED_MODELS filtra TODO o catálogo (upstream + aliases). Se preenchida,
-# inclua também os IDs do upstream que quer manter, senão só o alias Claude aparece.
-# Troque deepseek-v4-* pelos IDs reais do seu upstream (veja GET /v1/models).
+# inclua também os IDs do upstream que quer manter, senão só os aliases habilitados aparecem.
 ALLOWED_MODELS=deepseek-v4-pro,deepseek-v4-flash,claude-cli-opus-4.8
 ```
 
-No ambiente do broker, `BROKER_ENABLE_CLAUDE_CLI=true` já foi definido no passo 4.2.
-Recrie o gateway:
+O container precisa montar o diretório `secrets/` para ler e renovar o token —
+isso já está configurado em [docker-compose.yml](../../docker-compose.yml) via a
+variável `AZIGATE_SECRETS_DIR` (default `./secrets`).
+
+### 4.3 Recriar e verificar
 
 ```bash
 docker compose up -d --force-recreate gateway
 curl --fail http://127.0.0.1:3000/ready
-```
-
-**4.5 Verificar e testar**
-
-O alias deve aparecer no catálogo:
-
-```bash
 curl --fail -H "Authorization: Bearer SUA_CHAVE_DO_GATEWAY" \
   http://127.0.0.1:3000/v1/models
 ```
+
+Os aliases habilitados e com token salvo devem aparecer no catálogo.
 
 Um request de chat, escolhendo o effort:
 
@@ -232,14 +182,10 @@ O formato aninhado acima é o emitido pelo Qwen Code. O campo plano
 `reasoning_effort` continua aceito para compatibilidade e, se ambos forem enviados,
 tem precedência.
 
-Se o alias retornar `503 cli_unavailable`, confira o broker (health do socket, login,
-`BROKER_ENABLE_CLAUDE_CLI`, caminho do binário) no [runbook](../operations/broker.md).
-
-Para publicar outros modelos Claude, repita 4.3 e 4.4 com o nome interno
-correspondente (por exemplo `claude-fable-5`, `claude-sonnet-5`, `claude-opus-4-6`,
-`claude-sonnet-4-5`) e acrescente o alias público à `ALLOWED_MODELS`. Para o Codex, o
-fluxo é análogo com `npm run gate:codex` e `ENABLE_CODEX_CLI=true`. A tabela de
-aliases, efforts e status de gate está em
+Se o alias retornar `503 cli_unavailable`, confira se `ENABLE_CODEX_CLI`/
+`ENABLE_CLAUDE_CLI` está `true`, se o login OAuth foi feito
+(arquivo em `CODEX_TOKEN_FILE`/`CLAUDE_TOKEN_FILE` existe) e se o alias está em
+`ALLOWED_MODELS`. A tabela de aliases, efforts e status de gate está em
 [Configurar um agente OpenAI-compatible](../operations/openai-compatible-agents.md).
 
 ## 5. Publicar com Nginx e TLS
@@ -268,11 +214,11 @@ via Nginx.
   uma das chaves definidas em `GATEWAY_API_KEYS`.
 - **403 `ip_not_allowed`:** o IP de origem não está em `ALLOWED_IPS`.
 - **403 `model_not_allowed`:** o `model` não está em `ALLOWED_MODELS`.
-- **Alias retorna 503 `cli_unavailable`:** o broker está desligado, não passou no
-  gate, ou o alias não está em `ALLOWED_MODELS`. Consulte o
-  [runbook do broker](../operations/broker.md).
-- **Socket com permissão negada:** alinhe `BROKER_UID`/`BROKER_GID` do container ao
-  usuário da unidade `systemd`; não relaxe as permissões do socket.
+- **Alias retorna 503 `cli_unavailable`:** o provedor está desabilitado ou o login
+  OAuth não foi feito (`CODEX_TOKEN_FILE`/`CLAUDE_TOKEN_FILE` ausente). Refaça o
+  passo 4.1.
+- **502 `oauth_refresh_failed`:** o refresh token expirou ou foi revogado —
+  refaça o login (passo 4.1).
 
 ## Rollback
 
@@ -285,7 +231,6 @@ docker compose up -d --force-recreate gateway
 
 ## Referências
 
-- [Instalação e operação do broker](../operations/broker.md)
 - [Configurar seu agente OpenAI-compatible](../operations/openai-compatible-agents.md)
 - [Arquitetura](../architecture.md)
 - [Contrato público](../../specs/gateway-api.md)

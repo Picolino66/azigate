@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import type { FastifyInstance } from 'fastify'
 import type { AppConfig } from '../config.js'
-import type { CliBrokerClientLike } from '../providers/broker-client.js'
 import { healthyCliAliases } from '../providers/registry.js'
 import type { DeepSeekClient } from '../upstream/client.js'
 
@@ -28,7 +27,6 @@ export function registerHealthRoutes(
   app: FastifyInstance,
   config: AppConfig,
   client: DeepSeekClient,
-  broker: CliBrokerClientLike,
 ): void {
   app.get('/health', async () => ({ status: 'ok', service: 'azigate' }))
 
@@ -38,7 +36,7 @@ export function registerHealthRoutes(
     }
     const [deepseek, aliases] = await Promise.all([
       deepSeekReady(config, client),
-      healthyCliAliases(config, broker),
+      healthyCliAliases(config),
     ])
     if (!deepseek && aliases.length === 0) {
       return reply.code(503).send({ status: 'not_ready', service: 'azigate' })

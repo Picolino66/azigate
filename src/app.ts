@@ -21,12 +21,17 @@ import { registerModelsRoute } from './routes/models.js'
 import { GatewayAuthenticator } from './security/auth.js'
 import { FixedWindowRateLimiter } from './security/rate-limiter.js'
 import { DeepSeekClient } from './upstream/client.js'
-import { CliBrokerClient, type CliBrokerClientLike } from './providers/broker-client.js'
+import { AnthropicClient } from './providers/anthropic-client.js'
+import { CodexClient } from './providers/codex-client.js'
+import { refreshClaudeToken } from './providers/oauth/claude-oauth.js'
+import { refreshCodexToken } from './providers/oauth/codex-oauth.js'
+import { createTokenManager, type TokenManager } from './providers/oauth/token-store.js'
 
 export interface AppDependencies {
   logger?: FastifyBaseLogger
   metrics?: GatewayMetrics
-  brokerClient?: CliBrokerClientLike
+  codexTokenManager?: TokenManager
+  claudeTokenManager?: TokenManager
 }
 
 function createLogger(config: AppConfig): FastifyBaseLogger {
@@ -58,8 +63,33 @@ export function createApp(config: AppConfig, dependencies: AppDependencies = {})
   const authenticator = new GatewayAuthenticator(config.gatewayApiKeys)
   const limiter = new FixedWindowRateLimiter(config.rateLimitWindowMs, config.rateLimitMax, config.rateLimitIpMax)
   const client = new DeepSeekClient(config)
-  const broker = dependencies.brokerClient ?? new CliBrokerClient(config.cliBrokerSocketPath, config.cliRequestTimeoutMs)
-  const models = new ModelsService(config, client, broker)
+  const codexTokens =
+    dependencies.codexTokenManager ??
+    createTokenManager({ provider: 'codex', filePath: config.codexTokenFile, refresh: refreshCodexToken })
+  const claudeTokens =
+    dependencies.claudeTokenManager ??
+    createTokenManager({ provider: 'claude', filePath: config.claudeTokenFile, refresh: refreshClaudeToken })
+  const codexClient = new CodexClient(
+    {
+      baseUrl: config.codexBaseUrl.href,
+      connectTimeoutMs: config.connectTimeoutMs,
+      requestTimeoutMs: config.requestTimeoutMs,
+      maxRetries: config.upstreamMaxRetries,
+      retryMaxDelayMs: config.retryMaxDelayMs,
+    },
+    codexTokens,
+  )
+  const anthropicClient = new AnthropicClient(
+    {
+      baseUrl: config.claudeBaseUrl.href,
+      connectTimeoutMs: config.connectTimeoutMs,
+      requestTimeoutMs: config.requestTimeoutMs,
+      maxRetries: config.upstreamMaxRetries,
+      retryMaxDelayMs: config.retryMaxDelayMs,
+    },
+    claudeTokens,
+  )
+  const models = new ModelsService(config, client)
 
   app.decorateRequest('telemetry')
   app.addHook('onRequest', async (request) => {
@@ -98,11 +128,6 @@ export function createApp(config: AppConfig, dependencies: AppDependencies = {})
           : { estimatedCostUsd: request.telemetry.estimatedCostUsd }),
       },
     )
-    metrics.observeCliSession(
-      request.telemetry.sessionMode,
-      request.telemetry.sessionReused,
-      request.telemetry.transcriptBytes,
-    )
     if ((request.telemetry.upstreamStatus ?? 0) >= 500) metrics.upstreamErrorsTotal += 1
     request.log.info({
       requestId: request.id,
@@ -140,14 +165,6 @@ export function createApp(config: AppConfig, dependencies: AppDependencies = {})
       ...(request.telemetry.cacheHitPercent === undefined
         ? {}
         : { cacheHitPercent: request.telemetry.cacheHitPercent }),
-      ...(request.telemetry.sessionMode === undefined ? {} : { sessionMode: request.telemetry.sessionMode }),
-      ...(request.telemetry.sessionReused === undefined ? {} : { sessionReused: request.telemetry.sessionReused }),
-      ...(request.telemetry.transcriptBytes === undefined
-        ? {}
-        : { transcriptBytes: request.telemetry.transcriptBytes }),
-      ...(request.telemetry.validationCode === undefined
-        ? {}
-        : { validationCode: request.telemetry.validationCode }),
       ...(request.telemetry.error === undefined ? {} : { error: request.telemetry.error }),
     })
   })
@@ -190,16 +207,16 @@ export function createApp(config: AppConfig, dependencies: AppDependencies = {})
   }
 
   registerErrorHandler(app)
-  registerHealthRoutes(app, config, client, broker)
+  registerHealthRoutes(app, config, client)
   registerModelsRoute(app, protectedHook, models)
-  registerChatRoute(app, config, protectedHook, client, broker, metrics)
+  registerChatRoute(app, config, protectedHook, client, codexClient, anthropicClient, metrics)
 
   app.setNotFoundHandler((request, reply) => {
     request.telemetry.error = 'RouteNotFound'
     reply.code(404).send(publicError('Endpoint não encontrado', 'route_not_found'))
   })
   app.addHook('onClose', async () => {
-    await client.close()
+    await Promise.all([client.close(), codexClient.close(), anthropicClient.close()])
   })
 
   return app

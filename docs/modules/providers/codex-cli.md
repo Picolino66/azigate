@@ -2,97 +2,71 @@
 
 ## Descrição
 
-Aliases experimentais Codex que escolhem um modelo fixo da sessão autenticada. O Codex só produz texto ou uma decisão estruturada de tool calls para o agente cliente.
+Aliases Codex que falam diretamente com a **Responses API** da OpenAI
+(`https://chatgpt.com/backend-api/codex/responses`), autenticados pela assinatura
+do operador via OAuth — não por API key. Cada alias escolhe um modelo interno
+fixo.
 
 ## Localização no código
 
-`src/providers/`, `src/broker/executor.ts`, `src/broker/memory-executor.ts`,
-`src/broker/session-correlation.ts`, `src/broker/capabilities.ts` e
-`src/broker/viability-gate.ts`.
+`src/providers/codex-client.ts`, `src/providers/oauth/codex-oauth.ts`,
+`src/providers/oauth/login-codex.ts`, `src/translation/openai-to-responses.ts`,
+`src/translation/responses-to-openai.ts` e `src/providers/reasoning-effort.ts`.
 
 ## Entrada
 
-Mensagens textuais, function tools, `tool_choice` e `parallel_tool_calls`. Os modelos públicos são `codex-cli-sol`, `codex-cli-terra`, `codex-cli-luna`, `codex-cli-5.5` e `codex-cli-5.4`, mapeados para `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5` e `gpt-5.4`. `codex-cli` continua como sinônimo de `gpt-5.4`. Effort aceita `reasoning_effort` ou `reasoning.effort` com `low`, `medium`, `high`, `xhigh` ou `max`.
+Mensagens textuais ou multimodais (imagem, arquivo, áudio), function tools,
+`tool_choice` e `parallel_tool_calls`. Os modelos públicos são `codex-cli-sol`,
+`codex-cli-terra`, `codex-cli-luna`, `codex-cli-5.5` e `codex-cli-5.4`, mapeados
+para `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5` e `gpt-5.4`.
+`codex-cli` continua como sinônimo de `gpt-5.4`. Effort aceita `reasoning_effort`
+ou `reasoning.effort` com `low`, `medium`, `high`, `xhigh` ou `max`.
 
 ## Saída
 
-Chat Completion com `content` ou `tool_calls`. IDs são criados pelo gateway. Em streaming, heartbeat precede a decisão final atômica.
+Chat Completion com `content` ou `tool_calls`, em JSON (buffer) ou SSE
+incremental real, conforme o `stream` do pedido. IDs de tool call vêm do
+`call_id` da Responses API.
 
 ## Dependências
 
-Codex CLI autenticado, Bubblewrap, `~/.codex` privado, broker ativo e `ENABLE_CODEX_CLI=true`.
+Token OAuth da assinatura salvo em `CODEX_TOKEN_FILE` (obtido uma vez com
+`npm run login:codex`) e `ENABLE_CODEX_CLI=true`.
 
 ## Regras de negócio
 
-- Em `memory`, um App Server privado cria threads com `ephemeral: true`; cada
-  `turn/start` recebe modelo/effort validados e `outputSchema`. O modo `stateless`
-  de contingência conserva `codex exec --ephemeral`/JSONL.
-- O modelo chega ao broker somente pela allowlist interna. No App Server ele é
-  definido em `thread/start`; em contingência vira `--model` no argv fixo.
-- O default de todos os modelos é `medium`; `max` é reduzido para `xhigh`. O valor
-  efetivo chega pelo protocolo v6 e é enviado em `turn/start`. No modo stateless,
-  vira `-c model_reasoning_effort="..."` reconstruído.
-- `reasoning_effort` plano tem precedência sobre `reasoning.effort`; `reasoning: false`, ausência ou objeto sem effort usa o default.
-- Configuração e rules do usuário ignoradas; somente `auth.json` entra no home
-  efêmero do App Server.
-- Sandbox `read-only`, approval `never` e shell/apps/browser/computer/hooks/multi-agent desabilitados.
-- O prompt canônico neutraliza a autoconsciência de sandbox do modelo: instrui que
-  o ambiente local é descartável, que estado read-only/approval nunca justifica
-  recusa e que ações em arquivos/comandos devem ser delegadas pela function tool
-  correspondente ao executor remoto. Mudanças nesse prompt exigem novo gate.
-- Qualquer evento de ferramenta local invalida a execução.
-- O gate usa 10 cenários duas vezes: 100% estrutural, zero ferramentas locais e 90% de categoria.
-- O startup não faz inferência: interpreta `debug models --bundled` e exige todos
-  os modelos/efforts fixados. A execução real mantém `--strict-config`.
-- A correlação em RAM reutiliza uma thread somente com um prefixo semântico exato.
-  Troca de effort é aplicada por turno sem perder a thread; divergência ou troca de
-  modelo cria thread nova.
-- Usage usa `thread/tokenUsage/updated.tokenUsage.last`: input já inclui cache,
-  cached/reasoning são subconjuntos e não são somados novamente.
-- A partir do `codex-cli 0.144`, o App Server envia `turn/completed` com `items`
-  vazios (`itemsView: "notLoaded"`); a decisão vem do último `item/completed` de
-  tipo `agentMessage` do turno, com o formato antigo mantido como preferência
-  quando `items` vier populado. As notificações `remoteControl/status/changed`
-  (a feature está `removed` e sempre reporta `disabled`) e `warning` são
-  toleradas como metadados; eventos MCP, de shell ou de subagente continuam
-  encerrando a sessão com `invalid_cli_output`.
-- O `outputSchema` é específico do request e obrigatoriamente um único objeto
-  plano: o validador de structured outputs da OpenAI rejeita `oneOf`/`anyOf` na
-  raiz e arrays sem `items`. O schema restringe `content` (`string|null`
-  conforme `tool_choice`), o `enum` dos nomes oferecidos, `minItems` quando
-  tools são obrigatórias e `maxItems` conforme `parallel_tool_calls`. O XOR
-  texto/tools e as demais regras são garantidos por `validateCliDecision` no
-  broker e no gateway, como defesa em profundidade.
-- Durante a execução, o broker registra somente fases e reasons sanitizados em
-  JSONL privado; decisão, item, argumentos e saída bruta nunca entram no log.
-  A notificação `error` do App Server só encerra o turno quando `willRetry` não
-  é verdadeiro; o broker aguarda a recuperação automática do Codex sem registrar
-  a resposta RPC. No erro terminal, o `codexErrorInfo` é classificado em um enum
-  fechado e gravado como `errorCode` no JSONL, sem a mensagem do provedor.
-
-## Evidência de viabilidade
-
-Em 16/07/2026, a versão instalada `codex-cli 0.133.0` passou 20/20 saídas estruturais, 20/20 categorias e produziu zero evento de ferramenta local. O gate deve ser repetido para cada modelo publicado e após upgrades.
-
-Em 20/07/2026, após upgrade para `codex-cli 0.144.6`, smokes isolados no effort
-`medium` aprovaram Sol, Terra e Luna com 1/1 estrutura válida, 1/1 categoria e
-zero ferramenta local por modelo. Isso valida o caminho funcional, mas não
-substitui o gate completo de 20 cenários de cada modelo.
-
-Em 21/07/2026, o prompt canônico recebeu instruções anti-recusa de sandbox após
-o `gpt-5.5` responder texto recusando criação de arquivo em vez de delegar. Smoke
-manual com o argv stateless do broker e `gpt-5.4` medium: o cenário que falhava
-retornou `tool_calls` com `write_file` correto, 1/1 estrutura válida e zero
-ferramenta local. O gate completo de 20 cenários por modelo com o prompt novo
-permanece pendente.
+- O corpo da Responses API tem campos fixos: `instructions: ""`, `store: false`,
+  `reasoning.summary: "auto"` e `include: ["reasoning.encrypted_content"]`.
+  `temperature`, `top_p` e `max_output_tokens` nunca são enviados — a Responses
+  via Codex rejeita esses campos.
+- O modelo chega somente pela allowlist interna (`src/cli-catalog.ts`); o cliente
+  nunca escolhe o valor enviado em `model`.
+- O default de todos os modelos é `medium`; `max` é reduzido para `xhigh` antes de
+  chegar à API (`src/providers/reasoning-effort.ts`).
+- `reasoning_effort` plano tem precedência sobre `reasoning.effort`; `reasoning: false`, ausência ou objeto sem `effort` usa o default.
+- Mensagem de assistant que contém somente `tool_calls` não vira um item
+  `message`: os `function_call` são emitidos diretamente no `input[]`, preservando
+  a correlação por `call_id`.
+- Nomes de ferramenta acima de 64 caracteres são encurtados preservando o prefixo
+  `mcp__` e o último segmento, com mapa reverso aplicado na resposta para devolver
+  ao cliente o nome original (`buildShortNameMap`).
+- Streaming é incremental real: cada evento SSE (`response.output_text.delta`,
+  `response.function_call_arguments.delta`, etc.) vira um chunk OpenAI assim que
+  chega, sem heartbeat nem buffer da resposta inteira.
+- Erro antes do primeiro byte vira status HTTP (`codex_upstream_error`,
+  `codex_timeout`, `codex_connection_error`); erro depois do início do stream vira
+  evento `error` sanitizado, sem `[DONE]`.
+- Retentativas seguem a mesma política do upstream: só antes do início da
+  resposta, limitadas a `429`/`502`/`503`/`504`.
 
 ## Fluxo resumido
 
-Gateway normaliza modelo/effort -> protocolo v6 -> broker correlaciona o prefixo ->
-App Server recebe transcript completo ou delta -> broker recusa itens locais e
-valida a mensagem final -> gateway valida allowlist -> o agente recebe a decisão.
+Gateway normaliza modelo/effort -> traduz o corpo OpenAI para o corpo Responses ->
+`CodexClient` injeta o token OAuth e chama a API -> SSE nativo é traduzido evento a
+evento -> gateway devolve streaming incremental ou `chat.completion` acumulado.
 
 ## Possíveis erros
 
-`invalid_cli_request`, `cli_context_too_large`, `cli_busy`, `invalid_cli_output`,
-`cli_execution_failed`, `cli_unavailable` e `cli_timeout`.
+`invalid_reasoning_effort`, `cli_unavailable`, `oauth_not_logged_in`,
+`oauth_refresh_failed`, `codex_upstream_error`, `codex_timeout` e
+`codex_connection_error`.

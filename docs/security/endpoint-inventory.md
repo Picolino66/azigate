@@ -1,6 +1,7 @@
 # Inventário e matriz de endpoints
 
-Data: 20/07/2026.
+Data: 27/07/2026. Atualizado pela migração de broker CLI para adaptadores HTTP
+nativos (ver [ADR-016](../../adr/ADR-016-substituicao-do-broker-por-adaptadores-http.md)).
 
 ## Superfície pública
 
@@ -8,21 +9,18 @@ Data: 20/07/2026.
 |---|---|---|---|---|---|---|
 | GET | `/health` | não | liveness local | nome/status estáticos, sem consulta a provider | teste local e smoke do container | OK |
 | GET | `/ready` | não | prontidão agregada | somente status/nome; ao menos um provider utilizável | testes de degradação | OK |
-| GET | `/v1/models` | Bearer gateway | catálogo combinado | allowlists; aliases apenas habilitados/saudáveis; `503` se vazio | testes auth/cache/falha parcial | OK |
-| POST | `/v1/chat/completions` | Bearer gateway | inferência roteada | rate limit; allowlists; upstream opaco ou subconjunto CLI estrito | regressão do upstream e integração broker | OK |
+| GET | `/v1/models` | Bearer gateway | catálogo combinado | allowlists; aliases apenas habilitados com token OAuth salvo; `503` se vazio | testes auth/cache/falha parcial | OK |
+| POST | `/v1/chat/completions` | Bearer gateway | inferência roteada | rate limit; allowlists; upstream opaco ou tradução Codex/Claude | regressão do upstream e integração multiprovedor | OK |
 
 Qualquer outra rota recebe `404`. Não existem login, cadastro, upload, download, pagamentos, administração, tenants, webhooks ou recursos por ID; BOLA/IDOR não se aplicam.
 
-## Superfície privada do broker
+## Superfície privada: não existe mais
 
-Não é TCP nem pública. Existe somente no Unix socket `0600`, sob diretório `0700`.
-
-| Método | Rota | Controle | Entrada | Saída | Status |
-|---|---|---|---|---|---|
-| GET | `/health` | filesystem/UID + protocolo local | nenhuma | versão e capacidade sanitizada | OK |
-| POST | `/execute` | filesystem/UID + header v6 + JSON | request ID, provider, modelo CLI permitido, effort efetivo, mensagens e function tools | decisão, usage provider-specific e metadados seguros da sessão | OK local |
-
-`/execute` rejeita campos extras, inclusive `cwd`, comando, argv, ambiente, URL e path. O gateway reconstrói a entrada; nenhum campo HTTP do agente cliente escolhe binário ou filesystem.
+O broker, o socket Unix `0600` e o subprocesso Bubblewrap foram removidos. Os
+aliases Codex/Claude não têm mais uma superfície privada intermediária — o
+gateway fala HTTPS diretamente com `api.anthropic.com` e
+`chatgpt.com/backend-api/codex`, autenticado por token OAuth (ver
+[ADR-018](../../adr/ADR-018-credencial-oauth-da-assinatura.md)).
 
 ## Operações críticas
 
@@ -30,11 +28,11 @@ Não é TCP nem pública. Existe somente no Unix socket `0600`, sob diretório `
 |---|---|---|---|---|---|
 | Consultar modelos | chave/IP/model allowlist | rate limit e cache local | metadados sem body | consumo de cota/enumeração | OK |
 | Inferência do upstream | chave/IP/model | body, timeout e retries pré-resposta | sem conteúdo | custo e dados sensíveis | OK |
-| Decisão Codex/Claude | chave/IP/alias + socket UID | 1 execução, 10 min, 4 MiB/turno, transcript 256 KiB, 4 sessões RAM, sem retry do gateway | usage/cache/sessão sem prompt/stdout/stderr | login CLI, confusão de sessão e prompt injection | OK automatizado; benchmark real pendente |
+| Inferência Codex/Claude (HTTP nativo) | chave/IP/alias + token OAuth próprio do provedor | timeout/retry limitados a status configurados, sem fila | usage/effort sem prompt/resposta/tool arguments | detecção de cliente não-oficial (Claude), expiração/perda de token OAuth | OK automatizado; smoke real (Fase 8) pendente |
 | Executar ferramenta | confirmação do agente no seu computador | política do agente | fora do gateway | alteração no repositório | smoke remoto pendente |
 
 ## Mass assignment e exposição
 
 - O upstream aceita campos extras intencionalmente para preservar o contrato opaco, mas o destino continua fixo.
-- CLI usa reconstrução allowlist: somente mensagens textuais, function tools, `tool_choice`, `parallel_tool_calls`, modelo interno fixo e effort normalizado entram no broker.
-- Catálogo, health e erros não expõem paths de binário/auth, argv, stderr, account ID ou secrets.
+- Codex/Claude usam tradução determinística (`src/translation/`): mensagens, tools, `tool_choice`, `parallel_tool_calls`, modelo interno fixo e effort normalizado são convertidos para o corpo nativo de cada provedor; nenhum campo HTTP do cliente escolhe host, path ou credencial.
+- Catálogo, health e erros não expõem token OAuth, account ID bruto do provedor ou secrets.
