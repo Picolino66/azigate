@@ -75,6 +75,7 @@ export class AnthropicClient {
             accept: input.stream ? 'text/event-stream' : 'application/json',
             'accept-encoding': 'identity',
             connection: 'keep-alive',
+            'user-agent': 'azigate',
             'anthropic-version': ANTHROPIC_VERSION,
             'anthropic-beta': ANTHROPIC_BETA,
             'x-app': 'cli',

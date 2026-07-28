@@ -74,6 +74,7 @@ export class CodexClient {
             accept: input.stream ? 'text/event-stream' : 'application/json',
             'accept-encoding': 'identity',
             connection: 'keep-alive',
+            'user-agent': 'azigate',
             originator: CODEX_ORIGINATOR,
             ...(token.accountId === undefined ? {} : { 'chatgpt-account-id': token.accountId }),
             'x-request-id': input.requestId,

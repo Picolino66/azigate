@@ -38,6 +38,7 @@ describe('CodexClient', () => {
     expect(recorded?.headers['chatgpt-account-id']).toBe('acct_1')
     expect(recorded?.headers['content-type']).toBe('application/json')
     expect(recorded?.headers['accept-encoding']).toBe('identity')
+    expect(recorded?.headers['user-agent']).toBe('azigate')
 
     await client.close()
     await mock.close()

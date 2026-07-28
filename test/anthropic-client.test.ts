@@ -36,6 +36,7 @@ describe('AnthropicClient', () => {
     expect(recorded?.headers['anthropic-beta']).toContain('oauth-2025-04-20')
     expect(recorded?.headers['x-app']).toBe('cli')
     expect(recorded?.headers['accept-encoding']).toBe('identity')
+    expect(recorded?.headers['user-agent']).toBe('azigate')
 
     await client.close()
     await mock.close()
