@@ -1,62 +1,74 @@
 # Modelo de ameaças
 
-Data da revisão: 20/07/2026. Escopo: gateway, adaptador de upstream, broker host, subprocessos Codex/Claude, container, Compose, systemd e Nginx. O computador do agente cliente não foi alterado nem testado neste ciclo.
+Data da revisão: 27/07/2026. Escopo: gateway, adaptador de upstream, adaptadores
+HTTP nativos Codex/Claude, camada de tradução, fluxo OAuth e container. O
+computador do agente cliente não foi alterado nem testado neste ciclo.
+
+Reescrito pela migração de broker CLI (subprocessos Bubblewrap) para adaptadores
+HTTP nativos — ver [ADR-016](../../adr/ADR-016-substituicao-do-broker-por-adaptadores-http.md),
+[ADR-017](../../adr/ADR-017-fim-do-regime-sintetico-de-sse.md) e
+[ADR-018](../../adr/ADR-018-credencial-oauth-da-assinatura.md). A superfície de
+subprocesso, Bubblewrap e socket Unix **deixou de existir**; em seu lugar nasce a
+superfície de dois upstreams adicionais com segredos próprios (tokens OAuth) e uma
+camada de tradução que manipula conteúdo do usuário em código do gateway.
 
 ## Ativos
 
-- chave do upstream e chaves Bearer do gateway;
-- sessões e diretórios de autenticação `~/.codex` e `~/.claude`, incluindo o
-  arquivo top-level `~/.claude.json`;
+- chave do upstream, chaves Bearer do gateway e tokens OAuth (access + refresh) de
+  Codex e Claude;
 - prompts, código-fonte, tool arguments, resultados e respostas;
 - repositórios no computador do agente cliente;
-- disponibilidade e cotas dos provedores.
+- disponibilidade e cotas dos provedores (upstream, Codex, Claude).
 
 ## Fronteiras de confiança
 
 1. Agente cliente -> Nginx/gateway: rede não confiável, protegida por TLS, Bearer, allowlists e limites.
 2. Gateway -> upstream: HTTPS para base e paths fixos, com credencial reconstruída.
-3. Container -> broker: protocolo HTTP v6 sobre Unix socket privado; o mount é read-only.
-4. Broker -> CLI: processo e saída não confiáveis, contidos por argv fixo, ambiente limpo, Bubblewrap e schema.
-5. Agente cliente -> repositório: única fronteira com capacidade de leitura, shell e edição, sujeita à confirmação do usuário.
+3. Gateway -> Anthropic (Messages API): HTTPS, path fixo `/v1/messages`, `Authorization: Bearer <token OAuth>` reconstruído pelo `AnthropicClient`.
+4. Gateway -> Codex (Responses API): HTTPS, path fixo `/responses`, `Authorization: Bearer <token OAuth>` e `Chatgpt-Account-Id` reconstruídos pelo `CodexClient`.
+5. Gateway -> arquivo de token OAuth: leitura/escrita local `0600`, nunca logado, nunca montado em outro processo.
+6. Agente cliente -> repositório: única fronteira com capacidade de leitura, shell e edição, sujeita à confirmação do usuário.
 
 ## Ameaças e controles
 
 | Ameaça | Impacto | Controle implementado | Evidência |
 |---|---|---|---|
-| Proxy aberto/SSRF | acesso a hosts internos ou terceiros | quatro rotas públicas; registry fechado; base/paths do upstream fixos; broker recusa URL/path | testes de rotas, registry e protocolo |
+| Proxy aberto/SSRF | acesso a hosts internos ou terceiros | quatro rotas públicas; registry fechado; base/paths de todos os adaptadores fixos, nenhum aceita URL/path do cliente | testes de rotas, registry e clientes HTTP |
 | Confusão de provedor/fallback | envio de dados ao provedor errado | aliases reservados e sem fallback automático | testes de roteamento e catálogo |
-| Roubo/substituição de credencial | uso indevido ou vazamento | Bearer local, comparação constante, Authorization reconstruído e separação container/broker | regressão de auth e mounts do Compose |
-| Vazamento do login CLI | controle da conta Codex/Claude | auth dirs `0700`, arquivos `0600`, home oculto por systemd, somente `auth.json`/`.credentials.json` montados nas sessões e cópia efêmera da configuração Claude | check de capacidade, systemd, permissões e testes de isolamento |
-| Prompt injection solicitando host/shell | leitura ou alteração do servidor | CLI sem ferramentas, sem repositório/home, `/work` descartável, eventos de execução rejeitados | cenários de gate, testes de argv e output |
-| Injeção de comando no broker | execução arbitrária | protocolo não possui comando/cwd/argv/env; `spawn` com `shell: false` e argv fixo | testes de protocolo e fake runner |
-| Abuso de effort/modelo CLI | custo ou argumento inesperado | aliases fechados; modelo completo, effort efetivo e combinação revalidados no protocolo v6; argv/RPC reconstruídos | testes de catálogo, protocolo, normalização e executor |
-| Escape de filesystem | acesso ao host/repositório | Bubblewrap com filesystem mínimo, work/tmp/home efêmeros, nenhum home completo e nenhuma montagem do `.claude.json` original | smoke Bubblewrap, inspeção de argv e teste de imutabilidade do original |
-| Socket acessado por outro usuário | inferência não autorizada | diretório `0700`, socket `0600`, mesmo UID e bind read-only | teste Unix e unidade systemd |
-| Saída maliciosa/alucinação de tool | o agente executa ação não oferecida | schema fechado, allowlist de nomes, argumentos JSON, IDs locais e sem heurística de patch | testes de decisão e CLI output |
-| DoS/fork/processo órfão | exaustão de CPU/memória/processos | concorrência global 1 sem fila, transcript 256 KiB, timeout 10 min, 4 MiB por turno, até 4 sessões, TTL/LRU, interrupção/grupo SIGTERM/SIGKILL e limites systemd | testes de limite, sessão, busy, timeout, output e cancelamento |
-| Confusão entre sessões | vazamento de contexto entre conversas | hashes SHA-256, IDs de tool calls normalizados, modelo/tools no fingerprint e reuso somente com um único prefixo exato | testes de prefixo, divergência e ambiguidade |
-| Persistência indevida de transcript | exposição após restart | somente RAM; threads Codex efêmeras; Claude sem session persistence; work/home removidos em TTL, LRU, crash ou shutdown | testes com CLIs falsos e inspeção de artefatos |
-| Telemetria de usage incorreta | diagnóstico/custo enganoso | parsers separados; cache/reasoning tratados como parcelas ou subconjuntos conforme provider | fixtures Claude/Codex e incidente documentado |
-| Vazamento em logs/erros | exposição de secrets e código | sem bodies/stdout/stderr/prompts; modelo e effort usam allowlists/normalização; erros e health sanitizados | testes e revisão de observabilidade |
-| Log privado de execução | retenção de conteúdo ou acesso local indevido | JSONL somente com enum de fases/reasons e metadados permitidos; diretório `0700`, arquivos `0600`, rotação limitada e fora do container/Git | testes de sanitização, permissões e rotação |
-| Buffering/SSE inconsistente | cliente travado ou resposta inválida | upstream byte a byte; CLI heartbeat e decisão atômica validada | testes dos dois regimes SSE |
-| Mudança de flags/versionamento CLI | perda silenciosa de isolamento | checks de startup e gate por versão; alias omitido quando incapaz | gate real e testes de capacidades |
+| Roubo/substituição de credencial | uso indevido ou vazamento | Bearer local, comparação constante, `Authorization` reconstruída por adaptador a partir do seu próprio segredo — a credencial do cliente nunca segue adiante | testes de auth e dos clientes HTTP |
+| Vazamento/uso indevido do token OAuth da assinatura | controle da conta Codex/Claude do operador | arquivo `0700`/`0600`, fora do container versionado, nunca logado; renovação automática sob demanda; falha de login vira `oauth_not_logged_in` sem fallback | testes de `token-store`, `codex-oauth`, `claude-oauth` |
+| Detecção de cliente não-oficial pela Anthropic | bloqueio/limitação da conta ao usar o token OAuth fora do Claude Code oficial | **risco aceito e não mitigado por evasão**: o gateway não reproduz fingerprint/cloaking do cliente oficial (ver adendo do ADR-018); falha aparece como `anthropic_upstream_error` | ADR-018, sem gate automatizado — validar na Fase 8 |
+| Prompt injection solicitando host/shell | leitura ou alteração do servidor | Codex/Claude só recebem texto/tool schemas via HTTP; nenhuma ferramenta local, nenhum subprocesso, nenhum acesso a filesystem do host | testes de tradução e de roteamento |
+| Injeção de comando | execução arbitrária no servidor | não existe mais subprocesso, `spawn`, argv ou shell no caminho de requisição — a garantia é estrutural, não uma sandbox | ausência de qualquer chamada a `child_process` em `src/` |
+| Abuso de effort/modelo CLI | custo ou argumento inesperado | aliases fechados; modelo interno e effort normalizados em `src/providers/reasoning-effort.ts` antes de qualquer chamada HTTP | testes de `reasoning-effort` |
+| Saída maliciosa/alucinação de tool | o agente executa ação não oferecida | nomes de tool validados contra a allowlist da requisição; argumentos JSON parseados com fallback seguro (`{}`); IDs vêm do provedor | testes de tradução (tool_use/function_call) |
+| DoS por corpo grande | exaustão de memória | `MAX_REQUEST_BODY_BYTES` no Fastify; leitor de SSE limita o buffer de linha a 50 MB e o descarta se excedido | `sse-reader.ts` e testes |
+| Persistência indevida de conteúdo | exposição após restart | gateway stateless por requisição; nenhum transcript, prompt ou resposta é persistido em disco ou log | revisão de `cli-completion.ts` e observability |
+| Telemetria de usage incorreta | diagnóstico/custo enganoso | tradutores por provedor mapeiam `usage` explicitamente (cache/reasoning como subconjunto ou parcela conforme o provedor) | testes de tradução de usage |
+| Vazamento em logs/erros | exposição de secrets e código | sem bodies/prompts/tokens; erros de provedor viram códigos genéricos (`codex_upstream_error`, `anthropic_upstream_error`) sem repassar o corpo bruto do provedor | testes de sanitização e de erro |
+| Buffering/SSE inconsistente | cliente travado ou resposta inválida | upstream byte a byte; Codex/Claude streaming incremental real evento a evento, sem heartbeat artificial | testes dos três regimes SSE |
+| Mudança de contrato das APIs do provedor | falha silenciosa de tradução | Messages/Responses são APIs versionadas e estáveis (ao contrário das flags internas do broker anterior); mudanças de shape são pegas pelos testes de tabela da camada de tradução | suíte `test/translation-*.test.ts` |
+| Mudança do fluxo OAuth (client_id/endpoint não documentados oficialmente) | perda de acesso ou comportamento inesperado | lógica de OAuth isolada por provedor em `src/providers/oauth/`; falha vira `oauth_refresh_failed`/`oauth_token_exchange_failed` sem fallback silencioso | testes de `codex-oauth`/`claude-oauth` contra mock |
 | Supply chain/container | execução vulnerável | lockfile, `npm ci`, imagem pinada, processo não root e audit | build, audit e smoke local |
-
-O Bubblewrap segue o symlink de `/etc/resolv.conf` ao fazer o bind do arquivo. Somente resolução de nomes, hosts, identidade Unix pública e certificados são montados; `/etc` completo não entra na sandbox.
 
 ## Risco residual
 
-- Codex/Claude precisam ler o próprio diretório de autenticação e acessar seus
-  serviços pela rede; Claude também lê uma cópia efêmera de sua configuração. O
-  isolamento não elimina o risco intrínseco do binário autenticado.
-- Bubblewrap depende de user namespaces e do kernel do host. A unidade deve permanecer restrita ao ambiente pretendido (uso pessoal, LAN/VPN ou VPS autenticado) e atualizada.
-- O protocolo OpenAI-compatible do agente cliente e os CLIs são interfaces evolutivas; novos releases exigem repetir os gates antes de publicação.
+- O protocolo OpenAI-compatible do agente cliente e as APIs Messages/Responses são
+  interfaces evolutivas; mudanças de contrato exigem atualizar a camada de
+  tradução e seus testes de tabela.
+- O fluxo OAuth (client_id, endpoints, PKCE) reproduz comportamento observado das
+  CLIs oficiais, não uma API pública documentada e versionada — pode mudar sem
+  aviso, como as flags internas que motivaram a migração original.
+- Para o Claude, o gateway autentica com a assinatura do operador sem reproduzir
+  fingerprint/cloaking do cliente oficial. Isso pode ser detectado pela Anthropic
+  como uso não-oficial e resultar em bloqueio, limitação ou suspensão da conta —
+  risco aceito explicitamente pelo dono do projeto (ADR-018), não eliminado.
+- Usar a assinatura de um produto para autenticar um cliente não oficial pode
+  conflitar com os termos de uso do fornecedor, mesmo com reprodução de protocolo
+  tecnicamente equivalente à da CLI oficial.
 - Rate limit e cache continuam locais a uma instância.
-- Sessões em RAM ampliam o tempo de vida do processo autenticado até TTL/eviction.
-  Comprometimento do broker durante esse intervalo pode expor estado em memória;
-  não há persistência para recuperá-lo após restart.
 - A porcentagem das cotas Claude/Codex aplica pesos não expostos. Tokens lógicos
-  e custo estimado não garantem equivalência com a UI do plano.
-- O smoke completo de confirmação/edição/cancelamento no computador do agente cliente depende do deploy real e permanece pendente.
-- Depois do primeiro heartbeat SSE, o status HTTP não pode mudar; o erro sanitizado é enviado como evento e o stream termina sem `[DONE]`.
+  não garantem equivalência com a UI do plano.
+- O smoke completo com um cliente OpenAI-compatible real (tools, streaming,
+  multi-turn) depende de execução manual e permanece pendente até a Fase 8 da
+  migração ser concluída pelo operador.

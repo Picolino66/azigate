@@ -1,16 +1,34 @@
 {
   "orchestration_id": "c16a8ea6-06e8-4ec2-bb2c-7ac4cd272dc5",
   "created_at": "2026-07-14T13:35:00Z",
-  "updated_at": "2026-07-23T15:15:00-03:00",
-  "mode": "incident-response",
-  "current_phase": "F6",
-  "snapshot_version": "O5",
+  "updated_at": "2026-07-27T00:00:00-03:00",
+  "mode": "feature-evolution",
+  "current_phase": "F7",
+  "snapshot_version": "O6",
   "last_stable_snapshot": "O5",
   "evolution_cycle": {
-    "name": "multiprovider-cli-broker",
-    "status": "output-schema-plano-validado-na-api-real-deploy-do-broker-e-smoke-qwen-pendentes",
+    "name": "broker-cli-para-adaptadores-http",
+    "status": "fases-0-a-7-concluidas-check-verde-184-testes-coverage-e-audit-ok-fase-8-aguarda-validacao-manual-do-operador",
     "reassessed_phases": ["F2", "F3", "F5", "F6", "F7"],
-    "next_snapshot": "pending-qwen-tools-smoke-output-schema-plano"
+    "next_snapshot": "pending-translation-layer-e-clientes-http",
+    "spec": "migracao.md",
+    "migration_phases": {
+      "fase-0-decisao-e-adrs": "concluida",
+      "fase-1-camada-de-traducao": "concluida-src-translation-91-a-100-por-cento-cobertura-branches-84-por-cento",
+      "fase-2-clientes-http-oauth": "concluida-oauth-codex-e-claude-sem-cloaking-clientes-http-com-retry-check-verde-300-testes",
+      "fase-3-configuracao": "concluida-codex-claude-base-url-e-token-file-broker-cli-marcados-deprecated-check-verde-302-testes",
+      "fase-4-roteamento": "concluida-chat-ts-despacha-codex-claude-para-clientes-http",
+      "fase-5-streaming": "concluida-streaming-incremental-real-via-cli-completion-ts-sem-heartbeat",
+      "fase-6-remocao-broker": "concluida-src-broker-broker-client-cli-request-openai-response-systemd-apparmor-removidos",
+      "fase-7-documentacao": "concluida-arquitetura-modulos-operacao-seguranca-specs-incidentes-atualizados",
+      "fase-8-validacao-real": "pendente-requer-acao-manual-do-operador"
+    },
+    "credential_decision": {
+      "decided_by": "dono-do-projeto",
+      "option": "B-oauth-da-assinatura",
+      "adr": "ADR-018",
+      "date": "2026-07-27"
+    }
   },
   "product": {
     "name": "azigate",
@@ -109,49 +127,46 @@
     ]
   },
   "architecture": {
-    "pattern": "modular-monolith-plus-private-host-broker",
+    "pattern": "modular-monolith-http-adapters",
     "tech_stack": {
       "runtime": "Node.js >=20; imagem Node.js 22",
       "language": "TypeScript ESM NodeNext strict",
       "web": "Fastify",
-      "http": "Undici e HTTP/Unix socket nativo",
-      "isolation": "Bubblewrap + systemd",
+      "http": "Undici",
+      "isolation": "nenhuma (sem subprocesso/sandbox; garantia estrutural)",
       "tests": "Vitest"
     },
     "integration_contracts": [
       "Qwen Code OpenAI Compatible /v1",
       "DeepSeek /models e /chat/completions",
-      "broker Unix protocol v6 /health e /execute",
-      "Codex App Server com threads ephemeral, turn/start, outputSchema e tokenUsage.last; exec stateless como contingência",
-      "Claude print mode persistente stream-json com --model/--effort fixados, JSON schema, tools/MCP vazios e home efêmero"
+      "Anthropic Messages API /v1/messages (OAuth da assinatura)",
+      "OpenAI Responses API via Codex /backend-api/codex/responses (OAuth da assinatura)"
     ],
     "security_model": {
-      "authentication": "Bearer gateway e logins CLI existentes no host",
+      "authentication": "Bearer gateway; token OAuth da assinatura por adaptador (Codex/Claude)",
       "authorization": "IP/model/tool allowlists e aliases reservados",
-      "secrets": "gateway/container separados dos auth dirs e da configuração Claude do broker",
-      "ssrf": "DeepSeek e paths fixos; protocolo broker sem URL/path",
-      "execution": "Qwen único executor; CLIs sem ferramentas locais"
+      "secrets": "gateway/upstream/Codex/Claude com credenciais separadas; token OAuth em arquivo 0600",
+      "ssrf": "todos os adaptadores com paths fixos; nenhum aceita URL/path do cliente",
+      "execution": "agente cliente único executor; gateway nunca executa ferramentas nem subprocessos"
     },
-    "adrs": ["ADR-001", "ADR-002", "ADR-003", "ADR-004", "ADR-005", "ADR-006", "ADR-007", "ADR-008", "ADR-009", "ADR-010", "ADR-011", "ADR-012", "ADR-013", "ADR-014", "ADR-015"]
+    "adrs": ["ADR-001", "ADR-002", "ADR-003", "ADR-004", "ADR-005", "ADR-006", "ADR-007", "ADR-008", "ADR-009", "ADR-010", "ADR-011", "ADR-012", "ADR-013", "ADR-014", "ADR-015", "ADR-016", "ADR-017", "ADR-018"]
   },
   "contracts": {
     "api_version": "v1",
     "api_spec": "specs/openapi.yaml",
-    "broker_spec": "specs/broker-api.md",
-    "consistency_model": "gateway HTTP stateless; broker com sessões efêmeras somente em RAM",
+    "consistency_model": "gateway HTTP totalmente stateless; nenhuma sessão entre requisições",
     "schemas": [
       "payload DeepSeek aberto com validação mínima",
-      "payload CLI textual/function tool reconstruído",
-      "decisão CLI content xor tool_calls com schema gerado por request",
+      "payload Codex/Claude traduzido em código puro (src/translation/) para o formato nativo de cada provedor",
       "lista OpenAI de modelos combinada"
     ]
   },
   "engineering": {
     "module_map": {
       "edge": ["config", "auth", "rate-limit", "routes"],
-      "providers": ["registry", "deepseek-upstream", "broker-client", "cli-request", "openai-response"],
-      "broker": ["protocol", "capabilities", "prompt", "session-correlation", "interactive-process", "memory-executor", "isolation", "process-runner", "executor", "server"],
-      "operations": ["Docker", "Compose", "Nginx", "systemd"]
+      "providers": ["registry", "deepseek-upstream", "anthropic-client", "codex-client", "oauth", "reasoning-effort", "cli-completion", "sse-reader"],
+      "translation": ["openai-to-anthropic", "anthropic-to-openai", "openai-to-responses", "responses-to-openai", "state"],
+      "operations": ["Docker", "Compose", "Nginx"]
     },
     "backlog": ["GW-01..GW-10", "MP-01..MP-15"],
     "test_coverage_thresholds": {
@@ -166,11 +181,11 @@
     "docs_map": {
       "architecture": "docs/architecture.md",
       "providers": "docs/modules/providers/index.md",
+      "translation": "docs/modules/translation/index.md",
       "security": "docs/security/threat-model.md",
-      "broker_operations": "docs/operations/broker.md",
       "qwen_operations": "docs/operations/qwen-code.md"
     },
-    "specs_map": { "gateway": "specs/gateway-api.md", "openapi": "specs/openapi.yaml", "broker": "specs/broker-api.md" },
+    "specs_map": { "gateway": "specs/gateway-api.md", "openapi": "specs/openapi.yaml" },
     "tasks_workflow": { "plan": "tasks/implementation-plan.md" },
     "agents_map": { "ownership": "agents/README.md" },
     "skills_map": { "activated": "skills/README.md" },
@@ -235,17 +250,27 @@
       "F5-output-schema-plano-cobertura-acima-dos-limiares",
       "F5-output-schema-plano-audit-zero-vulnerabilidades",
       "F6-output-schema-plano-systemd-verify-json-e-links",
-      "F6-probe-real-output-schema-3-variantes-e-tool-call-valida"
+      "F6-probe-real-output-schema-3-variantes-e-tool-call-valida",
+      "F2-ADRs-016-017-018-migracao-broker-para-adaptadores-http",
+      "F5-translation-layer-86-testes-91-a-100-por-cento-cobertura",
+      "F5-oauth-codex-claude-e-clientes-http-com-retry-300-testes",
+      "F5-config-codex-claude-base-url-token-file-302-testes",
+      "F5-roteamento-e-streaming-incremental-real-sem-heartbeat",
+      "F6-remocao-completa-broker-bubblewrap-systemd-apparmor-184-testes",
+      "F6-check-lint-typecheck-build-verde",
+      "F6-cobertura-acima-dos-limiares-84-77-85-87",
+      "F6-audit-zero-vulnerabilidades-altas",
+      "F7-documentacao-arquitetura-modulos-operacao-seguranca-specs-incidentes-atualizada"
     ],
     "gates_failed": [
       "F5-claude-opus-4.7-estrutura-19-de-20",
       "F5-claude-sonnet-4.6-estrutura-18-de-20",
       "F5-claude-haiku-4.5-estrutura-19-de-20-categoria-11-de-20"
     ],
-    "gates_pending": ["F6-deploy-coordenado-protocolo-v6", "F6-benchmark-multiturn-10-turnos-reducao-60-por-cento", "F6-gate-completo-codex-5.6-por-modelo", "F6-smoke-qwen-codex-5.6-no-pc-da-vpn", "F6-smoke-qwen-efforts-low-medium-max-no-pc-da-vpn", "F6-smoke-claude-multiturn-na-conta", "F6-deploy-tls-lan-real", "F6-gate-codex-completo-pos-prompt-anti-recusa", "F6-smoke-qwen-tools-output-schema-plano"],
-    "test_results": { "files": 9, "tests_passed": 185, "tests_failed": 0 },
-    "coverage_report": { "statements": 82.31, "branches": 78.94, "functions": 88.09, "lines": 87.61 },
-    "security_report": "docs/security/2026-07-16-security-review.md"
+    "gates_pending": ["F8-smoke-real-cliente-openai-compatible-codex-claude-tools-streaming-multiturn", "F8-validar-risco-deteccao-cliente-nao-oficial-anthropic-sem-cloaking"],
+    "test_results": { "files": 15, "tests_passed": 184, "tests_failed": 0 },
+    "coverage_report": { "statements": 84.01, "branches": 76.76, "functions": 85.29, "lines": 87.47 },
+    "security_report": "npm audit --omit=dev --audit-level=high: 0 vulnerabilidades (27/07/2026, após bump find-my-way/brace-expansion)"
   },
   "operations": {
     "deployment_record": "broker e gateway v5 implantados pelo operador em 20/07/2026 às 11:11 BRT; Codex atualizou para 0.144.6 às 11:43 e o novo check de catálogo aguarda instalação antes do próximo restart",
@@ -258,7 +283,7 @@
       "broker": "serviço v5 ativo; subprocessos já usam Codex 0.144.6, mas o dist com check de catálogo precisa ser instalado antes de reiniciar",
       "gateway_restart": "container v5 recriado e DeepSeek validada; Sol/Terra/Luna podem permanecer na allowlist"
     },
-    "runbooks": ["docs/operations/broker.md", "docs/operations/qwen-code.md", "docs/operations/execution-clean.md"],
+    "runbooks": ["docs/installation/linux.md", "docs/operations/qwen-code.md", "docs/operations/openai-compatible-agents.md"],
     "rollback": "desabilitar aliases e recriar o gateway preserva DeepSeek",
     "slos": [],
     "alerts": [],
@@ -331,6 +356,14 @@
   },
   "orchestration": {
     "external_skills_activated": [
+      {
+        "skill_name": "autonomous-software-orchestrator",
+        "source": "~/.claude/skills/autonomous-software-orchestrator",
+        "reason": "coordenar a migração do broker CLI (subprocessos Bubblewrap) para adaptadores HTTP nativos contra Anthropic Messages API e OpenAI Responses API, conforme migracao.md",
+        "mode": "coordenadora-principal",
+        "phase": "F0-F7",
+        "timestamp": "2026-07-27T00:00:00-03:00"
+      },
       {
         "skill_name": "arch-refactor-engine",
         "source": "~/.agents/skills/arch-refactor-engine",

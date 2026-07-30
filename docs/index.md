@@ -8,9 +8,9 @@
 - [Contexto canônico do orquestrador](./orchestrator-context.json)
 - [Contrato público](../specs/gateway-api.md)
 - [OpenAPI](../specs/openapi.yaml)
-- [Protocolo privado do broker](../specs/broker-api.md)
 - [Plano rastreável](../tasks/implementation-plan.md)
 - [Plano de confiabilidade de execução CLI](../tasks/cli-execution-reliability-plan.md)
+- [Plano de migração broker → adaptadores HTTP](../migracao.md)
 
 ## Módulos
 
@@ -18,7 +18,11 @@
   - [Upstream OpenAI-compatible (DeepSeek por padrão)](./modules/providers/deepseek.md)
   - [Codex CLI](./modules/providers/codex-cli.md)
   - [Claude CLI](./modules/providers/claude-cli.md)
-  - [Sessões CLI efêmeras em memória](./modules/providers/sessoes-cli-em-memoria.md)
+- [Camada de tradução](./modules/translation/index.md)
+  - [OpenAI → Anthropic (requisição)](./modules/translation/openai-to-anthropic.md)
+  - [Anthropic → OpenAI (stream)](./modules/translation/anthropic-to-openai.md)
+  - [OpenAI → Responses/Codex (requisição)](./modules/translation/openai-to-responses.md)
+  - [Responses/Codex → OpenAI (stream)](./modules/translation/responses-to-openai.md)
 - [Observabilidade](./modules/observability/index.md)
   - [Logs de requisição](./modules/observability/logs.md)
 
@@ -30,10 +34,8 @@
 ## Operação
 
 - [Configurar um agente OpenAI-compatible](./operations/openai-compatible-agents.md)
-- [Instalação e operação do broker](./operations/broker.md)
 - [Configuração do Qwen Code](./operations/qwen-code.md)
 - [Incidentes operacionais](./operations/incidents/index.md)
-- [Execução limpa do broker e gateway Docker](./operations/execution-clean.md)
 
 ## Segurança
 
@@ -61,6 +63,9 @@
 - [ADR-013 — check Codex por catálogo estruturado](../adr/ADR-013-check-de-capacidade-codex-por-catalogo.md)
 - [ADR-014 — sessões CLI efêmeras em memória e usage por provider](../adr/ADR-014-sessoes-cli-efemeras-em-memoria-e-usage-por-provider.md)
 - [ADR-015 — telemetria segura e schema de decisão CLI](../adr/ADR-015-telemetria-segura-e-schema-decisao-cli.md)
+- [ADR-016 — substituição do broker por adaptadores HTTP](../adr/ADR-016-substituicao-do-broker-por-adaptadores-http.md)
+- [ADR-017 — fim do regime sintético de SSE](../adr/ADR-017-fim-do-regime-sintetico-de-sse.md)
+- [ADR-018 — credencial OAuth da assinatura](../adr/ADR-018-credencial-oauth-da-assinatura.md)
 
 ## Regra de sincronização
 

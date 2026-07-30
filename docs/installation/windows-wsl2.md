@@ -1,29 +1,33 @@
 # Instalação no Windows (WSL2)
 
-O `azigate` **não roda nativamente no Windows**: ele depende de Docker, systemd,
-Bubblewrap e user namespaces, que são recursos do Linux. No Windows, a forma
-suportada é executar todo o stack do servidor dentro do **WSL2** (Windows Subsystem
-for Linux 2), que fornece um kernel Linux real.
+O `azigate` roda em qualquer lugar que tenha Docker — desde a migração para
+adaptadores HTTP nativos, ele **não depende mais** de systemd, Bubblewrap ou user
+namespaces (ver [ADR-016](../../adr/ADR-016-substituicao-do-broker-por-adaptadores-http.md)).
+No Windows, a forma recomendada continua sendo rodar o servidor dentro do
+**WSL2** (Windows Subsystem for Linux 2) ou usar o Docker Desktop diretamente, mas
+o requisito de systemd que existia para o broker **deixou de existir**.
 
 O seu agente ou IDE (Qwen Code, GitHub Copilot, Cline, Continue) pode continuar no
 Windows normalmente — ele apenas fala HTTP com o gateway. Quem precisa do Linux é o
-servidor.
+container Docker.
 
 ```mermaid
 flowchart LR
     subgraph WIN["Windows (host)"]
         IDE["Agente / IDE<br/>(OpenAI-compatible)"]
-        subgraph WSL["WSL2 - Ubuntu (kernel Linux)"]
+        subgraph WSL["WSL2 - Ubuntu"]
             direction TB
             GW["azigate<br/>(Docker)"]
-            BK["broker + Codex/Claude<br/>(systemd + Bubblewrap)"]
         end
     end
     U["Upstream OpenAI-compatible<br/>(DeepSeek, OpenAI, ...)"]
+    AN["api.anthropic.com"]
+    CX["chatgpt.com/backend-api/codex"]
 
     IDE -- "http(s) via localhost" --> GW
     GW -- "HTTPS (passthrough)" --> U
-    GW -- "Unix socket" --> BK
+    GW -- "HTTPS + OAuth" --> AN
+    GW -- "HTTPS + OAuth" --> CX
 ```
 
 ## 1. Instalar o WSL2 e uma distro Ubuntu
@@ -49,35 +53,7 @@ wsl --set-version Ubuntu 2
 
 Requisitos: Windows 10 22H2+ ou Windows 11, com virtualização habilitada na BIOS.
 
-## 2. Habilitar systemd no WSL2
-
-O broker (necessário apenas para os aliases Codex/Claude) roda como serviço
-`systemd`. Habilite o systemd dentro da distro editando `/etc/wsl.conf`:
-
-```bash
-sudo tee /etc/wsl.conf >/dev/null <<'EOF'
-[boot]
-systemd=true
-EOF
-```
-
-Depois, no PowerShell, reinicie o WSL para aplicar:
-
-```powershell
-wsl --shutdown
-```
-
-Reabra o Ubuntu e confirme:
-
-```bash
-systemctl is-system-running
-```
-
-Uma resposta `running` (ou `degraded`) indica que o systemd está ativo. Se você for
-usar **apenas o modo passthrough** (só o upstream), o systemd não é obrigatório, mas deixá-lo ligado
-não atrapalha.
-
-## 3. Instalar o Docker
+## 2. Instalar o Docker
 
 Escolha uma das opções:
 
@@ -85,8 +61,7 @@ Escolha uma das opções:
   *Settings > Resources > WSL Integration* para a sua distro Ubuntu. O comando
   `docker` fica disponível dentro do WSL2.
 - **Docker Engine dentro da distro:** instale o Docker Engine diretamente no Ubuntu
-  do WSL2 (pacote `docker.io` ou o repositório oficial). Como o systemd está
-  ativo, o serviço `docker` inicia normalmente.
+  do WSL2 (pacote `docker.io` ou o repositório oficial).
 
 Valide dentro do WSL2:
 
@@ -94,7 +69,7 @@ Valide dentro do WSL2:
 docker compose version
 ```
 
-## 4. Instalar o gateway (dentro do WSL2)
+## 3. Instalar o gateway (dentro do WSL2)
 
 A partir daqui, tudo acontece **dentro da distro Ubuntu do WSL2**. Siga o guia de
 Linux, do início ao fim, no terminal do WSL2:
@@ -103,21 +78,22 @@ Linux, do início ao fim, no terminal do WSL2:
 
 Recomenda-se guardar o projeto no sistema de arquivos do próprio WSL2 (por exemplo
 `~/azigate`), e não em `/mnt/c/...`, para ter desempenho e permissões corretas.
+Isso inclui o passo de login OAuth (`npm run login:codex`/`npm run login:claude`),
+que abre a URL de autorização para você autenticar no navegador do Windows — o
+navegador não precisa estar dentro do WSL2, só a rede precisa alcançar o
+`redirect_uri` local (`localhost:1455`/`localhost:54545`), o que já funciona pelo
+port forwarding padrão do WSL2.
 
-## 5. Notas específicas do WSL2
+## 4. Notas específicas do WSL2
 
 - **Acesso pelo Windows:** por padrão, portas abertas no WSL2 ficam acessíveis via
   `localhost` no Windows (localhost forwarding). Assim, um agente rodando no Windows
-  aponta para `http://localhost:3000`.
+  aponta para `http://localhost:3000`, e o navegador do Windows alcança a URL de
+  callback do login OAuth normalmente.
 - **Acesso por outros dispositivos da LAN:** o WSL2 usa um IP interno próprio.
   Publicar para outras máquinas da rede exige mapeamento de portas
   (`netsh interface portproxy`) e liberação no firewall do Windows. Para uso
   pessoal na mesma máquina, `localhost` costuma bastar.
-- **Aliases Codex/Claude no WSL2:** Bubblewrap e user namespaces dependem da
-  configuração do kernel do WSL2 e podem exigir ajustes de AppArmor. Comece sempre
-  em **modo passthrough** (só o upstream); só depois tente habilitar os aliases seguindo o
-  [runbook do broker](../operations/broker.md). Se o health do broker retornar
-  `bwrap_unavailable`, os aliases ficam indisponíveis até o isolamento validar.
 
 ## Verificação
 
@@ -140,6 +116,5 @@ Se ambos respondem, siga para o
 ## Referências
 
 - [Instalação no Linux](./linux.md)
-- [Instalação e operação do broker](../operations/broker.md)
 - [Configurar seu agente OpenAI-compatible](../operations/openai-compatible-agents.md)
 - [Arquitetura](../architecture.md)

@@ -1,8 +1,7 @@
 import type { AppConfig } from '../config.js'
 import { CLI_ALIAS_CATALOG } from '../cli-catalog.js'
 import type { CliAlias, CliModel, CliProviderName } from '../cli-catalog.js'
-import { ClientAbortedError } from '../upstream/errors.js'
-import type { CliBrokerClientLike } from './broker-client.js'
+import { tokenFileExists } from './oauth/token-store.js'
 
 export const CLI_ALIASES = CLI_ALIAS_CATALOG
 
@@ -28,18 +27,12 @@ export function enabledCliAliases(config: AppConfig): { alias: CliAlias; provide
     .map(([alias, value]) => ({ alias, provider: value.provider }))
 }
 
-export async function healthyCliAliases(
-  config: AppConfig,
-  broker: CliBrokerClientLike,
-  signal?: AbortSignal,
-): Promise<{ alias: CliAlias; provider: CliProviderName }[]> {
+export async function healthyCliAliases(config: AppConfig): Promise<{ alias: CliAlias; provider: CliProviderName }[]> {
   const enabled = enabledCliAliases(config)
   if (enabled.length === 0) return []
-  try {
-    const health = await broker.health(signal)
-    return enabled.filter(({ provider }) => health.providers[provider].available)
-  } catch (error) {
-    if (error instanceof ClientAbortedError) throw error
-    return []
-  }
+  const [codexReady, claudeReady] = await Promise.all([
+    tokenFileExists(config.codexTokenFile),
+    tokenFileExists(config.claudeTokenFile),
+  ])
+  return enabled.filter(({ provider }) => (provider === 'codex' ? codexReady : claudeReady))
 }

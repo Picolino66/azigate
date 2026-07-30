@@ -12,9 +12,6 @@ export class GatewayMetrics {
   cacheReadInputTokensTotal = 0
   reasoningOutputTokensTotal = 0
   estimatedCostUsdTotal = 0
-  memorySessionRequestsTotal = 0
-  reusedSessionRequestsTotal = 0
-  transcriptBytesTotal = 0
   requestDurationMsTotal = 0
 
   observeDuration(durationMs: number): void {
@@ -45,12 +42,6 @@ export class GatewayMetrics {
     this.estimatedCostUsdTotal += details.estimatedCostUsd ?? 0
   }
 
-  observeCliSession(mode?: string, reused?: boolean, transcriptBytes?: number): void {
-    if (mode === 'memory') this.memorySessionRequestsTotal += 1
-    if (reused === true) this.reusedSessionRequestsTotal += 1
-    this.transcriptBytesTotal += transcriptBytes ?? 0
-  }
-
   snapshot(): Readonly<Record<string, number>> {
     return {
       requests_total: this.requestsTotal,
@@ -67,9 +58,6 @@ export class GatewayMetrics {
       cache_read_input_tokens_total: this.cacheReadInputTokensTotal,
       reasoning_output_tokens_total: this.reasoningOutputTokensTotal,
       estimated_cost_usd_total: this.estimatedCostUsdTotal,
-      memory_session_requests_total: this.memorySessionRequestsTotal,
-      reused_session_requests_total: this.reusedSessionRequestsTotal,
-      transcript_bytes_total: this.transcriptBytesTotal,
     }
   }
 }

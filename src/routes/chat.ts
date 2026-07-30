@@ -1,23 +1,25 @@
-import type { FastifyInstance, onRequestHookHandler } from 'fastify'
+import type { FastifyInstance, FastifyRequest, onRequestHookHandler } from 'fastify'
 import type { AppConfig } from '../config.js'
 import { publicError } from '../http/errors.js'
 import { createClientAbortSignal } from '../http/client-abort.js'
 import type { GatewayMetrics } from '../observability/metrics.js'
-import type { CliBrokerClientLike } from '../providers/broker-client.js'
-import {
-  cliTranscriptBytes,
-  CliRequestValidationError,
-  normalizeCliRequest,
-  validateCliDecision,
-} from '../providers/cli-request.js'
-import { CliContextTooLargeError, CliUnavailableError } from '../providers/errors.js'
-import { cliCompletionJson, streamCliCompletion } from '../providers/openai-response.js'
+import type { AnthropicClient } from '../providers/anthropic-client.js'
+import type { CodexClient } from '../providers/codex-client.js'
+import { runProviderCompletion } from '../providers/cli-completion.js'
+import { CliUnavailableError } from '../providers/errors.js'
+import { InvalidReasoningEffortError, resolveCliEffort } from '../providers/reasoning-effort.js'
 import { resolveProvider } from '../providers/registry.js'
+import { isAnthropicStreamEvent, translateAnthropicEvent } from '../translation/anthropic-to-openai.js'
+import { translateOpenAiToAnthropic } from '../translation/openai-to-anthropic.js'
+import { translateOpenAiToResponses } from '../translation/openai-to-responses.js'
+import { isResponsesStreamEvent, translateResponsesEvent } from '../translation/responses-to-openai.js'
+import { createStreamState, type OpenAiChunk } from '../translation/state.js'
 import type { ChatBody } from '../types.js'
 import type { DeepSeekClient } from '../upstream/client.js'
 import { forwardBufferedResponse, forwardStreamingResponse } from '../upstream/response.js'
 
 const LOGGABLE_DEEPSEEK_EFFORTS = new Set(['none', 'low', 'medium', 'high', 'xhigh', 'max'])
+const ANTHROPIC_DEFAULT_MAX_TOKENS = 8192
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -33,12 +35,27 @@ function deepseekEffortForLog(value: unknown): string {
     : 'não_informado'
 }
 
+function observeProviderUsage(request: FastifyRequest, usage: OpenAiChunk['usage']): void {
+  if (!usage) return
+  if (usage.prompt_tokens !== undefined) request.telemetry.inputTokens = usage.prompt_tokens
+  if (usage.completion_tokens !== undefined) request.telemetry.outputTokens = usage.completion_tokens
+  if (usage.total_tokens !== undefined) request.telemetry.totalTokens = usage.total_tokens
+  const cachedTokens = usage.prompt_tokens_details?.cached_tokens
+  if (cachedTokens !== undefined) request.telemetry.cachedInputTokens = cachedTokens
+  const reasoningTokens = usage.completion_tokens_details?.reasoning_tokens
+  if (reasoningTokens !== undefined) request.telemetry.reasoningOutputTokens = reasoningTokens
+  if (cachedTokens !== undefined && usage.prompt_tokens !== undefined && usage.prompt_tokens > 0) {
+    request.telemetry.cacheHitPercent = Math.round((cachedTokens / usage.prompt_tokens) * 10_000) / 100
+  }
+}
+
 export function registerChatRoute(
   app: FastifyInstance,
   config: AppConfig,
   protectedHook: onRequestHookHandler,
   client: DeepSeekClient,
-  broker: CliBrokerClientLike,
+  codexClient: CodexClient,
+  anthropicClient: AnthropicClient,
   metrics: GatewayMetrics,
 ): void {
   app.post(
@@ -100,40 +117,71 @@ export function registerChatRoute(
         }
 
         if (!selection.enabled) throw new CliUnavailableError()
-        let brokerRequest
+
+        let effort
         try {
-          brokerRequest = normalizeCliRequest(chatBody, request.id, selection.provider, selection.model)
+          effort = resolveCliEffort(chatBody, selection.provider, selection.model)
         } catch (error) {
-          if (!(error instanceof CliRequestValidationError)) throw error
+          if (!(error instanceof InvalidReasoningEffortError)) throw error
           request.telemetry.error = error.name
-          request.telemetry.validationCode = error.reasonCode
-          return reply.code(400).send(publicError(error.publicMessage, 'invalid_cli_request'))
+          return reply.code(400).send(publicError(error.message, 'invalid_reasoning_effort'))
         }
-        const transcriptBytes = cliTranscriptBytes(brokerRequest)
-        request.telemetry.transcriptBytes = transcriptBytes
-        if (transcriptBytes > config.cliMaxTranscriptBytes) throw new CliContextTooLargeError()
-        request.telemetry.effort = brokerRequest.effort ?? 'não_aplicável'
-        const execute = async () => {
-          const result = await broker.execute(brokerRequest, cancellation.signal)
-          request.telemetry.sessionMode = result.execution.sessionMode
-          request.telemetry.sessionReused = result.execution.sessionReused
-          request.telemetry.transcriptBytes = result.execution.transcriptBytes
-          return { decision: validateCliDecision(result.decision, brokerRequest), ...(result.usage ? { usage: result.usage } : {}) }
-        }
-        if (stream) {
-          await streamCliCompletion(
-            reply,
-            request,
+        request.telemetry.effort = effort ?? 'não_aplicável'
+
+        if (selection.provider === 'claude') {
+          const anthropicBody = translateOpenAiToAnthropic(chatBody, {
+            model: selection.model,
+            defaultMaxTokens: ANTHROPIC_DEFAULT_MAX_TOKENS,
+            ...(effort === undefined ? {} : { effort }),
+          })
+          const exchange = await anthropicClient.request({
+            requestId: request.id,
+            body: JSON.stringify(anthropicBody),
+            stream,
+            signal: cancellation.signal,
+          })
+          request.telemetry.upstreamStatus = exchange.response.status
+          await runProviderCompletion({
+            provider: 'anthropic',
             model,
-            brokerRequest,
-            execute,
-            config.cliHeartbeatIntervalMs,
+            wantsStream: stream,
+            exchange,
+            request,
+            reply,
             metrics,
-          )
+            createState: () => createStreamState(model, `chatcmpl-${request.id}`),
+            isEvent: isAnthropicStreamEvent,
+            translateEvent: translateAnthropicEvent,
+            observeUsage: observeProviderUsage,
+          })
           return
         }
-        const result = await execute()
-        return reply.send(cliCompletionJson(model, result.decision, result.usage, request))
+
+        const { request: responsesBody } = translateOpenAiToResponses(chatBody, {
+          model: selection.model,
+          ...(effort === undefined ? {} : { effort }),
+        })
+        const exchange = await codexClient.request({
+          requestId: request.id,
+          body: JSON.stringify(responsesBody),
+          stream,
+          signal: cancellation.signal,
+        })
+        request.telemetry.upstreamStatus = exchange.response.status
+        await runProviderCompletion({
+          provider: 'codex',
+          model,
+          wantsStream: stream,
+          exchange,
+          request,
+          reply,
+          metrics,
+          createState: () => createStreamState(model, `chatcmpl-${request.id}`),
+          isEvent: isResponsesStreamEvent,
+          translateEvent: translateResponsesEvent,
+          observeUsage: observeProviderUsage,
+        })
+        return
       } finally {
         cancellation.cleanup()
       }

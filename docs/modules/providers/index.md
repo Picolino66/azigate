@@ -2,52 +2,63 @@
 
 ## Descrição
 
-Registry multiprovedor que mantém um upstream OpenAI-compatible (DeepSeek por padrão) e oferece aliases experimentais para CLIs locais sem transferir a execução de ferramentas para o servidor.
+Registry multiprovedor que mantém um upstream OpenAI-compatible (DeepSeek por
+padrão) e adaptadores HTTP nativos para Codex (Responses API) e Claude (Messages
+API), autenticados pela assinatura do operador via OAuth.
 
 ## Localização no código
 
-- `src/providers/`: roteamento, validação, cliente do broker e respostas OpenAI.
-- `src/broker/`: protocolo e serviço host isolado.
+- `src/providers/registry.ts`: roteamento por `model`, sem fallback;
+- `src/providers/anthropic-client.ts` / `src/providers/codex-client.ts`: clientes HTTP Undici;
+- `src/providers/oauth/`: fluxo OAuth/PKCE, armazenamento e renovação de token;
+- `src/providers/reasoning-effort.ts`: normalização de `reasoning_effort`/`reasoning.effort`;
+- `src/providers/cli-completion.ts`: driver de streaming/buffer que consome o SSE traduzido;
+- `src/translation/`: conversão pura entre OpenAI Chat Completions e os formatos nativos;
 - `src/upstream/`: adaptador de upstream (DeepSeek por padrão).
 
 ## Entrada
 
-`model`, `messages`, `tools`, `tool_choice`, `parallel_tool_calls` e `stream` em `POST /v1/chat/completions`.
+`model`, `messages`, `tools`, `tool_choice`, `parallel_tool_calls`, `reasoning_effort`/`reasoning.effort` e `stream` em `POST /v1/chat/completions`.
 
 ## Saída
 
-Chat Completion JSON, SSE do upstream opaco ou SSE CLI sintético. O catálogo expõe modelos do upstream e aliases saudáveis.
+Chat Completion JSON, SSE do upstream opaco, ou JSON/SSE traduzido a partir da
+Messages/Responses API — incluindo multimodal e tool calls, sem a restrição
+textual da arquitetura anterior. O catálogo expõe modelos do upstream e aliases
+saudáveis (habilitados e com token OAuth salvo).
 
 ## Dependências
 
-Fastify, Undici, Unix socket, Bubblewrap e os binários Codex/Claude instalados no host.
+Fastify, Undici, e as APIs HTTPS reais da Anthropic e da OpenAI/Codex. Nenhuma
+dependência de subprocesso, sandbox ou socket local.
 
 ## Regras de negócio
 
 - Não há fallback automático.
 - Aliases reservados nunca são enviados ao upstream.
 - O agente cliente é o único executor de ferramentas.
-- Um alias só é publicado se habilitado e saudável.
-- O broker não aceita localização, comando ou ambiente do cliente.
-- O broker pode reutilizar sessões somente em RAM quando houver um único prefixo
-  exato; o gateway HTTP permanece stateless.
-- Transcript CLI acima do limite recebe `413`, sem truncamento.
-- Falhas CLI possuem reason interno sanitizado no log privado; a resposta pública
-  preserva somente os códigos de erro do contrato.
+- Um alias só é publicado se habilitado e com token OAuth presente em disco.
+- Cada adaptador reconstrói sua própria `Authorization`; a credencial Bearer do
+  cliente nunca segue adiante.
+- Falhas de provedor preservam o status HTTP quando ocorrem antes do primeiro
+  byte de resposta; depois do início do stream, viram evento `error` sanitizado.
 
 ## Fluxo resumido
 
-Autenticar -> aplicar allowlists -> resolver provider -> executar o adaptador -> validar/normalizar a resposta -> devolver ao agente.
+Autenticar -> aplicar allowlists -> resolver provider -> normalizar effort ->
+traduzir o corpo para o formato nativo -> chamar o adaptador HTTP -> traduzir a
+resposta/stream de volta para OpenAI -> devolver ao agente.
 
 ## Possíveis erros
 
-`model_not_allowed`, `invalid_cli_request`, `cli_context_too_large`, `cli_busy`,
-`invalid_cli_output`, `cli_execution_failed`, `cli_unavailable`,
-`providers_unavailable` e `cli_timeout`.
+`model_not_allowed`, `invalid_reasoning_effort`, `cli_unavailable`,
+`providers_unavailable`, `oauth_not_logged_in`, `oauth_refresh_failed`,
+`codex_upstream_error`, `anthropic_upstream_error`, `codex_timeout`/`anthropic_timeout`
+e `codex_connection_error`/`anthropic_connection_error`.
 
 ## Features
 
 - [Upstream OpenAI-compatible (DeepSeek por padrão)](./deepseek.md)
 - [Codex CLI](./codex-cli.md)
 - [Claude CLI](./claude-cli.md)
-- [Sessões CLI efêmeras em memória](./sessoes-cli-em-memoria.md)
+- [Camada de tradução](../translation/index.md)

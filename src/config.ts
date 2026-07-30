@@ -23,12 +23,12 @@ export interface AppConfig {
   readyCheckUpstream: boolean
   upstreamMaxRetries: number
   retryMaxDelayMs: number
-  cliBrokerSocketPath: string
   enableCodexCli: boolean
   enableClaudeCli: boolean
-  cliRequestTimeoutMs: number
-  cliHeartbeatIntervalMs: number
-  cliMaxTranscriptBytes: number
+  codexBaseUrl: URL
+  codexTokenFile: string
+  claudeBaseUrl: URL
+  claudeTokenFile: string
 }
 
 function readValue(env: NodeJS.ProcessEnv, name: string): string | undefined {
@@ -73,19 +73,19 @@ function csv(value: string | undefined): string[] {
     .filter(Boolean)
 }
 
-function normalizeBaseUrl(raw: string, nodeEnv: AppConfig['nodeEnv']): URL {
+function normalizeBaseUrl(name: string, raw: string, nodeEnv: AppConfig['nodeEnv']): URL {
   let url: URL
   try {
     url = new URL(raw)
   } catch {
-    throw new Error('DEEPSEEK_BASE_URL deve ser uma URL válida')
+    throw new Error(`${name} deve ser uma URL válida`)
   }
   const localDevelopment = nodeEnv !== 'production' && ['localhost', '127.0.0.1', '::1'].includes(url.hostname)
   if (url.protocol !== 'https:' && !(localDevelopment && url.protocol === 'http:')) {
-    throw new Error('DEEPSEEK_BASE_URL deve usar HTTPS')
+    throw new Error(`${name} deve usar HTTPS`)
   }
   if (url.username || url.password || url.search || url.hash) {
-    throw new Error('DEEPSEEK_BASE_URL não pode conter credenciais, query string ou fragmento')
+    throw new Error(`${name} não pode conter credenciais, query string ou fragmento`)
   }
   url.pathname = `${url.pathname.replace(/\/+$/u, '')}/`
   return url
@@ -121,7 +121,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     nodeEnv,
     port: integer(env, 'PORT', 3000, 1, 65_535),
     host: env.HOST?.trim() || '0.0.0.0',
-    deepseekBaseUrl: normalizeBaseUrl(env.DEEPSEEK_BASE_URL?.trim() || 'https://api.deepseek.com', nodeEnv),
+    deepseekBaseUrl: normalizeBaseUrl('DEEPSEEK_BASE_URL', env.DEEPSEEK_BASE_URL?.trim() || 'https://api.deepseek.com', nodeEnv),
     deepseekApiKey: requiredSecret(env, 'DEEPSEEK_API_KEY'),
     gatewayApiKeys,
     allowedModels,
@@ -139,12 +139,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     readyCheckUpstream: boolean(env, 'READY_CHECK_UPSTREAM', false),
     upstreamMaxRetries: integer(env, 'UPSTREAM_MAX_RETRIES', 0, 0, 2),
     retryMaxDelayMs: integer(env, 'RETRY_MAX_DELAY_MS', 2000, 0, 30_000),
-    cliBrokerSocketPath: env.CLI_BROKER_SOCKET_PATH?.trim() || '/run/azigate/broker.sock',
     enableCodexCli: boolean(env, 'ENABLE_CODEX_CLI', false),
     enableClaudeCli: boolean(env, 'ENABLE_CLAUDE_CLI', false),
-    cliRequestTimeoutMs: integer(env, 'CLI_REQUEST_TIMEOUT_MS', 600_000, 1000, 3_600_000),
-    cliHeartbeatIntervalMs: integer(env, 'CLI_HEARTBEAT_INTERVAL_MS', 15_000, 1000, 60_000),
-    cliMaxTranscriptBytes: integer(env, 'CLI_MAX_TRANSCRIPT_BYTES', 262_144, 1024, 100 * 1024 * 1024),
+    codexBaseUrl: normalizeBaseUrl(
+      'CODEX_BASE_URL',
+      env.CODEX_BASE_URL?.trim() || 'https://chatgpt.com/backend-api/codex',
+      nodeEnv,
+    ),
+    codexTokenFile: env.CODEX_TOKEN_FILE?.trim() || 'secrets/codex-oauth.json',
+    claudeBaseUrl: normalizeBaseUrl('CLAUDE_BASE_URL', env.CLAUDE_BASE_URL?.trim() || 'https://api.anthropic.com', nodeEnv),
+    claudeTokenFile: env.CLAUDE_TOKEN_FILE?.trim() || 'secrets/claude-oauth.json',
   }
 }
 
@@ -170,12 +174,12 @@ export function createTestConfig(overrides: Partial<AppConfig> = {}): AppConfig 
     readyCheckUpstream: false,
     upstreamMaxRetries: 0,
     retryMaxDelayMs: 10,
-    cliBrokerSocketPath: '/tmp/azigate-test-broker.sock',
     enableCodexCli: false,
     enableClaudeCli: false,
-    cliRequestTimeoutMs: 1000,
-    cliHeartbeatIntervalMs: 15_000,
-    cliMaxTranscriptBytes: 262_144,
+    codexBaseUrl: new URL('http://127.0.0.1:9999/'),
+    codexTokenFile: '/tmp/azigate-test-codex-oauth.json',
+    claudeBaseUrl: new URL('http://127.0.0.1:9999/'),
+    claudeTokenFile: '/tmp/azigate-test-claude-oauth.json',
     ...overrides,
   }
 }

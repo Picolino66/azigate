@@ -15,28 +15,28 @@ Qualquer outro caminho recebe `404`. Nenhum parâmetro público representa URL, 
 
 | `model` | Provider | Comportamento |
 |---|---|---|
-| `codex-cli-sol` | broker/Codex | `gpt-5.6-sol` |
-| `codex-cli-terra` | broker/Codex | `gpt-5.6-terra` |
-| `codex-cli-luna` | broker/Codex | `gpt-5.6-luna` |
-| `codex-cli-5.5` | broker/Codex | `gpt-5.5` |
-| `codex-cli-5.4` | broker/Codex | `gpt-5.4` |
-| `codex-cli` | broker/Codex | sinônimo legado de `gpt-5.4` |
-| `claude-cli-fable-5` | broker/Claude | `claude-fable-5` |
-| `claude-cli-sonnet-5` | broker/Claude | `claude-sonnet-5` |
-| `claude-cli-opus-4.8` | broker/Claude | `claude-opus-4-8` |
-| `claude-cli-opus-4.7` | broker/Claude | `claude-opus-4-7` |
-| `claude-cli-opus-4.6` | broker/Claude | `claude-opus-4-6` |
-| `claude-cli-sonnet-4.6` | broker/Claude | `claude-sonnet-4-6` |
-| `claude-cli-sonnet-4.5` | broker/Claude | `claude-sonnet-4-5` |
-| `claude-cli-haiku-4.5` | broker/Claude | `claude-haiku-4-5` |
-| `claude-cli` | broker/Claude | sinônimo legado de `claude-sonnet-4-6` |
+| `codex-cli-sol` | Codex (Responses API) | `gpt-5.6-sol` |
+| `codex-cli-terra` | Codex (Responses API) | `gpt-5.6-terra` |
+| `codex-cli-luna` | Codex (Responses API) | `gpt-5.6-luna` |
+| `codex-cli-5.5` | Codex (Responses API) | `gpt-5.5` |
+| `codex-cli-5.4` | Codex (Responses API) | `gpt-5.4` |
+| `codex-cli` | Codex (Responses API) | sinônimo legado de `gpt-5.4` |
+| `claude-cli-fable-5` | Claude (Messages API) | `claude-fable-5` |
+| `claude-cli-sonnet-5` | Claude (Messages API) | `claude-sonnet-5` |
+| `claude-cli-opus-4.8` | Claude (Messages API) | `claude-opus-4-8` |
+| `claude-cli-opus-4.7` | Claude (Messages API) | `claude-opus-4-7` |
+| `claude-cli-opus-4.6` | Claude (Messages API) | `claude-opus-4-6` |
+| `claude-cli-sonnet-4.6` | Claude (Messages API) | `claude-sonnet-4-6` |
+| `claude-cli-sonnet-4.5` | Claude (Messages API) | `claude-sonnet-4-5` |
+| `claude-cli-haiku-4.5` | Claude (Messages API) | `claude-haiku-4-5` |
+| `claude-cli` | Claude (Messages API) | sinônimo legado de `claude-sonnet-4-6` |
 | qualquer outro ID permitido | upstream (DeepSeek por padrão) | passthrough atual |
 
-Alias desabilitado retorna `503 cli_unavailable`; nunca há fallback automático. `ALLOWED_MODELS`, quando preenchida, também precisa incluir os aliases desejados.
+Alias desabilitado ou sem token OAuth salvo retorna `503 cli_unavailable`; nunca há fallback automático. `ALLOWED_MODELS`, quando preenchida, também precisa incluir os aliases desejados.
 
 ## Catálogo
 
-`GET /v1/models` consulta o upstream e o health do broker. A resposta bem-sucedida sempre usa `{ "object": "list", "data": [...] }`:
+`GET /v1/models` consulta o upstream e a presença do token OAuth de cada alias. A resposta bem-sucedida sempre usa `{ "object": "list", "data": [...] }`:
 
 - modelos do upstream mantêm os metadados seguros retornados por ele;
 - aliases locais usam `object: model`, `created: 0` e `owned_by: codex-cli|claude-cli`;
@@ -50,60 +50,54 @@ Alias desabilitado retorna `503 cli_unavailable`; nunca há fallback automático
 - `stream: true` preserva SSE byte a byte.
 - Status/corpos seguros do upstream são preservados na rota de chat.
 
-## Chat CLI
+## Chat CLI (Codex/Claude via HTTP nativo)
 
-- Mensagens devem conter somente texto. Arrays de content aceitam exclusivamente blocos `{ "type": "text", "text": "..." }`.
-- Tools devem ser `type: function`, ter nomes únicos válidos e parameters em objeto.
+- Mensagens aceitam texto e conteúdo multimodal (imagem, documento, áudio conforme o provedor); tudo é traduzido para o formato nativo (ver [camada de tradução](../docs/modules/translation/index.md)).
+- Tools devem ser `type: function` (ou, para Claude, ferramentas nativas do provedor passadas de forma opaca), com nomes únicos válidos e parameters em objeto.
 - `parameters` omitido ou vazio é normalizado para `{}`. Tool calls históricas são
   validadas estruturalmente, mas não precisam continuar na allowlist do turno atual;
   somente novas tool calls produzidas pelo modelo ficam restritas às tools atuais.
 - `tool_choice` aceita `auto`, `none`, `required` ou uma função oferecida.
 - `parallel_tool_calls` deve ser boolean.
-- Para aliases Codex e Claude, o effort pode vir como `reasoning_effort` ou `reasoning.effort`; o campo plano tem precedência. A enum pública é `low`, `medium`, `high`, `xhigh` ou `max`. Estrutura ou valor desconhecido recebe `400 invalid_cli_request`.
+- Para aliases Codex e Claude, o effort pode vir como `reasoning_effort` ou `reasoning.effort`; o campo plano tem precedência. A enum pública é `low`, `medium`, `high`, `xhigh` ou `max`. Estrutura ou valor desconhecido recebe `400 invalid_reasoning_effort`.
 - Ausência, `reasoning: false` ou objeto `reasoning` sem `effort` aplica o default do modelo. Codex usa `medium`; `max` vira `xhigh`. A matriz Claude permanece por modelo, e Sonnet 4.5/Haiku 4.5 nunca recebem effort.
-- Conteúdo multimodal recebe `400 invalid_cli_request`.
-- O gateway ignora parâmetros de sampling não aplicáveis e nunca os converte em argv.
-- Cada alias Codex é traduzido pelo gateway para um único modelo interno permitido; modelo e effort são revalidados pelo broker e viram `--model`/`model_reasoning_effort` reconstruídos. O cliente não escolhe argv.
-- Cada alias Claude seleciona um único modelo completo por `--model`; modelo e effort são validados novamente pelo broker. Thinking não é publicado.
-- A saída contém texto ou tool calls, nunca ambos. Nome/argumentos são validados e os IDs são gerados localmente.
-- Mensagens+tools normalizadas acima de `CLI_MAX_TRANSCRIPT_BYTES` recebem
-  `413 cli_context_too_large` antes do broker. O broker aplica novamente seu limite.
-- Em `memory`, o primeiro turno envia o transcript completo; turnos seguintes
-  enviam somente o delta quando existe um único prefixo semântico exato. A resposta
-  OpenAI continua expondo apenas `prompt_tokens`, `completion_tokens` e
-  `total_tokens`; detalhes de cache ficam em logs/métricas.
+- O gateway ignora parâmetros de sampling não aplicáveis ao provedor (ex.: `temperature`/`top_p` quando `thinking` está ativo no Claude; nenhum parâmetro de sampling é enviado ao Codex).
+- Cada alias Codex é traduzido pelo gateway para um único modelo interno permitido, enviado como `model` no corpo da Responses API. O cliente não escolhe esse valor.
+- Cada alias Claude seleciona um único modelo completo enviado como `model` no corpo da Messages API.
+- A saída contém texto ou tool calls, nunca ambos. Nome/argumentos são validados; IDs de tool call vêm do provedor (`tool_use.id`/`call_id`).
+- Sem limite fixo de tamanho de transcript: o corpo HTTP geral (`MAX_REQUEST_BODY_BYTES`) e os limites do próprio provedor se aplicam.
 
 ## Streaming CLI
 
-Enquanto a decisão está pendente, o gateway envia `: keep-alive` a cada `CLI_HEARTBEAT_INTERVAL_MS`. Depois da validação envia:
+Streaming incremental real: cada evento SSE nativo do provedor (Anthropic ou
+Responses) é traduzido e repassado como chunk `chat.completion.chunk` assim que
+chega, sem heartbeat nem buffer da resposta inteira. A sequência típica é:
 
-1. chunk atômico com content ou tool calls;
+1. chunks incrementais de `content`/`tool_calls`/`reasoning_content`;
 2. chunk com `finish_reason`;
 3. chunk de usage quando disponível;
 4. `data: [DONE]`.
 
-Falha antes do primeiro byte mantém o status HTTP do erro. Falha depois do heartbeat envia `event: error` com corpo sanitizado e encerra sem `[DONE]`.
+Falha antes do primeiro byte mantém o status HTTP do erro. Falha depois do
+início do stream envia `event: error` com corpo sanitizado e encerra sem `[DONE]`.
 
 ## Erros locais
 
 | Status | Código | Condição |
 |---|---|---|
 | 400 | `invalid_json`, `invalid_request`, `invalid_model`, `invalid_messages` | JSON/campos mínimos inválidos |
-| 400 | `invalid_cli_request` | conteúdo/tool contract não suportado pelo CLI |
+| 400 | `invalid_reasoning_effort` | `reasoning_effort`/`reasoning.effort` inválido para aliases CLI |
 | 401 | `invalid_gateway_key` | Bearer ausente/inválido |
 | 403 | `ip_not_allowed`, `model_not_allowed` | allowlist |
 | 413 | `request_body_too_large` | corpo HTTP acima do limite |
-| 413 | `cli_context_too_large` | transcript CLI normalizado acima do limite |
 | 415 | `unsupported_media_type` | Content-Type incompatível |
 | 429 | `rate_limit_exceeded` | limite HTTP local |
-| 429 | `cli_busy` | broker ocupado, sem fila |
 | 502 | `upstream_connection_error`, `upstream_protocol_error` | upstream inválido/inacessível |
-| 502 | `invalid_cli_output`, `cli_execution_failed` | saída CLI recusada/falha de processo |
-| 503 | `cli_unavailable` | alias, login, binário ou capacidade indisponível |
+| 502 | `codex_upstream_error`, `anthropic_upstream_error` | erro retornado pelo provedor Codex/Claude |
+| 502 | `codex_connection_error`, `anthropic_connection_error` | falha de conexão com o provedor |
+| 502 | `oauth_token_exchange_failed`, `oauth_refresh_failed` | falha no fluxo OAuth do provedor |
+| 503 | `cli_unavailable` | alias desabilitado ou sem token OAuth salvo |
 | 503 | `providers_unavailable` | catálogo sem nenhum provider utilizável |
-| 504 | `upstream_timeout`, `cli_timeout` | timeout do provider |
+| 503 | `oauth_not_logged_in` | token OAuth ausente para o provedor solicitado |
+| 504 | `upstream_timeout`, `codex_timeout`, `anthropic_timeout` | timeout do provider |
 | 500 | `internal_error` | falha inesperada sanitizada |
-
-## Protocolo privado
-
-O contrato Unix socket está em [broker-api.md](./broker-api.md). Ele não amplia a superfície HTTP pública.

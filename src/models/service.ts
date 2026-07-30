@@ -1,6 +1,5 @@
 import type { AppConfig } from '../config.js'
 import { sanitizeText } from '../observability/sanitize.js'
-import type { CliBrokerClientLike } from '../providers/broker-client.js'
 import { ProvidersUnavailableError } from '../providers/errors.js'
 import { healthyCliAliases } from '../providers/registry.js'
 import type { DeepSeekClient } from '../upstream/client.js'
@@ -34,13 +33,12 @@ export class ModelsService {
   constructor(
     private readonly config: AppConfig,
     private readonly client: DeepSeekClient,
-    private readonly broker: CliBrokerClientLike,
   ) {}
 
   async list(requestId: string, signal?: AbortSignal): Promise<ModelsResult> {
     const [deepseek, aliases] = await Promise.all([
       this.listDeepSeek(requestId, signal),
-      healthyCliAliases(this.config, this.broker, signal),
+      healthyCliAliases(this.config),
     ])
     if (!deepseek.available && aliases.length === 0) throw new ProvidersUnavailableError()
 

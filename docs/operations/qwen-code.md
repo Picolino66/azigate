@@ -167,8 +167,8 @@ Para reduzir contexto excessivo, mescle também:
 ```
 
 Mantenha `skipStartupContext: false`: o Qwen precisa conhecer o computador onde
-executa. Use `/clear` entre tarefas sem relação. O gateway recusa, sem truncar,
-mensagens+tools normalizadas acima de 256 KiB.
+executa. Use `/clear` entre tarefas sem relação para manter o contexto enviado
+sob controle.
 
 Nos aliases Codex, `low`, `medium`, `high` e `xhigh` chegam ao CLI sem mudança, o default é `medium` e `max` aparece no log como `xhigh`. Nos aliases Claude, continuam valendo os defaults e limites da tabela; `reasoning: false` também usa o default do modelo.
 
@@ -181,9 +181,10 @@ qwen
 
 Dentro do Qwen, use `/model` para selecionar um modelo do upstream, um alias `codex-cli-*` ou um alias Claude aprovado. Effort omitido ou incompatível usa o default da tabela; Sonnet 4.5 e Haiku 4.5 ignoram qualquer effort. Todos usam a mesma `baseUrl` e chave. `codex-cli` continua selecionando GPT-5.4. O alias `claude-cli` representa Sonnet 4.6, mas permanece fora da publicação atual porque seu gate falhou. Mantenha approval interativo e não use YOLO/auto-approval.
 
-Nos aliases CLI, mantenha `generationConfig.maxRetries: 0`. O broker não repete
-uma inferência que possa ter chegado ao provider; retries do próprio binário CLI
-continuam sob a implementação oficial e podem aparecer como eventos internos.
+Nos aliases CLI, mantenha `generationConfig.maxRetries: 0`. O gateway só repete a
+chamada ao provedor antes do início da resposta e apenas para status
+`429`/`502`/`503`/`504`; depois que o streaming começa, uma falha vira evento
+`error` sem retry.
 
 ## Fallback para versão antiga
 
@@ -209,9 +210,9 @@ Depois de ativar o alias:
 5. valide o retorno de uma tool e a continuação da conversa;
 6. cancele uma execução pendente;
 7. alterne entre Codex, Claude (`/effort low`, `/effort medium` e `/effort max`) e um modelo do upstream;
-8. confirme no servidor que nenhum arquivo do repositório apareceu no broker.
+8. confirme no servidor que nenhum arquivo do repositório apareceu no gateway.
 
-O resultado correto é alteração somente no seu computador. Logs do gateway/broker devem conter metadados, nunca prompt, código, resposta ou argumentos.
+O resultado correto é alteração somente no seu computador. Logs do gateway devem conter metadados, nunca prompt, código, resposta ou argumentos.
 
 ## Referência
 

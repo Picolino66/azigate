@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: AziGate
-  version: 2.0.0
-  description: Gateway OpenAI Compatible para um upstream OpenAI-compatible (DeepSeek por padrão) e aliases CLI isolados.
+  version: 3.0.0
+  description: Gateway OpenAI Compatible para um upstream OpenAI-compatible (DeepSeek por padrão) e aliases Codex/Claude traduzidos para a Responses API e a Messages API nativas.
 paths:
   /health:
     get:
@@ -68,9 +68,9 @@ paths:
                 tool_choice: {}
                 parallel_tool_calls: { type: boolean }
                 reasoning_effort:
-                  description: Para aliases CLI, formato plano legado com enum low, medium, high, xhigh ou max e precedência sobre reasoning.effort. Para o upstream, permanece opaco.
+                  description: Para aliases Codex/Claude, formato plano legado com enum low, medium, high, xhigh ou max e precedência sobre reasoning.effort. Para o upstream, permanece opaco.
                 reasoning:
-                  description: Para aliases CLI, false usa o default e reasoning.effort aceita low, medium, high, xhigh ou max. Para o upstream, permanece opaco.
+                  description: Para aliases Codex/Claude, false usa o default e reasoning.effort aceita low, medium, high, xhigh ou max. Para o upstream, permanece opaco.
                   example: { effort: medium }
               additionalProperties: true
       responses:
@@ -82,27 +82,27 @@ paths:
             text/event-stream:
               schema: { type: string }
         '400':
-          description: Requisição inválida ou conteúdo CLI não suportado
+          description: Requisição ou reasoning effort inválido
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
         '413':
-          description: Corpo HTTP ou transcript CLI normalizado acima do limite
+          description: Corpo HTTP acima do limite configurado
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
         '429':
-          description: Rate limit ou broker ocupado
+          description: Rate limit local excedido
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
         '502':
-          description: Falha/saída inválida do provider
+          description: Falha de conexão, protocolo ou erro retornado pelo provedor (upstream, Codex ou Claude)
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
         '503':
-          description: Provider CLI indisponível
+          description: Provider Codex/Claude indisponível (desabilitado ou sem login OAuth)
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }

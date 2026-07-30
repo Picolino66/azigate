@@ -9,8 +9,6 @@
   },
   "scripts": {
     "dev": "tsx watch --env-file=.env src/server.ts",
-    "broker:dev": "tsx watch src/broker/server.ts",
-    "broker:start": "node dist/broker/server.js",
     "start": "node dist/server.js",
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
@@ -18,9 +16,8 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "check": "npm run lint && npm run typecheck && npm run test && npm run build",
-    "gate:codex": "tsx src/broker/viability-gate.ts codex",
-    "gate:claude": "tsx src/broker/viability-gate.ts claude",
-    "gate:claude-efforts": "tsx src/broker/viability-gate.ts claude-efforts"
+    "login:codex": "tsx src/providers/oauth/login-codex.ts",
+    "login:claude": "tsx src/providers/oauth/login-claude.ts"
   },
   "dependencies": {
     "dotenv": "17.4.2",

@@ -24,10 +24,49 @@ describe('configuração', () => {
       expect(config.deepseekBaseUrl.href).toBe('https://api.deepseek.com/')
       expect(config.deepseekApiKey).toBe('deepseek-file-secret')
       expect(config.gatewayApiKeys).toEqual(['gateway-one', 'gateway-two'])
-      expect(config.cliMaxTranscriptBytes).toBe(262_144)
+      expect(config.codexBaseUrl.href).toBe('https://chatgpt.com/backend-api/codex/')
+      expect(config.codexTokenFile).toBe('secrets/codex-oauth.json')
+      expect(config.claudeBaseUrl.href).toBe('https://api.anthropic.com/')
+      expect(config.claudeTokenFile).toBe('secrets/claude-oauth.json')
     } finally {
       rmSync(directory, { recursive: true })
     }
+  })
+
+  it('aceita CODEX_BASE_URL/CLAUDE_BASE_URL e CODEX_TOKEN_FILE/CLAUDE_TOKEN_FILE customizados', () => {
+    const config = loadConfig({
+      NODE_ENV: 'production',
+      DEEPSEEK_API_KEY: 'secret',
+      GATEWAY_API_KEYS: 'gateway',
+      CODEX_BASE_URL: 'https://codex.exemplo.com',
+      CODEX_TOKEN_FILE: '/tmp/codex-oauth.json',
+      CLAUDE_BASE_URL: 'https://claude.exemplo.com',
+      CLAUDE_TOKEN_FILE: '/tmp/claude-oauth.json',
+    })
+    expect(config.codexBaseUrl.href).toBe('https://codex.exemplo.com/')
+    expect(config.codexTokenFile).toBe('/tmp/codex-oauth.json')
+    expect(config.claudeBaseUrl.href).toBe('https://claude.exemplo.com/')
+    expect(config.claudeTokenFile).toBe('/tmp/claude-oauth.json')
+  })
+
+  it('rejeita CODEX_BASE_URL/CLAUDE_BASE_URL em HTTP fora de desenvolvimento', () => {
+    expect(() =>
+      loadConfig({
+        NODE_ENV: 'production',
+        DEEPSEEK_API_KEY: 'secret',
+        GATEWAY_API_KEYS: 'gateway',
+        CODEX_BASE_URL: 'http://codex.exemplo.com',
+      }),
+    ).toThrow(/CODEX_BASE_URL.*HTTPS/u)
+
+    expect(() =>
+      loadConfig({
+        NODE_ENV: 'production',
+        DEEPSEEK_API_KEY: 'secret',
+        GATEWAY_API_KEYS: 'gateway',
+        CLAUDE_BASE_URL: 'http://claude.exemplo.com',
+      }),
+    ).toThrow(/CLAUDE_BASE_URL.*HTTPS/u)
   })
 
   it('rejeita upstream HTTP em produção', () => {
@@ -39,14 +78,5 @@ describe('configuração', () => {
         DEEPSEEK_BASE_URL: 'http://api.deepseek.com',
       }),
     ).toThrow(/HTTPS/u)
-  })
-
-  it('valida o limite preventivo de transcript CLI', () => {
-    expect(() => loadConfig({
-      NODE_ENV: 'production',
-      DEEPSEEK_API_KEY: 'secret',
-      GATEWAY_API_KEYS: 'gateway',
-      CLI_MAX_TRANSCRIPT_BYTES: '100',
-    })).toThrow(/CLI_MAX_TRANSCRIPT_BYTES/u)
   })
 })

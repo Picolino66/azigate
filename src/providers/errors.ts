@@ -1,29 +1,5 @@
 import { GatewayError } from '../upstream/errors.js'
 
-export class CliBusyError extends GatewayError {
-  constructor() {
-    super(429, 'cli_busy', 'O broker CLI já está executando outra solicitação')
-  }
-}
-
-export class InvalidCliOutputError extends GatewayError {
-  readonly executionReason: string
-
-  constructor(executionReason = 'decision_shape_invalid') {
-    super(502, 'invalid_cli_output', 'O CLI retornou uma decisão inválida')
-    this.executionReason = executionReason
-  }
-}
-
-export class CliExecutionFailedError extends GatewayError {
-  readonly executionReason: string
-
-  constructor(executionReason = 'cli_execution_failed') {
-    super(502, 'cli_execution_failed', 'O CLI não conseguiu produzir uma decisão')
-    this.executionReason = executionReason
-  }
-}
-
 export class CliUnavailableError extends GatewayError {
   constructor() {
     super(503, 'cli_unavailable', 'O provedor CLI solicitado não está disponível')
@@ -36,18 +12,20 @@ export class ProvidersUnavailableError extends GatewayError {
   }
 }
 
-export class CliTimeoutError extends GatewayError {
-  readonly executionReason = 'cli_timeout'
-
-  constructor() {
-    super(504, 'cli_timeout', 'O CLI não respondeu dentro do tempo limite')
+export class OAuthNotLoggedInError extends GatewayError {
+  constructor(provider: string) {
+    super(503, 'oauth_not_logged_in', `Nenhuma credencial OAuth encontrada para ${provider}. Execute o login antes de usar este provedor.`)
   }
 }
 
-export class CliContextTooLargeError extends GatewayError {
-  readonly executionReason = 'cli_context_too_large'
+export class OAuthTokenExchangeError extends GatewayError {
+  constructor(provider: string) {
+    super(502, 'oauth_token_exchange_failed', `Falha ao trocar o código de autorização por tokens para ${provider}`)
+  }
+}
 
-  constructor() {
-    super(413, 'cli_context_too_large', 'O contexto para o provedor CLI excede o limite configurado')
+export class OAuthRefreshFailedError extends GatewayError {
+  constructor(provider: string) {
+    super(502, 'oauth_refresh_failed', `Falha ao renovar o token OAuth de ${provider}`)
   }
 }

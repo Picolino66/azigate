@@ -14,10 +14,12 @@ Computador do agente cliente
              ▼
 Servidor (self-hosted, onde você quiser)
   Nginx -> container azigate
-              ├── adaptador de upstream -> HTTPS (upstream OpenAI-compatible,
-              │                                     DeepSeek por padrão)
-              └── adaptador CLI -> Unix socket 0600 -> broker host
-                                                     └── Bubblewrap -> Codex/Claude
+              ├── src/upstream/    -> HTTPS (upstream OpenAI-compatible,
+              │                        DeepSeek por padrão)
+              ├── src/providers/anthropic-client.ts -> HTTPS api.anthropic.com
+              │                                        (Messages API)
+              └── src/providers/codex-client.ts     -> HTTPS chatgpt.com/backend-api/codex
+                                                        (Responses API)
              │
              ▼
   Chat Completion/texto/tool calls
@@ -26,27 +28,42 @@ Servidor (self-hosted, onde você quiser)
   O agente executa somente no seu computador
 ```
 
+Não existe mais broker, socket Unix, Bubblewrap nem subprocesso. Os aliases
+`codex-cli-*`/`claude-cli-*` são adaptadores HTTP diretos: o gateway traduz o corpo
+OpenAI-compatible para o formato nativo de cada fornecedor em código puro, chama a
+API real por HTTPS e traduz a resposta de volta. Essa migração está registrada em
+[ADR-016](../adr/ADR-016-substituicao-do-broker-por-adaptadores-http.md),
+[ADR-017](../adr/ADR-017-fim-do-regime-sintetico-de-sse.md) e
+[ADR-018](../adr/ADR-018-credencial-oauth-da-assinatura.md).
+
 ## Padrão e módulos
 
-O gateway HTTP continua um monólito modular e stateless. O broker é um serviço
-host auxiliar privado e pode manter sessões efêmeras somente em RAM:
+O gateway continua um monólito modular e **totalmente stateless**: nenhum módulo
+mantém sessão, cache de conversa ou processo de longa duração entre requisições.
 
-- `config`: configuração e secrets do processo HTTP;
+- `config`: configuração e secrets do processo;
 - `security`: autenticação, allowlist e rate limit local;
 - `providers/registry`: registry fechado dos aliases e roteamento sem fallback;
-- `upstream`: adaptador de upstream (`DeepSeekClient`), único construtor de URLs HTTPS;
-- `providers/broker-client`: cliente HTTP sobre Unix socket;
-- `providers/cli-request`: validação e tradução do contrato OpenAI para o protocolo interno;
-- `providers/openai-response`: Chat Completions e SSE sintéticos dos CLIs;
-- `broker`: capacidade, protocolo, prompt estável, correlação semântica, sessões em
-  memória, isolamento, subprocessos e servidor host;
-- `models`: catálogo do upstream cacheado combinado com aliases CLI saudáveis;
-- `observability`: métricas, stdout e JSONL privado somente de metadados; cada alias conhecido recebe uma cor ANSI
-  própria no campo `model`, e o `effort` registrado para Claude é o valor normalizado efetivamente usado.
+- `upstream`: adaptador de upstream (`DeepSeekClient`), único construtor de URLs HTTPS opacas;
+- `providers/anthropic-client.ts` / `providers/codex-client.ts`: clientes HTTP
+  Undici para a Messages API e a Responses API, com paths fixos, `redirect: 'error'`,
+  retry limitado a status configurados e cancelamento propagado;
+- `providers/oauth/`: fluxo OAuth/PKCE próprio para Codex e Claude (obtenção,
+  armazenamento `0600` e renovação de token), sem reutilizar código das CLIs oficiais;
+- `translation/`: quatro conversores puros, síncronos e sem I/O entre o formato
+  OpenAI Chat Completions e os formatos nativos Anthropic/Responses, nos dois
+  sentidos (requisição e stream de eventos);
+- `providers/cli-completion.ts`: driver que consome o SSE nativo de cada provedor,
+  traduz evento a evento e ou repassa como streaming incremental real ou acumula em
+  um `chat.completion` único, conforme o cliente pediu `stream`;
+- `models`: catálogo do upstream cacheado combinado com aliases saudáveis (saudável
+  = habilitado e com token OAuth salvo em disco);
+- `observability`: métricas, stdout e JSONL privado somente de metadados; cada alias
+  conhecido recebe uma cor ANSI própria no campo `model`, e o `effort` registrado é
+  o valor normalizado efetivamente usado.
 
-Não há banco, fila, frontend, proxy genérico nem persistência de conversa. As
-sessões do broker têm TTL/LRU, desaparecem em restart e guardam somente hashes de
-correlação e handles dos processos. Rate limit e caches continuam locais.
+Não há banco, fila, frontend, proxy genérico nem persistência de conversa. Rate
+limit e caches continuam locais a uma instância.
 
 O upstream é fixo e opaco para o cliente, mas configurável pelo operador em
 `DEEPSEEK_BASE_URL`/`DEEPSEEK_API_KEY` (nomes históricos). Por padrão a DeepSeek;
@@ -56,89 +73,90 @@ ou local via Ollama/LM Studio/vLLM) que exponha `models` e `chat/completions`.
 ## Registry e disponibilidade
 
 - Os aliases Codex e Claude definidos no catálogo central são reservados mesmo quando desabilitados; nunca caem no upstream.
-- Os aliases Codex escolhem modelos internos fixos por allowlist; `codex-cli` permanece sinônimo de `gpt-5.4`. Effort público é normalizado para uma configuração fechada do subprocesso.
+- Os aliases Codex escolhem modelos internos fixos por allowlist; `codex-cli` permanece sinônimo de `gpt-5.4`. Effort público é normalizado em código puro (`src/providers/reasoning-effort.ts`) antes de virar `reasoning.effort` no corpo da Responses API.
 - Os aliases Claude escolhem oito modelos completos; `claude-cli` permanece sinônimo de `claude-sonnet-4-6`. A `ALLOWED_MODELS` publica somente modelos aprovados nos gates reais.
 - Qualquer outro ID permitido é encaminhado ao adaptador de upstream.
 - Não existe fallback automático entre provedores.
-- `/v1/models` combina o catálogo do upstream com aliases habilitados e saudáveis.
+- `/v1/models` combina o catálogo do upstream com aliases habilitados cujo arquivo de token OAuth existe em disco (`CODEX_TOKEN_FILE`/`CLAUDE_TOKEN_FILE`).
 - Se o upstream falhar, os aliases locais continuam listados. Se nenhum provedor estiver utilizável, a resposta é `503`.
 - `/ready` considera o upstream configurado quando `READY_CHECK_UPSTREAM=false`; com a checagem ativa, basta o upstream ou um alias CLI estar saudável.
 
-## Broker e isolamento
+## Camada de tradução
 
-O protocolo v6 oferece somente `GET /health` e `POST /execute` em Unix socket. Sua
-entrada é reconstruída pelo gateway e contém request ID, provedor, modelo CLI
-validado, effort efetivo, mensagens textuais, function tools, `tool_choice` e
-`parallel_tool_calls`. Cwd, path de host, URL, comando, argv e ambiente não
-pertencem ao contrato.
+Ver [docs/modules/translation/](modules/translation/index.md) para a especificação
+completa de cada conversor. Resumo:
 
-Cada request:
+| Módulo | Direção |
+|---|---|
+| `openai-to-anthropic.ts` | corpo OpenAI Chat Completions → corpo Messages API |
+| `anthropic-to-openai.ts` | evento SSE Messages API → chunk(s) OpenAI |
+| `openai-to-responses.ts` | corpo OpenAI Chat Completions → corpo Responses API |
+| `responses-to-openai.ts` | evento SSE Responses API → chunk(s) OpenAI |
 
-1. verifica se o provedor passou os checks de binário, autenticação, flags e Bubblewrap;
-2. adquire a única vaga global ou retorna `cli_busy` sem fila;
-3. rejeita mensagens+tools acima de 256 KiB, sem truncar;
-4. tenta correlacionar um único prefixo exato por hashes SHA-256, normalizando IDs
-   de tool calls; divergência ou ambiguidade cria sessão nova;
-5. cria `/work` e home descartáveis, settings/MCP vazios e monta somente o arquivo
-   de autenticação necessário;
-6. usa um App Server Codex com threads efêmeras ou um processo Claude `stream-json`
-   persistente; o primeiro turno recebe tudo e os seguintes somente o delta;
-7. limita a saída de cada turno a 4 MiB e o tempo a 10 minutos, recusa eventos de
-   ferramenta local, registra fases/reasons sanitizados e valida a decisão final;
-8. cancelamento interrompe o turno Codex ou encerra o grupo Claude; TTL, eviction,
-   crash e restart eliminam a sessão.
+Todas as funções são puras, síncronas e sem I/O — testáveis por tabela de casos,
+sem precisar de rede real. `src/translation/state.ts` guarda o estado por stream
+(índices de tool call, id, model, created) que os dois tradutores de resposta
+compartilham.
 
-Somente `~/.codex/auth.json` ou `~/.claude/.credentials.json` entra na sandbox em
-modo de sessão. Para Claude, o arquivo top-level é validado como regular, privado,
-pertencente ao usuário do broker e limitado a 1 MiB, então copiado para o home
-efêmero. Nenhum repositório, home completo, histórico/configuração Codex do
-operador ou secret do gateway entra nela. O modo `stateless` de contingência
-preserva o isolamento anterior.
+## Credencial OAuth da assinatura
 
-## Usage e cache
+Os adaptadores Codex e Claude não usam API key paga por token: reproduzem o fluxo
+OAuth/PKCE das CLIs oficiais para autenticar com a **assinatura** do operador
+(`npm run login:codex`/`npm run login:claude`), conforme
+[ADR-018](../adr/ADR-018-credencial-oauth-da-assinatura.md). O token (access +
+refresh) fica em arquivo local (`0700`/`0600`), renovado sob demanda pelo próprio
+gateway. Para o Claude, deliberadamente **não** há reprodução de técnicas de
+fingerprint/cloaking do cliente oficial — risco aceito e documentado no adendo do
+ADR-018.
+
+## Usage
 
 - Claude: `promptTokens = input + cache_creation + cache_read`.
 - Codex: `promptTokens = input`; `cached_input_tokens` é subconjunto e
   `freshInputTokens = input - cached`.
 - Reasoning Codex é subconjunto da saída, nunca parcela adicional.
 - `totalTokens` é volume lógico, não porcentagem da cota do plano.
-- Detalhes de cache, custo estimado, reuso e bytes ficam em logs/métricas; a
-  resposta OpenAI conserva somente os três campos padrão.
+- Detalhes de cache e reasoning ficam em `prompt_tokens_details`/
+  `completion_tokens_details`; a resposta OpenAI conserva os três campos padrão
+  mais esses detalhes quando o provedor os informa.
 
-## Dois regimes de streaming
+## Streaming
 
-- Upstream (passthrough): bytes SSE são copiados imediatamente, inclusive keep-alive, campos futuros, usage e `[DONE]`.
-- Codex/Claude: heartbeat a cada 15 segundos; a decisão é bufferizada até o limite, validada e emitida atomicamente. Falha depois do heartbeat gera `event: error` sanitizado e encerra sem `[DONE]`.
+Os três adaptadores agora usam o mesmo regime: **streaming incremental real**.
+
+- Upstream (passthrough): bytes SSE são copiados imediatamente, inclusive
+  keep-alive, campos futuros, usage e `[DONE]`.
+- Codex/Claude: cada evento SSE nativo do fornecedor (`content_block_delta`,
+  `response.output_text.delta`, etc.) é traduzido e repassado assim que chega,
+  sem heartbeat artificial e sem bufferizar a resposta inteira.
+
+Em ambos os casos, erro antes do primeiro byte vira status HTTP; erro depois do
+início do stream vira um evento `error` sanitizado e encerra sem `[DONE]`.
 
 ## Fronteiras de confiança
 
 1. Agente cliente -> Nginx: tráfego não confiável, HTTPS, Bearer, IP/model allowlists e limites.
 2. Nginx -> container: rede local ainda autenticada; somente quatro rotas públicas.
-3. Container -> upstream: HTTPS, paths tipados e credencial reconstruída.
-4. Container -> broker: Unix socket read-only no mount, UID igual e protocolo fechado.
-5. Broker -> CLI: subprocesso não confiável, Bubblewrap, ambiente mínimo e saída validada.
-6. Auth dirs/config -> CLI: credenciais necessárias, nunca montadas no container
-   nem registradas; a configuração Claude é somente leitura no serviço e efêmera
-   na sandbox.
-7. Broker -> log de execução: JSONL privado com enum fechada de fases/reasons; não
-   contém conteúdo de conversa, saída CLI, argumentos, stderr ou paths privados.
+3. Container -> upstream/Anthropic/Codex: HTTPS, paths fixos e credencial
+   reconstruída por adaptador (upstream: API key; Codex/Claude: token OAuth da
+   assinatura, nunca a credencial Bearer do cliente).
+4. Container -> arquivo de token OAuth: leitura/escrita local `0600`, nunca logado.
 
 ## Decisões
 
-- [ADR-005](../adr/ADR-005-registro-multiprovedor-e-broker-local.md): registry e broker host.
+- [ADR-005](../adr/ADR-005-registro-multiprovedor-e-broker-local.md): registry multiprovedor (parte do broker substituída pelo ADR-016).
 - [ADR-006](../adr/ADR-006-qwen-como-unico-executor.md): agente cliente como único executor.
-- [ADR-007](../adr/ADR-007-streaming-dividido-por-provedor.md): streaming por tipo de provedor.
+- [ADR-007](../adr/ADR-007-streaming-dividido-por-provedor.md): streaming por tipo de provedor (substituído pelo ADR-017).
 - [ADR-008](../adr/ADR-008-aliases-codex-com-modelo-fixo.md): seleção Codex por aliases fechados.
 - [ADR-009](../adr/ADR-009-claude-cli-esforco-configuravel.md): Claude no modelo padrão com esforço fechado.
 - [ADR-010](../adr/ADR-010-aliases-claude-com-modelo-fixo.md): aliases Claude com modelo e effort fixados.
 - [ADR-011](../adr/ADR-011-effort-qwen-para-provedores-cli.md): formatos de effort do Qwen e normalização Codex/Claude.
-- [ADR-012](../adr/ADR-012-configuracao-claude-em-home-efemero.md): configuração Claude em home efêmero.
-- [ADR-013](../adr/ADR-013-check-de-capacidade-codex-por-catalogo.md): check Codex por catálogo estruturado.
-- [ADR-014](../adr/ADR-014-sessoes-cli-efemeras-em-memoria-e-usage-por-provider.md): sessões efêmeras e contabilização provider-specific.
-- [ADR-015](../adr/ADR-015-telemetria-segura-e-schema-decisao-cli.md): telemetria sanitizada e schema por request.
+- [ADR-016](../adr/ADR-016-substituicao-do-broker-por-adaptadores-http.md): substituição do broker por adaptadores HTTP.
+- [ADR-017](../adr/ADR-017-fim-do-regime-sintetico-de-sse.md): fim do regime sintético de SSE.
+- [ADR-018](../adr/ADR-018-credencial-oauth-da-assinatura.md): credencial OAuth da assinatura.
 
 ## Referências de integração
 
-- [Codex App Server](https://developers.openai.com/codex/app-server/)
-- [Claude CLI usage](https://code.claude.com/docs/en/cli-usage)
+- [Anthropic Messages API](https://docs.anthropic.com/en/api/messages)
+- [OpenAI Responses API](https://developers.openai.com/codex/app-server/)
 - [Qwen Code model providers](https://qwenlm.github.io/qwen-code-docs/en/users/configuration/model-providers/)
