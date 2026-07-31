@@ -142,6 +142,20 @@ assinatura ativa, o alias permanece indisponível (fail-closed, `cli_unavailable
 
 O diretório `secrets/` já está no `.gitignore` — nunca versione esses arquivos.
 
+Execute o login como seu usuário normal, **sem `sudo`**. O container roda como
+usuário não privilegiado e precisa ler e renovar esses arquivos. Se um token tiver
+sido criado por `sudo`, ele pode ficar como `root:root` e causar erro `500` ao usar
+o alias. Corrija apenas proprietário e permissões, sem imprimir o token:
+
+```bash
+sudo chown "$USER":"$USER" secrets secrets/codex-oauth.json
+sudo chmod 700 secrets
+sudo chmod 600 secrets/codex-oauth.json
+docker compose up -d --force-recreate gateway
+```
+
+Para Claude, substitua `codex-oauth.json` por `claude-oauth.json`.
+
 ### 4.2 Habilitar no `.env`
 
 ```dotenv
@@ -219,6 +233,9 @@ via Nginx.
   passo 4.1.
 - **502 `oauth_refresh_failed`:** o refresh token expirou ou foi revogado —
   refaça o login (passo 4.1).
+- **Alias Codex/Claude retorna 500 logo após o login:** o token pode ter sido
+  criado com `sudo` e estar inacessível ao usuário do container. Repare proprietário
+  e permissões conforme o passo 4.1 e recrie o gateway.
 
 ## Rollback
 

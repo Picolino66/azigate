@@ -1,7 +1,7 @@
 {
   "orchestration_id": "c16a8ea6-06e8-4ec2-bb2c-7ac4cd272dc5",
   "created_at": "2026-07-14T13:35:00Z",
-  "updated_at": "2026-07-27T00:00:00-03:00",
+  "updated_at": "2026-07-30T00:00:00-03:00",
   "mode": "feature-evolution",
   "current_phase": "F7",
   "snapshot_version": "O6",
@@ -260,7 +260,11 @@
       "F6-check-lint-typecheck-build-verde",
       "F6-cobertura-acima-dos-limiares-84-77-85-87",
       "F6-audit-zero-vulnerabilidades-altas",
-      "F7-documentacao-arquitetura-modulos-operacao-seguranca-specs-incidentes-atualizada"
+      "F7-documentacao-arquitetura-modulos-operacao-seguranca-specs-incidentes-atualizada",
+      "F7-runbook-wsl2-docker-engine-oficial-e-compose-v2-documentado",
+      "F7-runbook-wsl2-nodejs-24-lts-nodesource-documentado",
+      "F7-runbook-wsl2-nat-lan-portproxy-firewall-e-recuperacao-bashrc-documentado",
+      "F7-erros-comuns-wsl2-e-permissoes-oauth-documentados"
     ],
     "gates_failed": [
       "F5-claude-opus-4.7-estrutura-19-de-20",
