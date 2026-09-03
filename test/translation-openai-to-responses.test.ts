@@ -272,4 +272,122 @@ describe('openai-to-responses', () => {
     expect(request.tools?.[0]?.name).toBe(shortName)
     expect(shortNames.shortToOriginal.get(shortName as string)).toBe(longName)
   })
+
+  describe('prompt_cache_key', () => {
+    const tools = [{ type: 'function', function: { name: 'read_file', parameters: {} } }]
+
+    it('permanece estável enquanto a conversa cresce', () => {
+      const turno1 = translateOpenAiToResponses(
+        body({
+          messages: [
+            { role: 'system', content: 'você é um agente' },
+            { role: 'user', content: 'refatore o módulo de auth' },
+          ],
+          tools,
+        }),
+        { model: 'gpt-5.4' },
+      ).request.prompt_cache_key
+
+      const turno5 = translateOpenAiToResponses(
+        body({
+          messages: [
+            { role: 'system', content: 'você é um agente' },
+            { role: 'user', content: 'refatore o módulo de auth' },
+            {
+              role: 'assistant',
+              content: null,
+              tool_calls: [{ id: 'call_1', type: 'function', function: { name: 'read_file', arguments: '{}' } }],
+            },
+            { role: 'tool', tool_call_id: 'call_1', content: 'conteúdo do arquivo' },
+            { role: 'assistant', content: 'entendi' },
+            { role: 'user', content: 'siga em frente' },
+          ],
+          tools,
+        }),
+        { model: 'gpt-5.4' },
+      ).request.prompt_cache_key
+
+      expect(turno1).toBeDefined()
+      expect(turno5).toBe(turno1)
+    })
+
+    it('não muda quando apenas o system varia (conteúdo volátil do agente)', () => {
+      const comData = translateOpenAiToResponses(
+        body({
+          messages: [
+            { role: 'system', content: 'agora são 10:00, cwd=/a' },
+            { role: 'user', content: 'mesma tarefa' },
+          ],
+          tools,
+        }),
+        { model: 'gpt-5.4' },
+      ).request.prompt_cache_key
+      const outraData = translateOpenAiToResponses(
+        body({
+          messages: [
+            { role: 'system', content: 'agora são 14:35, cwd=/b' },
+            { role: 'user', content: 'mesma tarefa' },
+          ],
+          tools,
+        }),
+        { model: 'gpt-5.4' },
+      ).request.prompt_cache_key
+
+      expect(comData).toBe(outraData)
+    })
+
+    it('separa conversas diferentes e conjuntos de ferramentas diferentes', () => {
+      const base = translateOpenAiToResponses(
+        body({ messages: [{ role: 'user', content: 'tarefa A' }], tools }),
+        { model: 'gpt-5.4' },
+      ).request.prompt_cache_key
+      const outraConversa = translateOpenAiToResponses(
+        body({ messages: [{ role: 'user', content: 'tarefa B' }], tools }),
+        { model: 'gpt-5.4' },
+      ).request.prompt_cache_key
+      const outrasFerramentas = translateOpenAiToResponses(
+        body({
+          messages: [{ role: 'user', content: 'tarefa A' }],
+          tools: [...tools, { type: 'function', function: { name: 'write_file', parameters: {} } }],
+        }),
+        { model: 'gpt-5.4' },
+      ).request.prompt_cache_key
+
+      expect(outraConversa).not.toBe(base)
+      expect(outrasFerramentas).not.toBe(base)
+    })
+
+    it('é opaca: não carrega conteúdo da conversa', () => {
+      const { request } = translateOpenAiToResponses(
+        body({ messages: [{ role: 'user', content: 'PROMPT_ULTRASSECRETO' }], tools }),
+        { model: 'gpt-5.4' },
+      )
+      expect(request.prompt_cache_key).toMatch(/^azigate-[0-9a-f]{32}$/u)
+      expect(request.prompt_cache_key).not.toContain('PROMPT_ULTRASSECRETO')
+    })
+
+    it('é omitida quando não há mensagem de usuário para ancorar', () => {
+      const { request } = translateOpenAiToResponses(
+        body({ messages: [{ role: 'system', content: 'apenas system' }], tools }),
+        { model: 'gpt-5.4' },
+      )
+      expect(request.prompt_cache_key).toBeUndefined()
+    })
+
+    it('lê a âncora de conteúdo multimodal em partes', () => {
+      const emPartes = translateOpenAiToResponses(
+        body({
+          messages: [{ role: 'user', content: [{ type: 'text', text: 'tarefa A' }] }],
+          tools,
+        }),
+        { model: 'gpt-5.4' },
+      ).request.prompt_cache_key
+      const texto = translateOpenAiToResponses(
+        body({ messages: [{ role: 'user', content: 'tarefa A' }], tools }),
+        { model: 'gpt-5.4' },
+      ).request.prompt_cache_key
+
+      expect(emPartes).toBe(texto)
+    })
+  })
 })

@@ -34,6 +34,9 @@ Fastify, Pino e a camada de tradução (para extrair usage dos chunks OpenAI).
   API; `inputTokens` é o total lógico reportado.
 - Codex registra input total, `cachedInputTokens` e `reasoningOutputTokens`;
   cache e reasoning são subconjuntos, não parcelas extras.
+- O `usage` é extraído dos chunks OpenAI à medida que são traduzidos, tanto no
+  modo streaming quanto no bufferizado; não depende de o gateway acumular a
+  resposta.
 - `cacheHitPercent` usa cache lido/input lógico. Não representa a porcentagem da
   cota mostrada pelo provider.
 - Nunca registrar mensagens, prompts, bodies, respostas, tool arguments, headers, credenciais, tokens OAuth ou saída bruta do provedor.

@@ -23,7 +23,8 @@ alias fechado; `reasoning_effort` ou `reasoning.effort` aceita `low`, `medium`,
 ## Saída
 
 Chat Completion com `content`/`tool_calls`, em JSON (buffer) ou SSE incremental
-real, conforme o `stream` do pedido.
+real, conforme o `stream` do pedido — que afeta apenas a resposta ao cliente,
+nunca o formato pedido à Messages API.
 
 ## Dependências
 
@@ -44,6 +45,9 @@ Token OAuth da assinatura salvo em `CLAUDE_TOKEN_FILE` (obtido uma vez com
 - Ferramentas nativas não-`function` (ex.: `web_search_*`) são preservadas de
   forma opaca; `allowed_domains`/`blocked_domains` vazios são removidos porque a
   API rejeita array vazio nesses campos.
+- A negociação com o fornecedor é sempre SSE (`stream: true` no corpo e
+  `Accept: text/event-stream`), independentemente do `stream` pedido pelo cliente
+  (ADR-019).
 - Streaming é incremental real: cada evento SSE (`content_block_delta`,
   `message_delta`, etc.) vira um chunk OpenAI assim que chega, sem heartbeat nem
   buffer da resposta inteira.

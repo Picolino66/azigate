@@ -389,6 +389,153 @@ describe('gateway multiprovedor CLI (adaptadores HTTP nativos)', () => {
     expect(logs).not.toContain('PROMPT_ULTRASSECRETO')
   })
 
+  it('envia prompt_cache_key estável ao Codex entre turnos da mesma conversa, sem vazar conteúdo', async () => {
+    let logs = ''
+    const logger = pino({ level: 'info', base: null }, new Writable({
+      write(chunk: Buffer, _encoding, callback) {
+        logs += chunk.toString()
+        callback()
+      },
+    }))
+    codex.setHandler((_request, response) => sseResponse(response, 200, sse(responsesTextEvents('ok'))))
+    const app = appFor({}, { logger })
+    const conversa = [
+      { role: 'system', content: 'agente' },
+      { role: 'user', content: 'PROMPT_ULTRASSECRETO' },
+    ]
+
+    const primeiro = await app.inject({
+      method: 'POST',
+      url: '/v1/chat/completions',
+      headers: CHAT_HEADERS,
+      payload: { model: 'codex-cli-sol', messages: conversa },
+    })
+    const segundo = await app.inject({
+      method: 'POST',
+      url: '/v1/chat/completions',
+      headers: CHAT_HEADERS,
+      payload: {
+        model: 'codex-cli-sol',
+        messages: [...conversa, { role: 'assistant', content: 'ok' }, { role: 'user', content: 'continue' }],
+      },
+    })
+    expect(primeiro.statusCode).toBe(200)
+    expect(segundo.statusCode).toBe(200)
+
+    const [turno1, turno2] = requestBodies(codex) as { prompt_cache_key?: string }[]
+    expect(turno1?.prompt_cache_key).toMatch(/^azigate-[0-9a-f]{32}$/u)
+    expect(turno2?.prompt_cache_key).toBe(turno1?.prompt_cache_key)
+    expect(codex.requests.map((entry) => entry.body).join('')).not.toContain('azigate-undefined')
+
+    expect(logs).not.toContain('prompt_cache_key')
+    expect(logs).not.toContain(turno1?.prompt_cache_key as string)
+    expect(logs).not.toContain('PROMPT_ULTRASSECRETO')
+  })
+
+  it('sempre pede SSE aos provedores CLI, mesmo quando o cliente não quer stream (regressão: 400 do backend Codex)', async () => {
+    codex.setHandler((_request, response) => sseResponse(response, 200, sse(responsesTextEvents('pronto'))))
+    claude.setHandler((_request, response) => sseResponse(response, 200, sse(anthropicTextEvents('pronto'))))
+    const app = appFor({ enableClaudeCli: true })
+
+    const codexResponse = await app.inject({
+      method: 'POST',
+      url: '/v1/chat/completions',
+      headers: CHAT_HEADERS,
+      payload: { model: 'codex-cli-sol', messages: [{ role: 'user', content: 'oi' }], stream: false },
+    })
+    expect(codexResponse.statusCode).toBe(200)
+    expect(codexResponse.json()).toMatchObject({ object: 'chat.completion' })
+    expect(requestBodies(codex)[0]).toMatchObject({ stream: true })
+    expect(codex.requests[0]?.headers.accept).toBe('text/event-stream')
+
+    const claudeResponse = await app.inject({
+      method: 'POST',
+      url: '/v1/chat/completions',
+      headers: CHAT_HEADERS,
+      payload: { model: 'claude-cli', messages: [{ role: 'user', content: 'oi' }], stream: false },
+    })
+    expect(claudeResponse.statusCode).toBe(200)
+    expect(claudeResponse.json()).toMatchObject({ object: 'chat.completion' })
+    expect(requestBodies(claude)[0]).toMatchObject({ stream: true })
+    expect(claude.requests[0]?.headers.accept).toBe('text/event-stream')
+  })
+
+  it('registra usage do Codex também em streaming (regressão: telemetria só existia sem stream)', async () => {
+    let logs = ''
+    const logger = pino({ level: 'info', base: null }, new Writable({
+      write(chunk: Buffer, _encoding, callback) {
+        logs += chunk.toString()
+        callback()
+      },
+    }))
+    codex.setHandler((_request, response) => sseResponse(response, 200, sse([
+      { type: 'response.created', response: { id: 'resp_1', model: 'gpt-5.4', created_at: 1 } },
+      { type: 'response.output_text.delta', delta: 'resposta pública' },
+      {
+        type: 'response.completed',
+        response: {
+          usage: {
+            input_tokens: 120,
+            output_tokens: 30,
+            total_tokens: 150,
+            input_tokens_details: { cached_tokens: 90 },
+            output_tokens_details: { reasoning_tokens: 12 },
+          },
+        },
+      },
+    ])))
+    const app = appFor({}, { logger })
+    await app.listen({ host: '127.0.0.1', port: 0 })
+    const address = app.server.address() as AddressInfo
+    const response = await fetch(`http://127.0.0.1:${address.port}/v1/chat/completions`, {
+      method: 'POST',
+      headers: CHAT_HEADERS,
+      body: JSON.stringify({
+        model: 'codex-cli-sol',
+        messages: [{ role: 'user', content: 'PROMPT_ULTRASSECRETO' }],
+        stream: true,
+      }),
+    })
+    await response.text()
+    await waitUntil(() => logs.includes('"path":"/v1/chat/completions"'))
+
+    expect(logs).toContain('"stream":true')
+    expect(logs).toContain('"inputTokens":120')
+    expect(logs).toContain('"outputTokens":30')
+    expect(logs).toContain('"totalTokens":150')
+    expect(logs).toContain('"cachedInputTokens":90')
+    expect(logs).toContain('"reasoningOutputTokens":12')
+    expect(logs).toContain('"cacheHitPercent":75')
+    expect(logs).not.toContain('PROMPT_ULTRASSECRETO')
+    expect(logs).not.toContain('resposta pública')
+  })
+
+  it('registra usage do Claude também em streaming', async () => {
+    let logs = ''
+    const logger = pino({ level: 'info', base: null }, new Writable({
+      write(chunk: Buffer, _encoding, callback) {
+        logs += chunk.toString()
+        callback()
+      },
+    }))
+    claude.setHandler((_request, response) =>
+      sseResponse(response, 200, sse(anthropicTextEvents('fluxo real', { input: 40, output: 7 }))))
+    const app = appFor({ enableClaudeCli: true }, { logger })
+    await app.listen({ host: '127.0.0.1', port: 0 })
+    const address = app.server.address() as AddressInfo
+    const response = await fetch(`http://127.0.0.1:${address.port}/v1/chat/completions`, {
+      method: 'POST',
+      headers: CHAT_HEADERS,
+      body: JSON.stringify({ model: 'claude-cli', messages: [{ role: 'user', content: 'oi' }], stream: true }),
+    })
+    await response.text()
+    await waitUntil(() => logs.includes('"path":"/v1/chat/completions"'))
+
+    expect(logs).toContain('"stream":true')
+    expect(logs).toContain('"inputTokens":40')
+    expect(logs).toContain('"outputTokens":7')
+  })
+
   it('combina catálogo DeepSeek com aliases CLI saudáveis (token OAuth presente)', async () => {
     deepseek.setHandler((_request, response) => jsonResponse(response, 200, {
       object: 'list',

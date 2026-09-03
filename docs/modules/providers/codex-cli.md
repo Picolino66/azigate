@@ -25,7 +25,8 @@ ou `reasoning.effort` com `low`, `medium`, `high`, `xhigh` ou `max`.
 ## Saída
 
 Chat Completion com `content` ou `tool_calls`, em JSON (buffer) ou SSE
-incremental real, conforme o `stream` do pedido. IDs de tool call vêm do
+incremental real, conforme o `stream` do pedido — que afeta apenas a resposta ao
+cliente, nunca o formato pedido à Responses API. IDs de tool call vêm do
 `call_id` da Responses API.
 
 ## Dependências
@@ -50,6 +51,12 @@ Token OAuth da assinatura salvo em `CODEX_TOKEN_FILE` (obtido uma vez com
 - Nomes de ferramenta acima de 64 caracteres são encurtados preservando o prefixo
   `mcp__` e o último segmento, com mapa reverso aplicado na resposta para devolver
   ao cliente o nome original (`buildShortNameMap`).
+- Cada requisição leva `prompt_cache_key` derivada da âncora da conversa, para
+  estabilizar o roteamento do cache de prefixo entre turnos (ADR-020).
+- A negociação com o fornecedor é sempre SSE (`stream: true` no corpo e
+  `Accept: text/event-stream`), independentemente do `stream` pedido pelo cliente;
+  o `stream` do cliente decide apenas se o gateway repassa chunks incrementais ou
+  acumula um `chat.completion` (ADR-019).
 - Streaming é incremental real: cada evento SSE (`response.output_text.delta`,
   `response.function_call_arguments.delta`, etc.) vira um chunk OpenAI assim que
   chega, sem heartbeat nem buffer da resposta inteira.

@@ -137,7 +137,7 @@ export function registerChatRoute(
           const exchange = await anthropicClient.request({
             requestId: request.id,
             body: JSON.stringify(anthropicBody),
-            stream,
+            stream: true,
             signal: cancellation.signal,
           })
           request.telemetry.upstreamStatus = exchange.response.status
@@ -164,7 +164,7 @@ export function registerChatRoute(
         const exchange = await codexClient.request({
           requestId: request.id,
           body: JSON.stringify(responsesBody),
-          stream,
+          stream: true,
           signal: cancellation.signal,
         })
         request.telemetry.upstreamStatus = exchange.response.status

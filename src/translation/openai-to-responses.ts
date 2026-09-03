@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import type { ChatBody } from '../types.js'
 import type { ShortNameMapping } from './state.js'
 
@@ -50,10 +51,11 @@ export interface ResponsesRequestBody {
   model: string
   instructions: ''
   store: false
-  stream?: boolean
+  stream: true
   parallel_tool_calls?: boolean
   reasoning: { effort: string; summary: 'auto' }
   include: ['reasoning.encrypted_content']
+  prompt_cache_key?: string
   input: ResponsesInputItem[]
   tools?: ResponsesTool[]
   tool_choice?: ResponsesToolChoice
@@ -185,6 +187,33 @@ function convertMessages(messages: unknown[], shortNames: ShortNameMapping): Res
   return items
 }
 
+const CACHE_KEY_PREFIX = 'azigate'
+const CACHE_KEY_HEX_LENGTH = 32
+
+// Âncora estável da conversa: o primeiro texto de usuário não vazio. Ele não muda
+// entre turnos e separa conversas distintas. Mensagens `system` ficam de fora de
+// propósito: agentes costumam injetar conteúdo volátil nelas (data, cwd, arquivos
+// abertos), o que rotacionaria a chave a cada turno e anularia o roteamento.
+function conversationAnchor(messages: readonly unknown[]): string | undefined {
+  for (const raw of messages) {
+    if (!isRecord(raw) || raw.role !== 'user') continue
+    const text = extractPlainText(raw.content)
+    if (text.length > 0) return text
+  }
+  return undefined
+}
+
+// Deriva um identificador opaco de roteamento de cache. Só o digest sai do
+// processo: nenhum trecho da conversa é enviado ou registrado por esta função.
+export function buildPromptCacheKey(anchor: string, toolNames: readonly string[]): string {
+  const hash = createHash('sha256')
+  hash.update(`${String(toolNames.length)}\n`)
+  for (const name of toolNames) hash.update(`${name}\n`)
+  hash.update('\u0000')
+  hash.update(anchor)
+  return `${CACHE_KEY_PREFIX}-${hash.digest('hex').slice(0, CACHE_KEY_HEX_LENGTH)}`
+}
+
 function convertTools(tools: unknown, shortNames: ShortNameMapping): ResponsesTool[] | undefined {
   if (!Array.isArray(tools) || tools.length === 0) return undefined
   return tools.map((tool) => {
@@ -245,6 +274,9 @@ export function translateOpenAiToResponses(body: ChatBody, options: OpenAiToResp
     : []
   const shortNames = buildShortNameMap(toolNames)
 
+  const anchor = conversationAnchor(body.messages)
+  const promptCacheKey = anchor === undefined ? undefined : buildPromptCacheKey(anchor, toolNames)
+
   const input = convertMessages(body.messages, shortNames)
   const tools = convertTools(body.tools, shortNames)
   const toolChoice = convertToolChoice(body.tool_choice, shortNames)
@@ -255,10 +287,11 @@ export function translateOpenAiToResponses(body: ChatBody, options: OpenAiToResp
     model: options.model,
     instructions: '',
     store: false,
-    ...(body.stream === undefined ? {} : { stream: body.stream }),
+    stream: true,
     ...(tools !== undefined && parallelToolCalls !== undefined ? { parallel_tool_calls: parallelToolCalls } : {}),
     reasoning: { effort: options.effort ?? 'medium', summary: 'auto' },
     include: ['reasoning.encrypted_content'],
+    ...(promptCacheKey === undefined ? {} : { prompt_cache_key: promptCacheKey }),
     input,
     ...(tools === undefined ? {} : { tools }),
     ...(toolChoice === undefined ? {} : { tool_choice: toolChoice }),

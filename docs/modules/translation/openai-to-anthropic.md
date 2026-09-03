@@ -11,14 +11,16 @@ Anthropic.
 
 ## Entrada
 
-`ChatBody` (model, messages, tools, tool_choice, stream, stop, top_p,
+`ChatBody` (model, messages, tools, tool_choice, stop, top_p,
 temperature, parallel_tool_calls) mais `{ model, defaultMaxTokens, effort?,
-thinkingBudgetTokens? }`.
+thinkingBudgetTokens? }`. O `stream` do cliente não é entrada desta tradução: ele
+governa apenas a borda de saída do gateway.
 
 ## Saída
 
-`AnthropicRequestBody`: `{ model, messages, max_tokens, system?, stream?, top_p?,
+`AnthropicRequestBody`: `{ model, messages, max_tokens, system?, stream, top_p?,
 temperature?, stop_sequences?, tools?, tool_choice?, thinking?, output_config? }`.
+O campo `stream` é fixo em `true`.
 
 ## Dependências
 

@@ -81,6 +81,11 @@ chega, sem heartbeat nem buffer da resposta inteira. A sequência típica é:
 Falha antes do primeiro byte mantém o status HTTP do erro. Falha depois do
 início do stream envia `event: error` com corpo sanitizado e encerra sem `[DONE]`.
 
+Sem `stream: true`, a resposta é um `chat.completion` único acumulado a partir
+dos mesmos chunks. O gateway negocia SSE com o provedor nos dois casos: o
+`stream` do cliente não altera o formato pedido à Messages API ou à Responses
+API (ADR-019).
+
 ## Erros locais
 
 | Status | Código | Condição |

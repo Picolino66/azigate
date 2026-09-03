@@ -127,6 +127,7 @@ export async function runProviderCompletion<TEvent>(input: RunProviderCompletion
 
     const state = createState()
     const chunks: OpenAiChunk[] = []
+    let lastUsage: OpenAiChunk['usage']
     let errored = false
 
     for await (const raw of readSseEvents(body)) {
@@ -150,6 +151,10 @@ export async function runProviderCompletion<TEvent>(input: RunProviderCompletion
         errored = true
         break
       }
+      for (const chunk of step.chunks) {
+        if (chunk.usage !== undefined) lastUsage = chunk.usage
+      }
+
       if (wantsStream) {
         for (const chunk of step.chunks) {
           if (!started) startStream()
@@ -161,7 +166,6 @@ export async function runProviderCompletion<TEvent>(input: RunProviderCompletion
       if (step.done) break
     }
 
-    const lastUsage = [...chunks].reverse().find((chunk) => chunk.usage !== undefined)?.usage
     if (lastUsage !== undefined) input.observeUsage(request, lastUsage)
 
     if (errored) {

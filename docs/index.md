@@ -10,7 +10,6 @@
 - [OpenAPI](../specs/openapi.yaml)
 - [Plano rastreável](../tasks/implementation-plan.md)
 - [Plano de confiabilidade de execução CLI](../tasks/cli-execution-reliability-plan.md)
-- [Plano de migração broker → adaptadores HTTP](../migracao.md)
 
 ## Módulos
 
@@ -66,6 +65,8 @@
 - [ADR-016 — substituição do broker por adaptadores HTTP](../adr/ADR-016-substituicao-do-broker-por-adaptadores-http.md)
 - [ADR-017 — fim do regime sintético de SSE](../adr/ADR-017-fim-do-regime-sintetico-de-sse.md)
 - [ADR-018 — credencial OAuth da assinatura](../adr/ADR-018-credencial-oauth-da-assinatura.md)
+- [ADR-019 — adaptadores CLI sempre consomem SSE](../adr/ADR-019-adaptadores-cli-sempre-consomem-sse.md)
+- [ADR-020 — `prompt_cache_key` derivada da conversa](../adr/ADR-020-prompt-cache-key-derivada-da-conversa.md)
 
 ## Regra de sincronização
 

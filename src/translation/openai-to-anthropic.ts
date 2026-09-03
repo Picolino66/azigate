@@ -62,7 +62,7 @@ export interface AnthropicRequestBody {
   messages: AnthropicMessage[]
   max_tokens: number
   system?: AnthropicTextBlock[]
-  stream?: boolean
+  stream: true
   top_p?: number
   temperature?: number
   stop_sequences?: string[]
@@ -307,7 +307,7 @@ export function translateOpenAiToAnthropic(body: ChatBody, options: OpenAiToAnth
     messages: nonEmptyMessages,
     max_tokens: maxTokens,
     ...(system.length > 0 ? { system } : {}),
-    ...(body.stream === undefined ? {} : { stream: body.stream }),
+    stream: true,
     ...(!dropSamplingParams && topP !== undefined ? { top_p: topP } : {}),
     ...(!dropSamplingParams && temperature !== undefined ? { temperature } : {}),
     ...(stopSequences === undefined ? {} : { stop_sequences: stopSequences }),

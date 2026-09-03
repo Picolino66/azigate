@@ -12,14 +12,17 @@ mais `buildShortNameMap`.
 
 ## Entrada
 
-`ChatBody` (model, messages, tools, tool_choice, stream, response_format,
-parallel_tool_calls) mais `{ model, effort? }`.
+`ChatBody` (model, messages, tools, tool_choice, response_format,
+parallel_tool_calls) mais `{ model, effort? }`. O `stream` do cliente não é
+entrada desta tradução: ele governa apenas a borda de saída do gateway.
 
 ## Saída
 
 `TranslatedResponsesRequest`: `{ request: ResponsesRequestBody, shortNames:
 ShortNameMapping }`. O corpo tem campos fixos: `instructions: ""`, `store: false`,
-`reasoning: {effort, summary:"auto"}`, `include: ["reasoning.encrypted_content"]`.
+`stream: true`, `reasoning: {effort, summary:"auto"}`,
+`include: ["reasoning.encrypted_content"]`, mais `prompt_cache_key` quando há
+âncora de conversa.
 
 ## Dependências
 
@@ -50,6 +53,16 @@ Regras adicionais:
   `mcp__` e o último segmento (`buildShortNameMap`), com colisões resolvidas por
   sufixo numérico; o mapa reverso é usado por `responses-to-openai.ts` para
   devolver o nome original ao cliente.
+- `prompt_cache_key` é `azigate-<sha256 truncado em 32 hex>` sobre a quantidade e
+  os nomes das ferramentas mais a **âncora da conversa**: o texto da primeira
+  mensagem `user` não vazia (`buildPromptCacheKey`). A âncora não muda entre
+  turnos, então a chave permanece estável durante toda a conversa e serve como
+  dica de roteamento para o cache de prefixo do fornecedor (ADR-020).
+- Mensagens `system` ficam fora da âncora de propósito: agentes injetam nelas
+  conteúdo volátil (data, cwd, arquivos abertos), que rotacionaria a chave a cada
+  turno.
+- Sem mensagem `user` com texto, `prompt_cache_key` é omitido em vez de assumir
+  valor degenerado. A chave nunca é registrada em log.
 
 ## Fluxo resumido
 
