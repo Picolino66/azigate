@@ -17,7 +17,8 @@
     "test:coverage": "vitest run --coverage",
     "check": "npm run lint && npm run typecheck && npm run test && npm run build",
     "login:codex": "tsx src/providers/oauth/login-codex.ts",
-    "login:claude": "tsx src/providers/oauth/login-claude.ts"
+    "login:claude": "tsx src/providers/oauth/login-claude.ts",
+    "experiment:previous-response": "tsx test/manual/previous-response-id-scenarios.ts"
   },
   "dependencies": {
     "dotenv": "17.4.2",
