@@ -88,3 +88,100 @@ essa conta já é única e compartilhada por construção (ADR-018). Registrado 
 O `prompt_cache_key` é um campo aceito pela Responses API; se o backend passar a rejeitá-lo, a
 falha aparece como `400`/`codex_upstream_error` já na primeira requisição, de forma
 imediatamente observável, e a reversão é a remoção do campo.
+
+---
+
+## Adendo — 21/09/2026 — âncora por `call_id` e registro do digest
+
+- Status: aceito
+- Motivação: `TOKEN_OPTIMIZATION_AUDIT.md` (findings TOK-001 e TOK-002)
+
+### O que a medição mostrou
+
+A sessão de 21/09/2026 (140 requisições `codex-cli-terra`, já com esta ADR em produção)
+registrou 47,65% de acerto de cache contra os 88,7% da sessão baseline acima. O fresco por
+turno subiu de ~10.010 para ~34.697, e 53 turnos com miss total consumiram 2.503.648 tokens
+frescos — 62,7% de todo o input pago da sessão.
+
+A diferença entre as duas sessões é **concorrência**: 28 dos 114 pares consecutivos de
+requisição se sobrepõem no tempo, ou seja, havia mais de uma conversa ativa sobre a mesma
+credencial. Separando os pares:
+
+| Requisição anterior | n | Miss total | Fresco/turno |
+|---|---|---|---|
+| Continuação plausível da mesma conversa | 61 | 19 (31%) | 38.373 |
+| Outra conversa intercalada | 53 | 34 (64%) | 30.566 |
+
+O miss total dobra quando há intercalação. É exatamente a consequência que a decisão
+original registrou como aceita: "Conversas cuja primeira mensagem de usuário seja idêntica
+compartilharão a chave." Duas sessões do mesmo agente, no mesmo repositório, abrem com o
+mesmo texto, recebem a mesma chave, são roteadas para a mesma máquina e despejam o prefixo
+uma da outra.
+
+A correlação é evidência de interferência entre conversas concorrentes, não prova isolada de
+colisão de chave — daí o segundo item deste adendo.
+
+### Mudança 1 — a âncora passa a ser o primeiro `call_id`
+
+`conversationAnchor` retorna agora uma âncora tipada:
+
+1. **`call_id`** — o primeiro identificador de tool call encontrado no histórico, seja em
+   `tool_calls[].id` de uma mensagem `assistant`, seja em `tool_call_id` de uma mensagem
+   `tool`. É gerado pelo fornecedor, devolvido pelo agente a cada turno, estável enquanto a
+   conversa existir e único entre conversas.
+2. **`user_text`** — o comportamento anterior, usado apenas enquanto não existe nenhuma tool
+   call no histórico.
+
+O tipo da âncora entra no digest antes do valor, então um `call_id` e um texto de usuário de
+mesmo valor nunca produzem a mesma chave.
+
+Mensagens `system` continuam fora da âncora, pelo motivo original: conteúdo volátil injetado
+pelos agentes rotacionaria a chave a cada turno.
+
+### Trade-off aceito: a chave muda entre o primeiro e o segundo turno
+
+Enquanto não há tool call, a âncora é o texto; no primeiro turno que traz uma, ela passa a ser
+o `call_id`. A chave muda uma vez por conversa, nessa transição.
+
+Isso é aceitável porque o primeiro turno é o menor da conversa — é o turno que **cria** o
+prefixo cacheado, não o que se beneficia dele. A partir do segundo turno, quando o histórico
+cresce e o cache passa a valer, a chave é estável até o fim.
+
+A alternativa de omitir a chave no primeiro turno foi considerada e descartada: perderia o
+roteamento de conversas que não usam ferramentas, que continuam funcionando pelo texto.
+
+### Risco residual: compactação de histórico
+
+Se o agente cliente compactar a conversa e descartar a primeira tool call, a âncora muda e a
+chave rotaciona. O efeito é o mesmo da âncora anterior quando o primeiro texto de usuário é
+descartado — e, nesse cenário, o prefixo real também mudou por inteiro, então o miss
+aconteceria de qualquer forma. A âncora por `call_id` não piora esse caso.
+
+### Mudança 2 — o digest passa a ser registrado em log
+
+A decisão original determinava que "o campo nunca é registrado em log". **Este adendo reverte
+essa cláusula.**
+
+Motivo: sem o `promptCacheKey` na telemetria não há como agrupar turnos por conversa, e sem
+esse agrupamento é impossível distinguir as causas candidatas de um miss — colisão de chave,
+compactação pelo cliente ou expiração. A auditoria precisou inferir as conversas pelo
+crescimento do `inputTokens`, uma heurística frágil que não sustenta decisão.
+
+O que passa a ser registrado é o **digest**, já opaco por construção: `azigate-` seguido de 32
+caracteres hexadecimais de um SHA-256 truncado. Não é reversível e não carrega trecho de
+conversa. Junto dele passa a ser registrado o `prefixFingerprint`, digest de 16 hex dos três
+primeiros itens do `input`, que existe para responder à pergunta que o `promptCacheKey`
+sozinho não responde: se o prefixo enviado mudou entre dois turnos da mesma chave.
+
+A invariante de não registrar prompts, mensagens, bodies, tool arguments ou secrets permanece
+intacta — o teste de integração que garante isso continua no lugar, agora afirmando que o
+digest aparece **e** que o conteúdo que o originou não aparece.
+
+### Consequências
+
+- `buildPromptCacheKey` passa a receber `ConversationAnchor` em vez de `string`. Continua
+  função pura, síncrona e sem I/O.
+- O gateway continua stateless: nada é memorizado entre requisições; a âncora é lida do corpo
+  que o cliente já envia.
+- A métrica de sucesso da mudança é `freshInputTokens` por turno, comparada com as duas linhas
+  de base registradas acima.

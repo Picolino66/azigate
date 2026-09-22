@@ -88,6 +88,118 @@ describe('CodexClient', () => {
     await mock.close()
   })
 
+  it('expõe retryCount com o número de tentativas repetidas (TOK-002)', async () => {
+    const mock = new MockUpstream()
+    const base = await mock.start()
+    let calls = 0
+    mock.setHandler((_request, response) => {
+      calls += 1
+      if (calls === 1) {
+        jsonResponse(response, 503, { error: 'unavailable' })
+        return
+      }
+      jsonResponse(response, 200, { ok: true })
+    })
+    const client = new CodexClient(config({ maxRetries: 2, retryMaxDelayMs: 20 }, base.toString()), tokens())
+
+    const exchange = await client.request({ requestId: 'req-1', body: '{}', stream: false })
+    expect(exchange.response.status).toBe(200)
+    expect(exchange.retryCount).toBe(1)
+    exchange.dispose()
+
+    await client.close()
+    await mock.close()
+  })
+
+  it('retryCount é zero quando a primeira tentativa já responde', async () => {
+    const mock = new MockUpstream()
+    const base = await mock.start()
+    mock.setHandler((_request, response) => jsonResponse(response, 200, { ok: true }))
+    const client = new CodexClient(config({}, base.toString()), tokens())
+
+    const exchange = await client.request({ requestId: 'req-1', body: '{}', stream: false })
+    expect(exchange.retryCount).toBe(0)
+    exchange.dispose()
+
+    await client.close()
+    await mock.close()
+  })
+
+  it('respeita Retry-After do fornecedor no retry interno (TOK-008)', async () => {
+    const mock = new MockUpstream()
+    const base = await mock.start()
+    let calls = 0
+    const instantes: number[] = []
+    mock.setHandler((_request, response) => {
+      calls += 1
+      instantes.push(Date.now())
+      if (calls === 1) {
+        response.writeHead(429, { 'content-type': 'application/json', 'retry-after': '1' })
+        response.end(JSON.stringify({ error: 'rate_limited' }))
+        return
+      }
+      jsonResponse(response, 200, { ok: true })
+    })
+    // retryMaxDelayMs acima do Retry-After: o valor do fornecedor é o que vale.
+    const client = new CodexClient(config({ maxRetries: 1, retryMaxDelayMs: 2000 }, base.toString()), tokens())
+
+    const exchange = await client.request({ requestId: 'req-1', body: '{}', stream: false })
+    expect(exchange.response.status).toBe(200)
+    expect(instantes[1]! - instantes[0]!).toBeGreaterThanOrEqual(900)
+    exchange.dispose()
+
+    await client.close()
+    await mock.close()
+  })
+
+  it('não repete quando o Retry-After do fornecedor excede o teto configurado', async () => {
+    const mock = new MockUpstream()
+    const base = await mock.start()
+    let calls = 0
+    mock.setHandler((_request, response) => {
+      calls += 1
+      response.writeHead(429, { 'content-type': 'application/json', 'retry-after': '120' })
+      response.end(JSON.stringify({ error: 'rate_limited' }))
+    })
+    const client = new CodexClient(config({ maxRetries: 2, retryMaxDelayMs: 50 }, base.toString()), tokens())
+
+    const exchange = await client.request({ requestId: 'req-1', body: '{}', stream: false })
+    expect(exchange.response.status).toBe(429)
+    expect(calls).toBe(1)
+    exchange.dispose()
+
+    await client.close()
+    await mock.close()
+  })
+
+  it('aplica piso de espera em 429 sem Retry-After, sem afetar outros status (TOK-008)', async () => {
+    const cenario = async (status: number): Promise<number> => {
+      const mock = new MockUpstream()
+      const base = await mock.start()
+      let calls = 0
+      const instantes: number[] = []
+      mock.setHandler((_request, response) => {
+        calls += 1
+        instantes.push(Date.now())
+        if (calls === 1) {
+          jsonResponse(response, status, { error: 'x' })
+          return
+        }
+        jsonResponse(response, 200, { ok: true })
+      })
+      const client = new CodexClient(config({ maxRetries: 1, retryMaxDelayMs: 400 }, base.toString()), tokens())
+      const exchange = await client.request({ requestId: 'req-1', body: '{}', stream: false })
+      exchange.dispose()
+      await client.close()
+      await mock.close()
+      return instantes[1]! - instantes[0]!
+    }
+
+    // 429 espera pelo menos o piso; 503 mantém o exponencial curto de sempre.
+    expect(await cenario(429)).toBeGreaterThanOrEqual(300)
+    expect(await cenario(503)).toBeLessThan(300)
+  })
+
   it('propaga ClientAbortedError quando o sinal do cliente é abortado', async () => {
     const mock = new MockUpstream()
     const base = await mock.start()

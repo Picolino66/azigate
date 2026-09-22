@@ -19,8 +19,13 @@ export class ProviderProtocolError extends GatewayError {
 }
 
 export class ProviderUpstreamError extends GatewayError {
-  constructor(provider: string, status: number) {
+  constructor(provider: string, status: number, retryAfterSeconds?: string) {
     const safeStatus = status >= 400 && status < 600 ? status : 502
-    super(safeStatus, `${provider}_upstream_error`, `O provedor ${provider} retornou um erro`)
+    super(
+      safeStatus,
+      `${provider}_upstream_error`,
+      `O provedor ${provider} retornou um erro`,
+      retryAfterSeconds,
+    )
   }
 }

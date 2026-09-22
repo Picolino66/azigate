@@ -5,6 +5,7 @@ import type { GatewayMetrics } from '../observability/metrics.js'
 import type { OpenAiChunk, StreamState, TranslatedStreamStep } from '../translation/state.js'
 import { ClientAbortedError, GatewayError } from '../upstream/errors.js'
 import { ProviderUpstreamError } from './http-errors.js'
+import { retryAfterSeconds } from './http-retry.js'
 import { readSseEvents } from './sse-reader.js'
 
 export interface ProviderExchange {
@@ -120,7 +121,11 @@ export async function runProviderCompletion<TEvent>(input: RunProviderCompletion
 
   try {
     if (!exchange.response.ok) {
-      throw new ProviderUpstreamError(provider, exchange.response.status)
+      throw new ProviderUpstreamError(
+        provider,
+        exchange.response.status,
+        retryAfterSeconds(exchange.response.headers.get('retry-after')),
+      )
     }
     const body = exchange.response.body as unknown as ReadableStream<Uint8Array> | null
     if (!body) throw new ProviderUpstreamError(provider, 502)

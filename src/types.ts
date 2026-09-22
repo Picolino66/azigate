@@ -19,6 +19,14 @@ export interface RequestTelemetry extends TokenUsage {
   reasoningOutputTokens?: number
   estimatedCostUsd?: number
   cacheHitPercent?: number
+  usageObserved?: boolean
+  promptCacheKey?: string
+  prefixFingerprint?: string
+  requestBodyBytes?: number
+  inputItemCount?: number
+  toolCount?: number
+  toolSchemaBytes?: number
+  retryCount?: number
 }
 
 export interface ChatBody {

@@ -37,6 +37,7 @@ function deepseekEffortForLog(value: unknown): string {
 
 function observeProviderUsage(request: FastifyRequest, usage: OpenAiChunk['usage']): void {
   if (!usage) return
+  request.telemetry.usageObserved = true
   if (usage.prompt_tokens !== undefined) request.telemetry.inputTokens = usage.prompt_tokens
   if (usage.completion_tokens !== undefined) request.telemetry.outputTokens = usage.completion_tokens
   if (usage.total_tokens !== undefined) request.telemetry.totalTokens = usage.total_tokens
@@ -44,6 +45,12 @@ function observeProviderUsage(request: FastifyRequest, usage: OpenAiChunk['usage
   if (cachedTokens !== undefined) request.telemetry.cachedInputTokens = cachedTokens
   const reasoningTokens = usage.completion_tokens_details?.reasoning_tokens
   if (reasoningTokens !== undefined) request.telemetry.reasoningOutputTokens = reasoningTokens
+  // Parcela efetivamente reprocessada pelo provedor. O cache é subconjunto do input,
+  // então a diferença nunca deveria ser negativa; o piso protege contra usage
+  // inconsistente do fornecedor.
+  if (usage.prompt_tokens !== undefined) {
+    request.telemetry.freshInputTokens = Math.max(0, usage.prompt_tokens - (cachedTokens ?? 0))
+  }
   if (cachedTokens !== undefined && usage.prompt_tokens !== undefined && usage.prompt_tokens > 0) {
     request.telemetry.cacheHitPercent = Math.round((cachedTokens / usage.prompt_tokens) * 10_000) / 100
   }
@@ -129,6 +136,7 @@ export function registerChatRoute(
         request.telemetry.effort = effort ?? 'não_aplicável'
 
         if (selection.provider === 'claude') {
+          request.telemetry.usageObserved = false
           const anthropicBody = translateOpenAiToAnthropic(chatBody, {
             model: selection.model,
             defaultMaxTokens: ANTHROPIC_DEFAULT_MAX_TOKENS,
@@ -157,16 +165,29 @@ export function registerChatRoute(
           return
         }
 
-        const { request: responsesBody } = translateOpenAiToResponses(chatBody, {
+        const { request: responsesBody, metrics: promptMetrics } = translateOpenAiToResponses(chatBody, {
           model: selection.model,
           ...(effort === undefined ? {} : { effort }),
         })
+        const serializedBody = JSON.stringify(responsesBody)
+        // Registrado antes da chamada: um turno que falhe sem `usage` continua medido
+        // pelo tamanho e pela forma do prompt (TOK-006).
+        request.telemetry.usageObserved = false
+        if (promptMetrics.promptCacheKey !== undefined) {
+          request.telemetry.promptCacheKey = promptMetrics.promptCacheKey
+        }
+        request.telemetry.prefixFingerprint = promptMetrics.prefixFingerprint
+        request.telemetry.requestBodyBytes = Buffer.byteLength(serializedBody)
+        request.telemetry.inputItemCount = promptMetrics.inputItemCount
+        request.telemetry.toolCount = promptMetrics.toolCount
+        request.telemetry.toolSchemaBytes = promptMetrics.toolSchemaBytes
         const exchange = await codexClient.request({
           requestId: request.id,
-          body: JSON.stringify(responsesBody),
+          body: serializedBody,
           stream: true,
           signal: cancellation.signal,
         })
+        request.telemetry.retryCount = exchange.retryCount
         request.telemetry.upstreamStatus = exchange.response.status
         await runProviderCompletion({
           provider: 'codex',

@@ -56,6 +56,14 @@ Token OAuth da assinatura salvo em `CLAUDE_TOKEN_FILE` (obtido uma vez com
   stream vira evento `error` sanitizado, sem `[DONE]`.
 - Autenticação sem técnicas de "cloaking"/fingerprint do cliente oficial — risco
   aceito e documentado no adendo do [ADR-018](../../../adr/ADR-018-credencial-oauth-da-assinatura.md).
+- Quando a Anthropic responde com `retry-after`, o valor é normalizado para segundos
+  inteiros e devolvido ao cliente no cabeçalho `retry-after`; valor inválido é
+  descartado. O driver de streaming é compartilhado com o Codex, então a regra é a
+  mesma nos dois adaptadores CLI.
+- A telemetria registra `usageObserved`, indicando se o provedor chegou a reportar
+  `usage` no stream. As métricas de forma do prompt (`promptCacheKey`,
+  `prefixFingerprint`, `requestBodyBytes`, `inputItemCount`, `toolCount`,
+  `toolSchemaBytes`) existem apenas no adaptador Codex.
 
 ## Fluxo resumido
 

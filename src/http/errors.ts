@@ -12,6 +12,7 @@ export function registerErrorHandler(app: FastifyInstance): void {
     if (reply.sent) return
 
     if (error instanceof GatewayError) {
+      if (error.retryAfterSeconds !== undefined) reply.header('retry-after', error.retryAfterSeconds)
       reply.code(error.statusCode).send(errorBody(error.publicMessage, error.code))
       return
     }

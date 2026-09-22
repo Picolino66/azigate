@@ -67,9 +67,20 @@ export interface OpenAiToResponsesOptions {
   effort?: string
 }
 
+// Métricas derivadas do corpo já traduzido. Só contagens e digests: nenhuma delas
+// carrega mensagem, prompt, argumento de ferramenta ou schema em texto claro.
+export interface ResponsesRequestMetrics {
+  promptCacheKey?: string
+  prefixFingerprint: string
+  inputItemCount: number
+  toolCount: number
+  toolSchemaBytes: number
+}
+
 export interface TranslatedResponsesRequest {
   request: ResponsesRequestBody
   shortNames: ShortNameMapping
+  metrics: ResponsesRequestMetrics
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -189,12 +200,36 @@ function convertMessages(messages: unknown[], shortNames: ShortNameMapping): Res
 
 const CACHE_KEY_PREFIX = 'azigate'
 const CACHE_KEY_HEX_LENGTH = 32
+const PREFIX_FINGERPRINT_ITEMS = 3
+const PREFIX_FINGERPRINT_HEX_LENGTH = 16
 
-// Âncora estável da conversa: o primeiro texto de usuário não vazio. Ele não muda
-// entre turnos e separa conversas distintas. Mensagens `system` ficam de fora de
-// propósito: agentes costumam injetar conteúdo volátil nelas (data, cwd, arquivos
-// abertos), o que rotacionaria a chave a cada turno e anularia o roteamento.
-function conversationAnchor(messages: readonly unknown[]): string | undefined {
+export type ConversationAnchor =
+  | { kind: 'call_id'; value: string }
+  | { kind: 'user_text'; value: string }
+
+// Primeiro `call_id` do histórico. O identificador é gerado pelo fornecedor, devolvido
+// pelo agente em `tool_calls[].id`/`tool_call_id` e não se repete entre conversas, então
+// distingue sessões concorrentes que compartilham o mesmo texto de abertura (ADR-020).
+function firstCallId(messages: readonly unknown[]): string | undefined {
+  for (const raw of messages) {
+    if (!isRecord(raw)) continue
+    if (raw.role === 'assistant' && Array.isArray(raw.tool_calls)) {
+      for (const call of raw.tool_calls) {
+        if (isRecord(call) && typeof call.id === 'string' && call.id.length > 0) return call.id
+      }
+    }
+    if (raw.role === 'tool' && typeof raw.tool_call_id === 'string' && raw.tool_call_id.length > 0) {
+      return raw.tool_call_id
+    }
+  }
+  return undefined
+}
+
+// Fallback do primeiro turno, antes de existir qualquer tool call: o primeiro texto de
+// usuário não vazio. Mensagens `system` ficam de fora de propósito — agentes injetam
+// conteúdo volátil nelas (data, cwd, arquivos abertos), o que rotacionaria a chave a
+// cada turno e anularia o roteamento.
+function firstUserText(messages: readonly unknown[]): string | undefined {
   for (const raw of messages) {
     if (!isRecord(raw) || raw.role !== 'user') continue
     const text = extractPlainText(raw.content)
@@ -203,15 +238,38 @@ function conversationAnchor(messages: readonly unknown[]): string | undefined {
   return undefined
 }
 
+export function conversationAnchor(messages: readonly unknown[]): ConversationAnchor | undefined {
+  const callId = firstCallId(messages)
+  if (callId !== undefined) return { kind: 'call_id', value: callId }
+  const text = firstUserText(messages)
+  if (text !== undefined) return { kind: 'user_text', value: text }
+  return undefined
+}
+
 // Deriva um identificador opaco de roteamento de cache. Só o digest sai do
 // processo: nenhum trecho da conversa é enviado ou registrado por esta função.
-export function buildPromptCacheKey(anchor: string, toolNames: readonly string[]): string {
+// O tipo da âncora entra no digest para separar os dois regimes: um `call_id` e um
+// texto de usuário idênticos nunca produzem a mesma chave.
+export function buildPromptCacheKey(anchor: ConversationAnchor, toolNames: readonly string[]): string {
   const hash = createHash('sha256')
   hash.update(`${String(toolNames.length)}\n`)
   for (const name of toolNames) hash.update(`${name}\n`)
   hash.update('\u0000')
-  hash.update(anchor)
+  hash.update(`${anchor.kind}\u0000`)
+  hash.update(anchor.value)
   return `${CACHE_KEY_PREFIX}-${hash.digest('hex').slice(0, CACHE_KEY_HEX_LENGTH)}`
+}
+
+// Digest dos primeiros itens do `input`, usado só para detectar que o prefixo enviado
+// mudou entre turnos. É unidirecional: permite comparar dois turnos sem revelar nada do
+// conteúdo comparado.
+export function buildPrefixFingerprint(input: readonly ResponsesInputItem[]): string {
+  const hash = createHash('sha256')
+  for (const item of input.slice(0, PREFIX_FINGERPRINT_ITEMS)) {
+    hash.update(JSON.stringify(item))
+    hash.update('\u0000')
+  }
+  return hash.digest('hex').slice(0, PREFIX_FINGERPRINT_HEX_LENGTH)
 }
 
 function convertTools(tools: unknown, shortNames: ShortNameMapping): ResponsesTool[] | undefined {
@@ -298,5 +356,13 @@ export function translateOpenAiToResponses(body: ChatBody, options: OpenAiToResp
     ...(textFormat === undefined ? {} : { text: textFormat }),
   }
 
-  return { request, shortNames }
+  const metrics: ResponsesRequestMetrics = {
+    ...(promptCacheKey === undefined ? {} : { promptCacheKey }),
+    prefixFingerprint: buildPrefixFingerprint(input),
+    inputItemCount: input.length,
+    toolCount: tools?.length ?? 0,
+    toolSchemaBytes: tools === undefined ? 0 : Buffer.byteLength(JSON.stringify(tools)),
+  }
+
+  return { request, shortNames, metrics }
 }

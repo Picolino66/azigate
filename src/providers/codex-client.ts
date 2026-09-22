@@ -6,6 +6,10 @@ import type { TokenManager } from './oauth/token-store.js'
 
 const PROVIDER = 'codex'
 const CODEX_ORIGINATOR = 'codex_cli_rs'
+// Piso de espera para `429` sem `Retry-After`. O exponencial começa em 100 ms, curto
+// demais para exaustão de cota: reenviar o histórico inteiro nesse intervalo só
+// realimenta o limite (TOK-008).
+const RATE_LIMIT_MIN_DELAY_MS = 1000
 
 export interface CodexClientConfig {
   baseUrl: string
@@ -24,6 +28,7 @@ export interface CodexRequestInput {
 
 export interface CodexExchange {
   response: Response
+  retryCount: number
   didTimeout(): boolean
   dispose(): void
 }
@@ -83,15 +88,17 @@ export class CodexClient {
         })
 
         if (!RETRYABLE_STATUSES.has(response.status) || attempt >= this.config.maxRetries) {
-          return { response, didTimeout: () => timedOut, dispose }
+          return { response, retryCount: attempt, didTimeout: () => timedOut, dispose }
         }
 
         const retryAfter = parseRetryAfter(response.headers.get('retry-after'))
         if (retryAfter !== undefined && retryAfter > this.config.retryMaxDelayMs) {
-          return { response, didTimeout: () => timedOut, dispose }
+          return { response, retryCount: attempt, didTimeout: () => timedOut, dispose }
         }
         const exponential = Math.min(this.config.retryMaxDelayMs, 100 * 2 ** attempt)
-        const delay = retryAfter ?? Math.round(exponential * (0.5 + Math.random() * 0.5))
+        const jittered = Math.round(exponential * (0.5 + Math.random() * 0.5))
+        const floor = response.status === 429 ? Math.min(this.config.retryMaxDelayMs, RATE_LIMIT_MIN_DELAY_MS) : 0
+        const delay = retryAfter ?? Math.max(floor, jittered)
         await response.body?.cancel()
         await wait(delay, controller.signal)
         attempt += 1

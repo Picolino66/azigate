@@ -3,6 +3,9 @@ export class GatewayError extends Error {
     public readonly statusCode: number,
     public readonly code: string,
     public readonly publicMessage: string,
+    // Segundos já normalizados para o cabeçalho `retry-after`. Nunca o valor bruto do
+    // fornecedor: só dígitos, sem chance de injeção de cabeçalho.
+    public readonly retryAfterSeconds?: string,
   ) {
     super(publicMessage)
     this.name = new.target.name

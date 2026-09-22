@@ -52,7 +52,16 @@ Token OAuth da assinatura salvo em `CODEX_TOKEN_FILE` (obtido uma vez com
   `mcp__` e o último segmento, com mapa reverso aplicado na resposta para devolver
   ao cliente o nome original (`buildShortNameMap`).
 - Cada requisição leva `prompt_cache_key` derivada da âncora da conversa, para
-  estabilizar o roteamento do cache de prefixo entre turnos (ADR-020).
+  estabilizar o roteamento do cache de prefixo entre turnos (ADR-020). A âncora é o
+  primeiro `call_id` do histórico; antes da primeira tool call, cai para o primeiro
+  texto de usuário não vazio. O tipo da âncora entra no digest, então um `call_id` e
+  um texto idênticos nunca geram a mesma chave.
+- Quando o fornecedor responde com `retry-after`, o valor é normalizado para segundos
+  inteiros pelo gateway e devolvido ao cliente no cabeçalho `retry-after`. Valor
+  inválido é descartado, nunca repassado como veio.
+- O retry interno respeita o `retry-after` do fornecedor; em `429` sem esse cabeçalho,
+  a espera tem piso de 1s (limitado por `RETRY_MAX_DELAY_MS`) em vez do exponencial
+  curto usado nos demais status retryable.
 - A negociação com o fornecedor é sempre SSE (`stream: true` no corpo e
   `Accept: text/event-stream`), independentemente do `stream` pedido pelo cliente;
   o `stream` do cliente decide apenas se o gateway repassa chunks incrementais ou
@@ -64,7 +73,12 @@ Token OAuth da assinatura salvo em `CODEX_TOKEN_FILE` (obtido uma vez com
   `codex_timeout`, `codex_connection_error`); erro depois do início do stream vira
   evento `error` sanitizado, sem `[DONE]`.
 - Retentativas seguem a mesma política do upstream: só antes do início da
-  resposta, limitadas a `429`/`502`/`503`/`504`.
+  resposta, limitadas a `429`/`502`/`503`/`504`. O número de tentativas repetidas é
+  registrado na telemetria como `retryCount`.
+- A telemetria registra a forma do prompt — `promptCacheKey`, `prefixFingerprint`,
+  `requestBodyBytes`, `inputItemCount`, `toolCount` e `toolSchemaBytes` — mesmo quando
+  a requisição falha antes de o fornecedor reportar `usage`. Ver
+  [logs de requisição](../observability/logs.md).
 
 ## Fluxo resumido
 

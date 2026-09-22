@@ -98,7 +98,7 @@ API (ADR-019).
 | 415 | `unsupported_media_type` | Content-Type incompatível |
 | 429 | `rate_limit_exceeded` | limite HTTP local |
 | 502 | `upstream_connection_error`, `upstream_protocol_error` | upstream inválido/inacessível |
-| 502 | `codex_upstream_error`, `anthropic_upstream_error` | erro retornado pelo provedor Codex/Claude |
+| status do provedor | `codex_upstream_error`, `anthropic_upstream_error` | erro retornado pelo provedor Codex/Claude; o status recebido é preservado quando está entre 400 e 599, senão vira 502 |
 | 502 | `codex_connection_error`, `anthropic_connection_error` | falha de conexão com o provedor |
 | 502 | `oauth_token_exchange_failed`, `oauth_refresh_failed` | falha no fluxo OAuth do provedor |
 | 503 | `cli_unavailable` | alias desabilitado ou sem token OAuth salvo |
@@ -106,3 +106,11 @@ API (ADR-019).
 | 503 | `oauth_not_logged_in` | token OAuth ausente para o provedor solicitado |
 | 504 | `upstream_timeout`, `codex_timeout`, `anthropic_timeout` | timeout do provider |
 | 500 | `internal_error` | falha inesperada sanitizada |
+
+### Cabeçalho `retry-after`
+
+Quando o provedor Codex/Claude responde com `retry-after`, o gateway normaliza o valor
+para segundos inteiros e o devolve no mesmo cabeçalho junto do erro sanitizado. Valor
+ausente ou inválido é descartado — o gateway nunca repassa o texto recebido como veio.
+O `429` local (`rate_limit_exceeded`) continua usando o `retry-after` calculado pelo
+próprio limitador.

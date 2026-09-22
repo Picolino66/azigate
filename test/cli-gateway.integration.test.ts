@@ -427,9 +427,12 @@ describe('gateway multiprovedor CLI (adaptadores HTTP nativos)', () => {
     expect(turno2?.prompt_cache_key).toBe(turno1?.prompt_cache_key)
     expect(codex.requests.map((entry) => entry.body).join('')).not.toContain('azigate-undefined')
 
-    expect(logs).not.toContain('prompt_cache_key')
-    expect(logs).not.toContain(turno1?.prompt_cache_key as string)
+    // ADR-020 (adendo): o digest passa a ser registrado como `promptCacheKey` para
+    // permitir correlacionar turnos da mesma conversa. O que continua proibido é o
+    // conteúdo que originou o digest.
+    expect(logs).toContain(`"promptCacheKey":"${turno1?.prompt_cache_key as string}"`)
     expect(logs).not.toContain('PROMPT_ULTRASSECRETO')
+    expect(logs).toMatch(/"prefixFingerprint":"[0-9a-f]{16}"/u)
   })
 
   it('sempre pede SSE aos provedores CLI, mesmo quando o cliente não quer stream (regressão: 400 do backend Codex)', async () => {
@@ -508,6 +511,180 @@ describe('gateway multiprovedor CLI (adaptadores HTTP nativos)', () => {
     expect(logs).toContain('"cacheHitPercent":75')
     expect(logs).not.toContain('PROMPT_ULTRASSECRETO')
     expect(logs).not.toContain('resposta pública')
+  })
+
+  describe('telemetria de cache do Codex (TOK-002/004/006/008)', () => {
+    type LoggerDeTeste = NonNullable<AppDependencies['logger']>
+
+    function capturaLogs(): { logger: LoggerDeTeste; linha: () => Record<string, unknown> } {
+      let logs = ''
+      const logger = pino({ level: 'info', base: null }, new Writable({
+        write(chunk: Buffer, _encoding, callback) {
+          logs += chunk.toString()
+          callback()
+        },
+      }))
+      const linha = (): Record<string, unknown> => {
+        const bruto = logs
+          .split('\n')
+          .filter((entrada) => entrada.includes('/v1/chat/completions'))
+          .pop()
+        return JSON.parse(bruto ?? '{}') as Record<string, unknown>
+      }
+      return { logger, linha }
+    }
+
+    async function chamaCodex(
+      logger: LoggerDeTeste,
+      usage: Record<string, unknown> | undefined,
+      payload: Record<string, unknown> = {},
+    ): Promise<void> {
+      codex.setHandler((_request, response) => sseResponse(response, 200, sse([
+        { type: 'response.created', response: { id: 'resp_1', model: 'gpt-5.4', created_at: 1 } },
+        { type: 'response.output_text.delta', delta: 'ok' },
+        { type: 'response.completed', response: usage === undefined ? {} : { usage } },
+      ])))
+      const app = appFor({}, { logger })
+      const resposta = await app.inject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        headers: CHAT_HEADERS,
+        payload: { model: 'codex-cli-sol', messages: [{ role: 'user', content: 'tarefa' }], ...payload },
+      })
+      expect(resposta.statusCode).toBe(200)
+    }
+
+    it('freshInputTokens é o input inteiro quando não há cache', async () => {
+      const { logger, linha } = capturaLogs()
+      await chamaCodex(logger, { input_tokens: 100, output_tokens: 10, total_tokens: 110, input_tokens_details: { cached_tokens: 0 } })
+      expect(linha()).toMatchObject({ inputTokens: 100, cachedInputTokens: 0, freshInputTokens: 100, cacheHitPercent: 0 })
+    })
+
+    it('freshInputTokens desconta a parcela cacheada em cache parcial', async () => {
+      const { logger, linha } = capturaLogs()
+      await chamaCodex(logger, { input_tokens: 120, output_tokens: 30, total_tokens: 150, input_tokens_details: { cached_tokens: 90 } })
+      expect(linha()).toMatchObject({ inputTokens: 120, cachedInputTokens: 90, freshInputTokens: 30, cacheHitPercent: 75 })
+    })
+
+    it('freshInputTokens é zero quando o cache cobre todo o input', async () => {
+      const { logger, linha } = capturaLogs()
+      await chamaCodex(logger, { input_tokens: 80, output_tokens: 5, total_tokens: 85, input_tokens_details: { cached_tokens: 80 } })
+      expect(linha()).toMatchObject({ inputTokens: 80, cachedInputTokens: 80, freshInputTokens: 0, cacheHitPercent: 100 })
+    })
+
+    it('freshInputTokens usa o input total quando o provedor não informa cached_tokens', async () => {
+      const { logger, linha } = capturaLogs()
+      await chamaCodex(logger, { input_tokens: 42, output_tokens: 7, total_tokens: 49 })
+      const registrada = linha()
+      expect(registrada).toMatchObject({ inputTokens: 42, freshInputTokens: 42 })
+      expect(registrada.cachedInputTokens).toBeUndefined()
+      expect(registrada.cacheHitPercent).toBeUndefined()
+    })
+
+    it('nunca produz freshInputTokens negativo se o provedor reportar cache maior que o input', async () => {
+      const { logger, linha } = capturaLogs()
+      await chamaCodex(logger, { input_tokens: 10, output_tokens: 1, total_tokens: 11, input_tokens_details: { cached_tokens: 50 } })
+      expect(linha()).toMatchObject({ freshInputTokens: 0 })
+    })
+
+    it('registra a forma do prompt junto do usage', async () => {
+      const { logger, linha } = capturaLogs()
+      await chamaCodex(logger, { input_tokens: 10, output_tokens: 1, total_tokens: 11 }, {
+        tools: [{ type: 'function', function: { name: 'read_file', parameters: { type: 'object' } } }],
+      })
+      const registrada = linha()
+      expect(registrada.usageObserved).toBe(true)
+      expect(registrada.inputItemCount).toBe(1)
+      expect(registrada.toolCount).toBe(1)
+      expect(registrada.toolSchemaBytes as number).toBeGreaterThan(0)
+      expect(registrada.requestBodyBytes as number).toBeGreaterThan(0)
+      expect(registrada.retryCount).toBe(0)
+      expect(registrada.promptCacheKey).toMatch(/^azigate-[0-9a-f]{32}$/u)
+      expect(registrada.prefixFingerprint).toMatch(/^[0-9a-f]{16}$/u)
+    })
+
+    it('registra a forma do prompt mesmo sem usage, sem inventar tokens (TOK-006)', async () => {
+      const { logger, linha } = capturaLogs()
+      codex.setHandler((_request, response) => {
+        response.writeHead(429, { 'content-type': 'application/json', 'retry-after': '30' })
+        response.end(JSON.stringify({ error: 'rate_limited' }))
+      })
+      const app = appFor({}, { logger })
+      const resposta = await app.inject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        headers: CHAT_HEADERS,
+        payload: { model: 'codex-cli-sol', messages: [{ role: 'user', content: 'tarefa' }] },
+      })
+      expect(resposta.statusCode).toBe(429)
+
+      const registrada = linha()
+      expect(registrada.usageObserved).toBe(false)
+      expect(registrada.inputTokens).toBeUndefined()
+      expect(registrada.outputTokens).toBeUndefined()
+      expect(registrada.freshInputTokens).toBeUndefined()
+      expect(registrada.requestBodyBytes as number).toBeGreaterThan(0)
+      expect(registrada.inputItemCount).toBe(1)
+      expect(registrada.toolCount).toBe(0)
+      expect(registrada.retryCount).toBe(0)
+      expect(registrada.promptCacheKey).toMatch(/^azigate-[0-9a-f]{32}$/u)
+      expect(registrada.prefixFingerprint).toMatch(/^[0-9a-f]{16}$/u)
+    })
+
+    it('propaga Retry-After do Codex para o cliente em 429 (TOK-008)', async () => {
+      codex.setHandler((_request, response) => {
+        response.writeHead(429, { 'content-type': 'application/json', 'retry-after': '42' })
+        response.end(JSON.stringify({ error: 'rate_limited' }))
+      })
+      const app = appFor()
+      const resposta = await app.inject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        headers: CHAT_HEADERS,
+        payload: { model: 'codex-cli-sol', messages: [{ role: 'user', content: 'tarefa' }] },
+      })
+
+      expect(resposta.statusCode).toBe(429)
+      expect(resposta.headers['retry-after']).toBe('42')
+      expect(resposta.json()).toMatchObject({ error: { code: 'codex_upstream_error' } })
+    })
+
+    it('normaliza Retry-After em data HTTP para segundos inteiros', async () => {
+      codex.setHandler((_request, response) => {
+        response.writeHead(429, {
+          'content-type': 'application/json',
+          'retry-after': new Date(Date.now() + 10_000).toUTCString(),
+        })
+        response.end(JSON.stringify({ error: 'rate_limited' }))
+      })
+      const app = appFor()
+      const resposta = await app.inject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        headers: CHAT_HEADERS,
+        payload: { model: 'codex-cli-sol', messages: [{ role: 'user', content: 'tarefa' }] },
+      })
+
+      expect(resposta.statusCode).toBe(429)
+      expect(resposta.headers['retry-after']).toMatch(/^\d+$/u)
+    })
+
+    it('descarta Retry-After inválido em vez de repassar valor do fornecedor', async () => {
+      codex.setHandler((_request, response) => {
+        response.writeHead(503, { 'content-type': 'application/json', 'retry-after': 'não-é-um-número' })
+        response.end(JSON.stringify({ error: 'unavailable' }))
+      })
+      const app = appFor()
+      const resposta = await app.inject({
+        method: 'POST',
+        url: '/v1/chat/completions',
+        headers: CHAT_HEADERS,
+        payload: { model: 'codex-cli-sol', messages: [{ role: 'user', content: 'tarefa' }] },
+      })
+
+      expect(resposta.statusCode).toBe(503)
+      expect(resposta.headers['retry-after']).toBeUndefined()
+    })
   })
 
   it('registra usage do Claude também em streaming', async () => {

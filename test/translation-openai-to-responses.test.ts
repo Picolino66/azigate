@@ -275,40 +275,144 @@ describe('openai-to-responses', () => {
 
   describe('prompt_cache_key', () => {
     const tools = [{ type: 'function', function: { name: 'read_file', parameters: {} } }]
+    const conversaComCall = (callId: string, extras: unknown[] = []): unknown[] => [
+      { role: 'system', content: 'você é um agente' },
+      { role: 'user', content: 'refatore o módulo de auth' },
+      {
+        role: 'assistant',
+        content: null,
+        tool_calls: [{ id: callId, type: 'function', function: { name: 'read_file', arguments: '{}' } }],
+      },
+      { role: 'tool', tool_call_id: callId, content: 'conteúdo do arquivo' },
+      ...extras,
+    ]
 
-    it('permanece estável enquanto a conversa cresce', () => {
-      const turno1 = translateOpenAiToResponses(
-        body({
-          messages: [
-            { role: 'system', content: 'você é um agente' },
-            { role: 'user', content: 'refatore o módulo de auth' },
-          ],
-          tools,
-        }),
+    it('permanece estável enquanto a conversa cresce depois da primeira tool call', () => {
+      const turno2 = translateOpenAiToResponses(
+        body({ messages: conversaComCall('call_abc'), tools }),
         { model: 'gpt-5.4' },
       ).request.prompt_cache_key
 
-      const turno5 = translateOpenAiToResponses(
+      const turno7 = translateOpenAiToResponses(
         body({
-          messages: [
-            { role: 'system', content: 'você é um agente' },
-            { role: 'user', content: 'refatore o módulo de auth' },
+          messages: conversaComCall('call_abc', [
+            { role: 'assistant', content: 'entendi' },
+            { role: 'user', content: 'siga em frente' },
             {
               role: 'assistant',
               content: null,
-              tool_calls: [{ id: 'call_1', type: 'function', function: { name: 'read_file', arguments: '{}' } }],
+              tool_calls: [{ id: 'call_xyz', type: 'function', function: { name: 'read_file', arguments: '{}' } }],
             },
-            { role: 'tool', tool_call_id: 'call_1', content: 'conteúdo do arquivo' },
-            { role: 'assistant', content: 'entendi' },
-            { role: 'user', content: 'siga em frente' },
+            { role: 'tool', tool_call_id: 'call_xyz', content: 'outro arquivo' },
+          ]),
+          tools,
+        }),
+        { model: 'gpt-5.4' },
+      ).request.prompt_cache_key
+
+      expect(turno2).toBeDefined()
+      expect(turno7).toBe(turno2)
+    })
+
+    it('separa conversas concorrentes que começam com o mesmo texto (ADR-020, adendo)', () => {
+      const conversaA = translateOpenAiToResponses(
+        body({ messages: conversaComCall('call_sessao_a'), tools }),
+        { model: 'gpt-5.4' },
+      ).request.prompt_cache_key
+      const conversaB = translateOpenAiToResponses(
+        body({ messages: conversaComCall('call_sessao_b'), tools }),
+        { model: 'gpt-5.4' },
+      ).request.prompt_cache_key
+
+      expect(conversaA).toBeDefined()
+      expect(conversaB).not.toBe(conversaA)
+    })
+
+    it('usa o primeiro call_id do histórico, não o mais recente', () => {
+      const semSegundaCall = translateOpenAiToResponses(
+        body({ messages: conversaComCall('call_1'), tools }),
+        { model: 'gpt-5.4' },
+      ).request.prompt_cache_key
+      const comSegundaCall = translateOpenAiToResponses(
+        body({
+          messages: conversaComCall('call_1', [
+            {
+              role: 'assistant',
+              content: null,
+              tool_calls: [{ id: 'call_2', type: 'function', function: { name: 'read_file', arguments: '{}' } }],
+            },
+          ]),
+          tools,
+        }),
+        { model: 'gpt-5.4' },
+      ).request.prompt_cache_key
+
+      expect(comSegundaCall).toBe(semSegundaCall)
+    })
+
+    it('aceita o call_id vindo só de uma mensagem tool (histórico sem o assistant original)', () => {
+      const viaToolResult = translateOpenAiToResponses(
+        body({
+          messages: [
+            { role: 'user', content: 'tarefa' },
+            { role: 'tool', tool_call_id: 'call_orfao', content: 'resultado' },
+          ],
+          tools,
+        }),
+        { model: 'gpt-5.4' },
+      ).request.prompt_cache_key
+      const semTool = translateOpenAiToResponses(
+        body({ messages: [{ role: 'user', content: 'tarefa' }], tools }),
+        { model: 'gpt-5.4' },
+      ).request.prompt_cache_key
+
+      expect(viaToolResult).toBeDefined()
+      expect(viaToolResult).not.toBe(semTool)
+    })
+
+    it('cai para o primeiro texto de usuário no primeiro turno, antes de existir call_id', () => {
+      const primeiroTurno = translateOpenAiToResponses(
+        body({
+          messages: [
+            { role: 'system', content: 'você é um agente' },
+            { role: 'user', content: 'refatore o módulo de auth' },
+          ],
+          tools,
+        }),
+        { model: 'gpt-5.4' },
+      ).request.prompt_cache_key
+      const mesmoTextoOutraSessao = translateOpenAiToResponses(
+        body({
+          messages: [
+            { role: 'system', content: 'outro system' },
+            { role: 'user', content: 'refatore o módulo de auth' },
           ],
           tools,
         }),
         { model: 'gpt-5.4' },
       ).request.prompt_cache_key
 
-      expect(turno1).toBeDefined()
-      expect(turno5).toBe(turno1)
+      expect(primeiroTurno).toMatch(/^azigate-[0-9a-f]{32}$/u)
+      expect(mesmoTextoOutraSessao).toBe(primeiroTurno)
+    })
+
+    it('não confunde um call_id com um texto de usuário de mesmo valor', () => {
+      const comoTexto = translateOpenAiToResponses(
+        body({ messages: [{ role: 'user', content: 'call_1' }], tools }),
+        { model: 'gpt-5.4' },
+      ).request.prompt_cache_key
+      const comoCallId = translateOpenAiToResponses(
+        body({
+          messages: [
+            { role: 'user', content: 'call_1' },
+            { role: 'tool', tool_call_id: 'call_1', content: 'r' },
+          ],
+          tools,
+        }),
+        { model: 'gpt-5.4' },
+      ).request.prompt_cache_key
+
+      expect(comoCallId).not.toBe(comoTexto)
     })
 
     it('não muda quando apenas o system varia (conteúdo volátil do agente)', () => {
@@ -357,16 +461,40 @@ describe('openai-to-responses', () => {
       expect(outrasFerramentas).not.toBe(base)
     })
 
-    it('é opaca: não carrega conteúdo da conversa', () => {
+    it('mantém as ferramentas no digest mesmo com âncora de call_id', () => {
+      const comLeitura = translateOpenAiToResponses(
+        body({ messages: conversaComCall('call_1'), tools }),
+        { model: 'gpt-5.4' },
+      ).request.prompt_cache_key
+      const comEscrita = translateOpenAiToResponses(
+        body({
+          messages: conversaComCall('call_1'),
+          tools: [...tools, { type: 'function', function: { name: 'write_file', parameters: {} } }],
+        }),
+        { model: 'gpt-5.4' },
+      ).request.prompt_cache_key
+
+      expect(comEscrita).not.toBe(comLeitura)
+    })
+
+    it('é opaca: não carrega conteúdo da conversa nem o call_id em claro', () => {
       const { request } = translateOpenAiToResponses(
-        body({ messages: [{ role: 'user', content: 'PROMPT_ULTRASSECRETO' }], tools }),
+        body({
+          messages: [
+            { role: 'user', content: 'PROMPT_ULTRASSECRETO' },
+            { role: 'tool', tool_call_id: 'call_IDENTIFICADOR_BRUTO', content: 'r' },
+          ],
+          tools,
+        }),
         { model: 'gpt-5.4' },
       )
       expect(request.prompt_cache_key).toMatch(/^azigate-[0-9a-f]{32}$/u)
       expect(request.prompt_cache_key).not.toContain('PROMPT_ULTRASSECRETO')
+      expect(request.prompt_cache_key).not.toContain('call_IDENTIFICADOR_BRUTO')
+      expect(request.prompt_cache_key).not.toContain('IDENTIFICADOR')
     })
 
-    it('é omitida quando não há mensagem de usuário para ancorar', () => {
+    it('é omitida quando não há âncora nenhuma', () => {
       const { request } = translateOpenAiToResponses(
         body({ messages: [{ role: 'system', content: 'apenas system' }], tools }),
         { model: 'gpt-5.4' },
@@ -388,6 +516,80 @@ describe('openai-to-responses', () => {
       ).request.prompt_cache_key
 
       expect(emPartes).toBe(texto)
+    })
+  })
+
+  describe('métricas do prompt (TOK-002)', () => {
+    const tools = [{ type: 'function', function: { name: 'read_file', description: 'lê', parameters: { type: 'object' } } }]
+
+    it('conta itens de input, ferramentas e bytes de schema', () => {
+      const { metrics } = translateOpenAiToResponses(
+        body({
+          messages: [
+            { role: 'system', content: 'agente' },
+            { role: 'user', content: 'tarefa' },
+          ],
+          tools,
+        }),
+        { model: 'gpt-5.4' },
+      )
+      expect(metrics.inputItemCount).toBe(2)
+      expect(metrics.toolCount).toBe(1)
+      expect(metrics.toolSchemaBytes).toBeGreaterThan(0)
+    })
+
+    it('zera contagem de ferramentas quando o cliente não declara nenhuma', () => {
+      const { metrics } = translateOpenAiToResponses(body(), { model: 'gpt-5.4' })
+      expect(metrics.toolCount).toBe(0)
+      expect(metrics.toolSchemaBytes).toBe(0)
+    })
+
+    it('mantém o prefixFingerprint estável quando só o fim da conversa cresce', () => {
+      const prefixo = [
+        { role: 'system', content: 'agente' },
+        { role: 'user', content: 'tarefa' },
+        { role: 'assistant', content: 'primeira resposta' },
+      ]
+      const turnoA = translateOpenAiToResponses(body({ messages: prefixo }), { model: 'gpt-5.4' }).metrics
+      const turnoB = translateOpenAiToResponses(
+        body({ messages: [...prefixo, { role: 'user', content: 'continue' }] }),
+        { model: 'gpt-5.4' },
+      ).metrics
+
+      expect(turnoB.prefixFingerprint).toBe(turnoA.prefixFingerprint)
+      expect(turnoB.inputItemCount).toBe(turnoA.inputItemCount + 1)
+    })
+
+    it('muda o prefixFingerprint quando o cliente reescreve o começo da conversa', () => {
+      const original = translateOpenAiToResponses(
+        body({
+          messages: [
+            { role: 'system', content: 'agente' },
+            { role: 'user', content: 'tarefa original' },
+          ],
+        }),
+        { model: 'gpt-5.4' },
+      ).metrics
+      const compactada = translateOpenAiToResponses(
+        body({
+          messages: [
+            { role: 'system', content: 'agente' },
+            { role: 'user', content: 'resumo da conversa anterior' },
+          ],
+        }),
+        { model: 'gpt-5.4' },
+      ).metrics
+
+      expect(compactada.prefixFingerprint).not.toBe(original.prefixFingerprint)
+    })
+
+    it('é um digest: não revela o conteúdo do prefixo', () => {
+      const { metrics } = translateOpenAiToResponses(
+        body({ messages: [{ role: 'user', content: 'PROMPT_ULTRASSECRETO' }] }),
+        { model: 'gpt-5.4' },
+      )
+      expect(metrics.prefixFingerprint).toMatch(/^[0-9a-f]{16}$/u)
+      expect(metrics.prefixFingerprint).not.toContain('PROMPT')
     })
   })
 })

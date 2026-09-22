@@ -17,8 +17,37 @@ O modelo é o campo público `model`. Para Codex e Claude, o `effort` é obtido 
 
 O evento final pode incluir `requestId`, método, rota, status, duração,
 `stream`, `model`, `effort`, status upstream, usage padrão, detalhes de cache/
-reasoning, `cacheHitPercent` e código de erro sanitizado. A cor ANSI é uma
-apresentação do stdout: não altera a semântica.
+reasoning, `cacheHitPercent`, `freshInputTokens`, as métricas de forma do prompt e
+código de erro sanitizado. A cor ANSI é uma apresentação do stdout: não altera a
+semântica.
+
+### Campos de token
+
+| Campo | Significado |
+|---|---|
+| `inputTokens` | Input lógico total reportado pelo provedor |
+| `cachedInputTokens` | Parcela do input servida pelo cache (subconjunto, não parcela extra) |
+| `freshInputTokens` | `inputTokens - cachedInputTokens`, com piso em zero: o que foi efetivamente reprocessado |
+| `outputTokens` | Saída total |
+| `reasoningOutputTokens` | Reasoning, subconjunto da saída |
+| `totalTokens` | Volume lógico, não porcentagem de cota |
+| `cacheHitPercent` | `cachedInputTokens / inputTokens`, só quando o provedor informa cache |
+| `usageObserved` | `false` quando o provedor não chegou a reportar `usage` (erro, `429`, cancelamento) |
+
+### Métricas de forma do prompt (somente Codex)
+
+| Campo | Significado |
+|---|---|
+| `promptCacheKey` | Digest opaco enviado como `prompt_cache_key`; permite correlacionar turnos da mesma conversa |
+| `prefixFingerprint` | Digest de 16 hex dos três primeiros itens do `input`; muda quando o cliente reescreve o começo da conversa |
+| `requestBodyBytes` | Tamanho em bytes do corpo serializado enviado à Responses API |
+| `inputItemCount` | Quantidade de itens em `input[]` |
+| `toolCount` | Quantidade de ferramentas declaradas |
+| `toolSchemaBytes` | Tamanho em bytes do array `tools` serializado |
+| `retryCount` | Tentativas repetidas antes da resposta considerada |
+
+Todos são contagens ou digests unidirecionais. Nenhum permite reconstruir mensagem,
+prompt, argumento de ferramenta ou schema.
 
 ## Dependências
 
@@ -32,6 +61,18 @@ Fastify, Pino e a camada de tradução (para extrair usage dos chunks OpenAI).
 - Para o upstream, valores reconhecidos são registrados; ausência ou valor desconhecido vira `não_informado`, sem alterar o payload opaco enviado ao upstream.
 - Claude registra `cachedInputTokens` (leitura de cache) quando informado pela
   API; `inputTokens` é o total lógico reportado.
+- `freshInputTokens` é derivado no gateway, não vem do provedor. Quando o provedor
+  não informa `cached_tokens`, o valor é o input inteiro — nunca um número inventado.
+- `usageObserved` é gravado como `false` antes da chamada ao provedor e só vira
+  `true` quando o `usage` chega. Um turno que termina em `429`, timeout ou
+  cancelamento permanece no log com a forma do prompt e **sem** campos de token.
+- As métricas de forma do prompt são registradas antes do envio, então existem mesmo
+  quando a requisição falha. Elas descrevem a estrutura do que foi enviado, nunca o
+  conteúdo.
+- `promptCacheKey` é o mesmo digest enviado ao fornecedor. Registrá-lo é deliberado
+  (adendo do ADR-020): sem ele não há como correlacionar turnos da mesma conversa
+  para diagnosticar queda de cache. O conteúdo que originou o digest continua
+  proibido no log.
 - Codex registra input total, `cachedInputTokens` e `reasoningOutputTokens`;
   cache e reasoning são subconjuntos, não parcelas extras.
 - O `usage` é extraído dos chunks OpenAI à medida que são traduzidos, tanto no

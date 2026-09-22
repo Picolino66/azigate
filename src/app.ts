@@ -165,6 +165,26 @@ export function createApp(config: AppConfig, dependencies: AppDependencies = {})
       ...(request.telemetry.cacheHitPercent === undefined
         ? {}
         : { cacheHitPercent: request.telemetry.cacheHitPercent }),
+      ...(request.telemetry.usageObserved === undefined
+        ? {}
+        : { usageObserved: request.telemetry.usageObserved }),
+      ...(request.telemetry.promptCacheKey === undefined
+        ? {}
+        : { promptCacheKey: request.telemetry.promptCacheKey }),
+      ...(request.telemetry.prefixFingerprint === undefined
+        ? {}
+        : { prefixFingerprint: request.telemetry.prefixFingerprint }),
+      ...(request.telemetry.requestBodyBytes === undefined
+        ? {}
+        : { requestBodyBytes: request.telemetry.requestBodyBytes }),
+      ...(request.telemetry.inputItemCount === undefined
+        ? {}
+        : { inputItemCount: request.telemetry.inputItemCount }),
+      ...(request.telemetry.toolCount === undefined ? {} : { toolCount: request.telemetry.toolCount }),
+      ...(request.telemetry.toolSchemaBytes === undefined
+        ? {}
+        : { toolSchemaBytes: request.telemetry.toolSchemaBytes }),
+      ...(request.telemetry.retryCount === undefined ? {} : { retryCount: request.telemetry.retryCount }),
       ...(request.telemetry.error === undefined ? {} : { error: request.telemetry.error }),
     })
   })
