@@ -27,6 +27,8 @@ export interface RequestTelemetry extends TokenUsage {
   toolCount?: number
   toolSchemaBytes?: number
   retryCount?: number
+  oauthRefreshStatus?: number
+  oauthRefreshError?: string
 }
 
 export interface ChatBody {

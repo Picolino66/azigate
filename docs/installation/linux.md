@@ -165,7 +165,7 @@ CODEX_TOKEN_FILE=secrets/codex-oauth.json
 CLAUDE_TOKEN_FILE=secrets/claude-oauth.json
 # ATENÇÃO: ALLOWED_MODELS filtra TODO o catálogo (upstream + aliases). Se preenchida,
 # inclua também os IDs do upstream que quer manter, senão só os aliases habilitados aparecem.
-ALLOWED_MODELS=deepseek-v4-pro,deepseek-v4-flash,claude-cli-opus-4.8
+ALLOWED_MODELS=deepseek-v4-pro,deepseek-v4-flash,claude-cli-opus-5.5
 ```
 
 O container precisa montar o diretório `secrets/` para ler e renovar o token —
@@ -188,7 +188,7 @@ Um request de chat, escolhendo o effort:
 ```bash
 curl -N -H "Authorization: Bearer SUA_CHAVE_DO_GATEWAY" \
   -H "Content-Type: application/json" \
-  -d '{"model":"claude-cli-opus-4.8","reasoning":{"effort":"high"},"messages":[{"role":"user","content":"diga ola"}]}' \
+  -d '{"model":"claude-cli-opus-5.5","reasoning":{"effort":"high"},"messages":[{"role":"user","content":"diga ola"}]}' \
   http://127.0.0.1:3000/v1/chat/completions
 ```
 
@@ -231,8 +231,11 @@ via Nginx.
 - **Alias retorna 503 `cli_unavailable`:** o provedor está desabilitado ou o login
   OAuth não foi feito (`CODEX_TOKEN_FILE`/`CLAUDE_TOKEN_FILE` ausente). Refaça o
   passo 4.1.
-- **502 `oauth_refresh_failed`:** o refresh token expirou ou foi revogado —
-  refaça o login (passo 4.1).
+- **502 `oauth_refresh_failed`:** consulte `oauthRefreshStatus` e
+  `oauthRefreshError` no log da requisição. `400`/`invalid_grant` indica refresh
+  token expirado, revogado ou já rotacionado: refaça o login (passo 4.1). O
+  gateway relê o arquivo na requisição seguinte, sem restart. Os demais valores
+  estão em [Renovação de token OAuth](../modules/providers/oauth-token-renewal.md).
 - **Alias Codex/Claude retorna 500 logo após o login:** o token pode ter sido
   criado com `sudo` e estar inacessível ao usuário do container. Repare proprietário
   e permissões conforme o passo 4.1 e recrie o gateway.

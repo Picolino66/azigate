@@ -5,8 +5,12 @@ import { tokenFileExists } from './oauth/token-store.js'
 
 export const CLI_ALIASES = CLI_ALIAS_CATALOG
 
+// Prefixos reservados: um alias desconhecido (ex.: removido do catálogo) nunca segue para o upstream.
+const RESERVED_CLI_PREFIXES = ['codex-cli', 'claude-cli'] as const
+
 export type ProviderSelection =
   | { kind: 'deepseek' }
+  | { kind: 'unknown-cli' }
   | { kind: 'cli'; alias: CliAlias; provider: CliProviderName; model: CliModel; enabled: boolean }
 
 export function resolveProvider(model: string, config: AppConfig): ProviderSelection {
@@ -18,6 +22,7 @@ export function resolveProvider(model: string, config: AppConfig): ProviderSelec
     model: alias.model,
     enabled: alias.provider === 'codex' ? config.enableCodexCli : config.enableClaudeCli,
   }
+  if (RESERVED_CLI_PREFIXES.some((prefix) => model.startsWith(prefix))) return { kind: 'unknown-cli' }
   return { kind: 'deepseek' }
 }
 

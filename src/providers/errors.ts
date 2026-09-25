@@ -24,8 +24,20 @@ export class OAuthTokenExchangeError extends GatewayError {
   }
 }
 
+/**
+ * Diagnóstico interno da renovação, só para o log: status HTTP do endpoint de token e
+ * código OAuth já sanitizado por allowlist. Nunca entra na resposta pública.
+ */
+export interface OAuthRefreshDiagnostic {
+  status?: number
+  oauthError: string
+}
+
 export class OAuthRefreshFailedError extends GatewayError {
-  constructor(provider: string) {
+  constructor(
+    provider: string,
+    public readonly diagnostic: OAuthRefreshDiagnostic = { oauthError: 'nao_informado' },
+  ) {
     super(502, 'oauth_refresh_failed', `Falha ao renovar o token OAuth de ${provider}`)
   }
 }

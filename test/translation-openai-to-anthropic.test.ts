@@ -225,6 +225,20 @@ describe('openai-to-anthropic', () => {
     expect(result.tool_choice).toEqual(expected)
   })
 
+  it.each([
+    ['required', { type: 'auto' }],
+    [{ type: 'function', function: { name: 'read_file' } }, { type: 'auto' }],
+    ['auto', { type: 'auto' }],
+    ['none', { type: 'none' }],
+  ] as const)('rebaixa tool_choice forçado %j para auto quando o modelo não o aceita', (input, expected) => {
+    const result = translateOpenAiToAnthropic(body({ tool_choice: input }), {
+      model: 'm',
+      defaultMaxTokens: 100,
+      forcedToolChoice: false,
+    })
+    expect(result.tool_choice).toEqual(expected)
+  })
+
   it('mapeia tool_choice de função nomeada', () => {
     const result = translateOpenAiToAnthropic(
       body({ tool_choice: { type: 'function', function: { name: 'read_file' } } }),

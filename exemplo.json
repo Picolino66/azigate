@@ -146,18 +146,36 @@
 				"maxOutputTokens": 64000
 			},
 			{
-				"id": "claude-cli-fable-5",
-				"name": "Claude Fable 5",
+				"id": "claude-cli-opus-5.5",
+				"name": "Claude Opus 5.5",
 				"url": "http://192.168.2.6:3000/v1/chat/completions",
 				"toolCalling": true,
 				"thinking": true,
-				"supportsReasoningEffort": [
-					"low",
-					"medium",
-					"high",
-					"xhigh",
-					"max"
-				],
+				"supportsReasoningEffort": ["low", "medium", "high", "xhigh", "max"],
+				"vision": false,
+				"streaming": true,
+				"maxInputTokens": 200000,
+				"maxOutputTokens": 64000
+			},
+			{
+				"id": "claude-cli-opus-5",
+				"name": "Claude Opus 5",
+				"url": "http://192.168.2.6:3000/v1/chat/completions",
+				"toolCalling": true,
+				"thinking": true,
+				"supportsReasoningEffort": ["low", "medium", "high", "xhigh", "max"],
+				"vision": false,
+				"streaming": true,
+				"maxInputTokens": 200000,
+				"maxOutputTokens": 64000
+			},
+			{
+				"id": "claude-cli-fable-5.1",
+				"name": "Claude Fable 5.1",
+				"url": "http://192.168.2.6:3000/v1/chat/completions",
+				"toolCalling": true,
+				"thinking": true,
+				"supportsReasoningEffort": ["low", "medium", "high", "xhigh", "max"],
 				"vision": false,
 				"streaming": true,
 				"maxInputTokens": 200000,
@@ -170,66 +188,6 @@
 				"toolCalling": true,
 				"thinking": true,
 				"supportsReasoningEffort": ["low", "medium", "high", "xhigh", "max"],
-				"vision": false,
-				"streaming": true,
-				"maxInputTokens": 200000,
-				"maxOutputTokens": 64000
-			},
-			{
-				"id": "claude-cli-opus-4.8",
-				"name": "Claude Opus 4.8",
-				"url": "http://192.168.2.6:3000/v1/chat/completions",
-				"toolCalling": true,
-				"thinking": true,
-				"supportsReasoningEffort": ["low", "medium", "high", "xhigh", "max"],
-				"vision": false,
-				"streaming": true,
-				"maxInputTokens": 200000,
-				"maxOutputTokens": 64000
-			},
-			{
-				"id": "claude-cli-opus-4.7",
-				"name": "Claude Opus 4.7",
-				"url": "http://192.168.2.6:3000/v1/chat/completions",
-				"toolCalling": true,
-				"thinking": true,
-				"supportsReasoningEffort": ["low", "medium", "high", "xhigh", "max"],
-				"vision": false,
-				"streaming": true,
-				"maxInputTokens": 200000,
-				"maxOutputTokens": 64000
-			},
-			{
-				"id": "claude-cli-opus-4.6",
-				"name": "Claude Opus 4.6",
-				"url": "http://192.168.2.6:3000/v1/chat/completions",
-				"toolCalling": true,
-				"thinking": true,
-				"supportsReasoningEffort": ["low", "medium", "high", "max"],
-				"vision": false,
-				"streaming": true,
-				"maxInputTokens": 200000,
-				"maxOutputTokens": 64000
-			},
-			{
-				"id": "claude-cli-sonnet-4.6",
-				"name": "Claude Sonnet 4.6",
-				"url": "http://192.168.2.6:3000/v1/chat/completions",
-				"toolCalling": true,
-				"thinking": true,
-				"supportsReasoningEffort": ["low", "medium", "high", "max"],
-				"vision": false,
-				"streaming": true,
-				"maxInputTokens": 200000,
-				"maxOutputTokens": 64000
-			},
-			{
-				"id": "claude-cli-sonnet-4.5",
-				"name": "Claude Sonnet 4.5",
-				"url": "http://192.168.2.6:3000/v1/chat/completions",
-				"toolCalling": true,
-				"thinking": true,
-				"supportsReasoningEffort": [],
 				"vision": false,
 				"streaming": true,
 				"maxInputTokens": 200000,
@@ -249,11 +207,11 @@
 			},
 			{
 				"id": "claude-cli",
-				"name": "Claude Sonnet 4.6 (alias legado)",
+				"name": "Claude Opus 5.5 (alias genérico)",
 				"url": "http://192.168.2.6:3000/v1/chat/completions",
 				"toolCalling": true,
 				"thinking": true,
-				"supportsReasoningEffort": ["low", "medium", "high", "max"],
+				"supportsReasoningEffort": ["low", "medium", "high", "xhigh", "max"],
 				"vision": false,
 				"streaming": true,
 				"maxInputTokens": 200000,
@@ -285,26 +243,20 @@
 			"codex-cli-5.4": {
 				"reasoningEffort": "medium"
 			},
-			"claude-cli-fable-5": {
+			"claude-cli-opus-5.5": {
+				"reasoningEffort": "medium"
+			},
+			"claude-cli-opus-5": {
+				"reasoningEffort": "high"
+			},
+			"claude-cli-fable-5.1": {
 				"reasoningEffort": "high"
 			},
 			"claude-cli-sonnet-5": {
 				"reasoningEffort": "high"
 			},
-			"claude-cli-opus-4.8": {
-				"reasoningEffort": "high"
-			},
-			"claude-cli-opus-4.7": {
-				"reasoningEffort": "xhigh"
-			},
-			"claude-cli-opus-4.6": {
-				"reasoningEffort": "high"
-			},
-			"claude-cli-sonnet-4.6": {
-				"reasoningEffort": "high"
-			},
 			"claude-cli": {
-				"reasoningEffort": "high"
+				"reasoningEffort": "medium"
 			}
 		}
 	}

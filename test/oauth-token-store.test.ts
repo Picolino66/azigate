@@ -1,8 +1,9 @@
-import { mkdtemp, rm, stat } from 'node:fs/promises'
+import { chmod, mkdtemp, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { OAuthNotLoggedInError } from '../src/providers/errors.js'
+import { OAuthNotLoggedInError, OAuthRefreshFailedError } from '../src/providers/errors.js'
+import { ClaudeOAuthHttpError } from '../src/providers/oauth/claude-oauth.js'
 import { createTokenManager, readTokenFile, writeTokenFile, type StoredOAuthToken } from '../src/providers/oauth/token-store.js'
 
 let dir: string
@@ -112,6 +113,70 @@ describe('oauth token-store', () => {
         refresh: () => Promise.reject(new Error('token inválido')),
       })
       await expect(manager.getAccessToken()).rejects.toThrow('Falha ao renovar o token OAuth de claude')
+    })
+
+    it('carrega status e código OAuth no diagnóstico da falha de refresh', async () => {
+      const filePath = join(dir, 'token.json')
+      await writeTokenFile(filePath, token({ expiresAt: Date.now() + 1_000 }))
+      const manager = createTokenManager({
+        provider: 'claude',
+        filePath,
+        refresh: () => Promise.reject(new ClaudeOAuthHttpError(400, 'invalid_grant')),
+      })
+      const error: unknown = await manager.getAccessToken().catch((caught: unknown) => caught)
+      expect(error).toBeInstanceOf(OAuthRefreshFailedError)
+      expect((error as OAuthRefreshFailedError).diagnostic).toEqual({ status: 400, oauthError: 'invalid_grant' })
+    })
+
+    it('classifica falha sem resposta HTTP como falha_de_transporte', async () => {
+      const filePath = join(dir, 'token.json')
+      await writeTokenFile(filePath, token({ expiresAt: Date.now() + 1_000 }))
+      const manager = createTokenManager({
+        provider: 'claude',
+        filePath,
+        refresh: () => Promise.reject(new TypeError('fetch failed')),
+      })
+      const error: unknown = await manager.getAccessToken().catch((caught: unknown) => caught)
+      expect((error as OAuthRefreshFailedError).diagnostic).toEqual({ oauthError: 'falha_de_transporte' })
+    })
+
+    it('relê o arquivo depois de uma falha de refresh, aceitando um novo login sem reiniciar', async () => {
+      const filePath = join(dir, 'token.json')
+      await writeTokenFile(filePath, token({ expiresAt: Date.now() + 1_000 }))
+      let refreshCalls = 0
+      const manager = createTokenManager({
+        provider: 'claude',
+        filePath,
+        refresh: () => {
+          refreshCalls += 1
+          return Promise.reject(new ClaudeOAuthHttpError(400, 'invalid_grant'))
+        },
+      })
+      await expect(manager.getAccessToken()).rejects.toBeInstanceOf(OAuthRefreshFailedError)
+
+      await writeTokenFile(filePath, token({ accessToken: 'novo-login', refreshToken: 'refresh-2' }))
+      const result = await manager.getAccessToken()
+      expect(result.accessToken).toBe('novo-login')
+      expect(refreshCalls).toBe(1)
+    })
+
+    it.skipIf(process.getuid?.() === 0)('mantém em memória o token rotacionado quando a gravação falha', async () => {
+      const filePath = join(dir, 'token.json')
+      await writeTokenFile(filePath, token({ expiresAt: Date.now() + 1_000 }))
+      await chmod(filePath, 0o400)
+      let refreshCalls = 0
+      const manager = createTokenManager({
+        provider: 'claude',
+        filePath,
+        refresh: () => {
+          refreshCalls += 1
+          return Promise.resolve(token({ accessToken: 'rotacionado', refreshToken: 'refresh-2' }))
+        },
+      })
+      await expect(manager.getAccessToken()).rejects.toMatchObject({ code: 'EACCES' })
+      const result = await manager.getAccessToken()
+      expect(result.refreshToken).toBe('refresh-2')
+      expect(refreshCalls).toBe(1)
     })
   })
 })

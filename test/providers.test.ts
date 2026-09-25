@@ -33,45 +33,41 @@ describe('providers CLI', () => {
   })
 
   it('reserva e publica os aliases Claude com modelos versionados', () => {
-    expect(resolveProvider('claude-cli-opus-4.8', createTestConfig())).toMatchObject({
+    expect(resolveProvider('claude-cli-opus-5', createTestConfig())).toMatchObject({
       kind: 'cli',
       provider: 'claude',
-      model: 'claude-opus-4-8',
+      model: 'claude-opus-5',
       enabled: false,
     })
     expect(resolveProvider('claude-cli', createTestConfig())).toMatchObject({
       kind: 'cli',
       provider: 'claude',
-      model: 'claude-sonnet-4-6',
+      model: 'claude-opus-5-5',
     })
+    expect(resolveProvider('claude-cli-opus-4.8', createTestConfig())).toEqual({ kind: 'unknown-cli' })
+    expect(resolveProvider('codex-cli-inexistente', createTestConfig())).toEqual({ kind: 'unknown-cli' })
     expect(enabledCliAliases(createTestConfig({ enableClaudeCli: true }))).toEqual([
-      { alias: 'claude-cli-fable-5', provider: 'claude' },
+      { alias: 'claude-cli-opus-5.5', provider: 'claude' },
+      { alias: 'claude-cli-opus-5', provider: 'claude' },
+      { alias: 'claude-cli-fable-5.1', provider: 'claude' },
       { alias: 'claude-cli-sonnet-5', provider: 'claude' },
-      { alias: 'claude-cli-opus-4.8', provider: 'claude' },
-      { alias: 'claude-cli-opus-4.7', provider: 'claude' },
-      { alias: 'claude-cli-opus-4.6', provider: 'claude' },
-      { alias: 'claude-cli-sonnet-4.6', provider: 'claude' },
-      { alias: 'claude-cli-sonnet-4.5', provider: 'claude' },
       { alias: 'claude-cli-haiku-4.5', provider: 'claude' },
       { alias: 'claude-cli', provider: 'claude' },
     ])
   })
 
-  it('mapeia os nove aliases Claude para modelos internos fixos', () => {
+  it('mapeia os seis aliases Claude para modelos internos fixos', () => {
     expect(Object.fromEntries(
       Object.entries(CLI_ALIASES)
         .filter(([, configuration]) => configuration.provider === 'claude')
         .map(([alias, configuration]) => [alias, configuration.model]),
     )).toEqual({
-      'claude-cli-fable-5': 'claude-fable-5',
+      'claude-cli-opus-5.5': 'claude-opus-5-5',
+      'claude-cli-opus-5': 'claude-opus-5',
+      'claude-cli-fable-5.1': 'claude-fable-5-1',
       'claude-cli-sonnet-5': 'claude-sonnet-5',
-      'claude-cli-opus-4.8': 'claude-opus-4-8',
-      'claude-cli-opus-4.7': 'claude-opus-4-7',
-      'claude-cli-opus-4.6': 'claude-opus-4-6',
-      'claude-cli-sonnet-4.6': 'claude-sonnet-4-6',
-      'claude-cli-sonnet-4.5': 'claude-sonnet-4-5',
       'claude-cli-haiku-4.5': 'claude-haiku-4-5',
-      'claude-cli': 'claude-sonnet-4-6',
+      'claude-cli': 'claude-opus-5-5',
     })
   })
 
@@ -87,13 +83,18 @@ describe('providers CLI', () => {
 
   it('catálogo Claude define a matriz de effort esperada', () => {
     expect(CLAUDE_MODEL_CATALOG).toEqual({
-      'claude-fable-5': { efforts: ['low', 'medium', 'high', 'xhigh', 'max'], defaultEffort: 'high' },
+      'claude-opus-5-5': {
+        efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
+        defaultEffort: 'medium',
+        forcedToolChoice: false,
+      },
+      'claude-opus-5': { efforts: ['low', 'medium', 'high', 'xhigh', 'max'], defaultEffort: 'high' },
+      'claude-fable-5-1': {
+        efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
+        defaultEffort: 'high',
+        forcedToolChoice: false,
+      },
       'claude-sonnet-5': { efforts: ['low', 'medium', 'high', 'xhigh', 'max'], defaultEffort: 'high' },
-      'claude-opus-4-8': { efforts: ['low', 'medium', 'high', 'xhigh', 'max'], defaultEffort: 'high' },
-      'claude-opus-4-7': { efforts: ['low', 'medium', 'high', 'xhigh', 'max'], defaultEffort: 'xhigh' },
-      'claude-opus-4-6': { efforts: ['low', 'medium', 'high', 'max'], defaultEffort: 'high' },
-      'claude-sonnet-4-6': { efforts: ['low', 'medium', 'high', 'max'], defaultEffort: 'high' },
-      'claude-sonnet-4-5': { efforts: [] },
       'claude-haiku-4-5': { efforts: [] },
     })
   })

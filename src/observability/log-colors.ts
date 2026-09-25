@@ -11,13 +11,10 @@ export const MODEL_LOG_COLORS: Readonly<Record<string, string>> = {
   'codex-cli-5.5': '\x1b[36m',
   'codex-cli-5.4': '\x1b[95m',
   'claude-cli': '\x1b[38;5;214m',
-  'claude-cli-fable-5': '\x1b[96m',
+  'claude-cli-opus-5.5': '\x1b[92m',
+  'claude-cli-opus-5': '\x1b[38;5;208m',
+  'claude-cli-fable-5.1': '\x1b[96m',
   'claude-cli-sonnet-5': '\x1b[93m',
-  'claude-cli-opus-4.8': '\x1b[92m',
-  'claude-cli-opus-4.7': '\x1b[38;5;208m',
-  'claude-cli-opus-4.6': '\x1b[38;5;129m',
-  'claude-cli-sonnet-4.6': '\x1b[38;5;39m',
-  'claude-cli-sonnet-4.5': '\x1b[38;5;220m',
   'claude-cli-haiku-4.5': '\x1b[38;5;141m',
 }
 

@@ -10,6 +10,7 @@
 > abaixo permanecem como histórico da arquitetura anterior (broker + Bubblewrap),
 > já removida do código.
 
+- [23/09/2026 — renovação OAuth do Claude falhando sem diagnóstico](./2026-09-23-oauth-refresh-claude-sem-diagnostico.md) — **corrigido no gateway; recuperação exige novo login**
 - [23/07/2026 — outputSchema do broker rejeitado pelo structured outputs](./2026-07-23-output-schema-rejeitado-structured-outputs.md) — **resolvido por mudança arquitetural (ADR-016)**
 - [23/07/2026 — bind mount órfão do socket após restart do broker](./2026-07-23-bind-mount-orfao-do-socket.md) — **resolvido por mudança arquitetural (ADR-016, socket removido)**
 - [23/07/2026 — broker interrompe retry do App Server Codex](./2026-07-23-codex-app-server-retry.md) — **resolvido por mudança arquitetural (ADR-016)**

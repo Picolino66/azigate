@@ -103,4 +103,26 @@ describe('claude oauth', () => {
 
     await mock.close()
   })
+
+  it('preserva status e código OAuth sanitizado quando o refresh é recusado, sem a descrição livre', async () => {
+    const mock = new MockUpstream()
+    const base = await mock.start()
+    const endpoints: ClaudeOAuthEndpoints = {
+      authUrl: 'https://claude.ai/oauth/authorize',
+      tokenUrl: new URL('/v1/oauth/token', base).toString(),
+      clientId: 'client-test',
+      redirectUri: 'http://localhost:54545/callback',
+    }
+    mock.setHandler((_request, response) => {
+      jsonResponse(response, 400, { error: 'invalid_grant', error_description: 'DESCRICAO_SENSIVEL refresh-1' })
+    })
+
+    const error: unknown = await refreshClaudeToken('refresh-1', endpoints).catch((caught: unknown) => caught)
+    expect(error).toBeInstanceOf(ClaudeOAuthHttpError)
+    expect(error).toMatchObject({ status: 400, oauthError: 'invalid_grant' })
+    expect(JSON.stringify(error)).not.toContain('DESCRICAO_SENSIVEL')
+    expect((error as Error).message).not.toContain('DESCRICAO_SENSIVEL')
+
+    await mock.close()
+  })
 })

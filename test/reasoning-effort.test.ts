@@ -8,8 +8,9 @@ function body(overrides: Partial<ChatBody> = {}): ChatBody {
 
 describe('resolveCliEffort', () => {
   it('normaliza effort Claude por modelo e aplica os defaults da tabela', () => {
-    expect(resolveCliEffort(body({ reasoning_effort: 'xhigh' }), 'claude', 'claude-sonnet-4-6')).toBe('high')
-    expect(resolveCliEffort(body(), 'claude', 'claude-opus-4-7')).toBe('xhigh')
+    expect(resolveCliEffort(body({ reasoning_effort: 'xhigh' }), 'claude', 'claude-opus-5')).toBe('xhigh')
+    expect(resolveCliEffort(body(), 'claude', 'claude-opus-5-5')).toBe('medium')
+    expect(resolveCliEffort(body(), 'claude', 'claude-fable-5-1')).toBe('high')
     expect(resolveCliEffort(body({ reasoning_effort: 'max' }), 'claude', 'claude-haiku-4-5')).toBeUndefined()
   })
 
@@ -37,13 +38,13 @@ describe('resolveCliEffort', () => {
   })
 
   it.each(['none', '', 42, null])('rejeita reasoning_effort inválido: %j', (effort) => {
-    expect(() => resolveCliEffort(body({ reasoning_effort: effort }), 'claude', 'claude-sonnet-4-6')).toThrow(
+    expect(() => resolveCliEffort(body({ reasoning_effort: effort }), 'claude', 'claude-sonnet-5')).toThrow(
       InvalidReasoningEffortError,
     )
   })
 
   it('usa o effort quando pertence à matriz do modelo, senão cai no default', () => {
-    expect(resolveCliEffort(body({ reasoning_effort: 'xhigh' }), 'claude', 'claude-opus-4-6')).toBe('high')
-    expect(resolveCliEffort(body({ reasoning_effort: 'low' }), 'claude', 'claude-opus-4-6')).toBe('low')
+    expect(resolveCliEffort(body({ reasoning_effort: 'max' }), 'claude', 'claude-opus-5-5')).toBe('max')
+    expect(resolveCliEffort(body({ reasoning_effort: 'low' }), 'claude', 'claude-haiku-4-5')).toBeUndefined()
   })
 })

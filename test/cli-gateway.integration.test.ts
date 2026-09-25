@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { createApp, type AppDependencies } from '../src/app.js'
 import { createTestConfig, type AppConfig } from '../src/config.js'
 import { GatewayMetrics } from '../src/observability/metrics.js'
+import { OAuthRefreshFailedError } from '../src/providers/errors.js'
 import { writeTokenFile } from '../src/providers/oauth/token-store.js'
 import { jsonResponse, MockUpstream, type RecordedRequest } from './mock-upstream.js'
 
@@ -189,7 +190,7 @@ describe('gateway multiprovedor CLI (adaptadores HTTP nativos)', () => {
     expect(claude.requests[0]?.url).toBe('/v1/messages')
     expect(claude.requests[0]?.headers.authorization).toBe('Bearer claude-access-token')
     const [sent] = requestBodies(claude)
-    expect(sent).toMatchObject({ model: 'claude-sonnet-4-6' })
+    expect(sent).toMatchObject({ model: 'claude-opus-5-5', output_config: { effort: 'max' } })
   })
 
   it('completude Codex não-streaming: traduz requisição, chama a Responses API e normaliza max para xhigh', async () => {
@@ -339,12 +340,12 @@ describe('gateway multiprovedor CLI (adaptadores HTTP nativos)', () => {
   it('modelo fora da ALLOWED_MODELS recebe 403 sem chamar o provedor', async () => {
     const response = await appFor({
       enableClaudeCli: true,
-      allowedModels: new Set(['claude-cli-sonnet-4.6']),
+      allowedModels: new Set(['claude-cli-sonnet-5']),
     }).inject({
       method: 'POST',
       url: '/v1/chat/completions',
       headers: CHAT_HEADERS,
-      payload: { model: 'claude-cli-fable-5', messages: [] },
+      payload: { model: 'claude-cli-fable-5.1', messages: [] },
     })
     expect(response.statusCode).toBe(403)
     expect(response.json()).toMatchObject({ error: { code: 'model_not_allowed' } })
@@ -802,5 +803,67 @@ describe('gateway multiprovedor CLI (adaptadores HTTP nativos)', () => {
     })
     expect(response.statusCode).toBe(200)
     expect(metrics.snapshot().active_streams).toBe(0)
+  })
+
+  it('registra status e código da falha de refresh OAuth sem expor segredos na resposta', async () => {
+    let logs = ''
+    const logger = pino({ level: 'info', base: null }, new Writable({
+      write(chunk: Buffer, _encoding, callback) {
+        logs += chunk.toString()
+        callback()
+      },
+    }))
+    const claudeTokenManager = {
+      getAccessToken: () =>
+        Promise.reject(new OAuthRefreshFailedError('claude', { status: 400, oauthError: 'invalid_grant' })),
+    }
+    const response = await appFor({ enableClaudeCli: true }, { logger, claudeTokenManager }).inject({
+      method: 'POST',
+      url: '/v1/chat/completions',
+      headers: CHAT_HEADERS,
+      payload: { model: 'claude-cli', messages: [{ role: 'user', content: 'PROMPT_ULTRASSECRETO' }] },
+    })
+    expect(response.statusCode).toBe(502)
+    expect(response.json()).toMatchObject({ error: { code: 'oauth_refresh_failed' } })
+    expect(response.body).not.toContain('invalid_grant')
+    expect(logs).toContain('"error":"OAuthRefreshFailedError"')
+    expect(logs).toContain('"oauthRefreshStatus":400')
+    expect(logs).toContain('"oauthRefreshError":"invalid_grant"')
+    expect(logs).not.toContain('PROMPT_ULTRASSECRETO')
+  })
+
+  it.each([
+    { model: 'claude-cli', sentModel: 'claude-opus-5-5', expected: { type: 'auto' } },
+    { model: 'claude-cli-fable-5.1', sentModel: 'claude-fable-5-1', expected: { type: 'auto' } },
+    { model: 'claude-cli-opus-5', sentModel: 'claude-opus-5', expected: { type: 'any' } },
+  ])('envia tool_choice aceito por $sentModel quando o cliente pede required', async ({ model, sentModel, expected }) => {
+    claude.setHandler((_request, response) => sseResponse(response, 200, sse(anthropicTextEvents('ok'))))
+    const response = await appFor({ enableClaudeCli: true }).inject({
+      method: 'POST',
+      url: '/v1/chat/completions',
+      headers: CHAT_HEADERS,
+      payload: {
+        model,
+        messages: [{ role: 'user', content: 'oi' }],
+        tools: [{ type: 'function', function: { name: 'read_file', parameters: { type: 'object', properties: {} } } }],
+        tool_choice: 'required',
+      },
+    })
+    expect(response.statusCode).toBe(200)
+    const [sent] = requestBodies(claude)
+    expect(sent).toMatchObject({ model: sentModel, tool_choice: expected })
+  })
+
+  it('recusa alias Claude removido do catálogo sem encaminhar à DeepSeek', async () => {
+    const response = await appFor({ enableClaudeCli: true }).inject({
+      method: 'POST',
+      url: '/v1/chat/completions',
+      headers: CHAT_HEADERS,
+      payload: { model: 'claude-cli-opus-4.8', messages: [{ role: 'user', content: 'oi' }] },
+    })
+    expect(response.statusCode).toBe(400)
+    expect(response.json()).toMatchObject({ error: { code: 'invalid_model' } })
+    expect(deepseek.requests).toHaveLength(0)
+    expect(claude.requests).toHaveLength(0)
   })
 })

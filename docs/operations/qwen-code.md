@@ -108,9 +108,9 @@ Em `~/.qwen/settings.json`, mescle sem remover outras configurações:
           }
         },
         {
-          "id": "claude-cli-opus-4.8",
-          "name": "Claude Opus 4.8 via azigate",
-          "description": "Modelo Claude aprovado no gate real; execução local pelo Qwen",
+          "id": "claude-cli-opus-5.5",
+          "name": "Claude Opus 5.5 via azigate",
+          "description": "Modelo Claude do catálogo atual; execução local pelo Qwen",
           "envKey": "AZIGATE_API_KEY",
           "baseUrl": "https://ia.meudominio.com/v1",
           "generationConfig": {
@@ -129,18 +129,19 @@ upstream padrão (DeepSeek). Se o operador configurou outro upstream (OpenAI,
 OpenRouter, etc.), use os IDs desse provedor — consulte `GET /v1/models` para ver o
 que está publicado. Os aliases `codex-cli-*`/`claude-cli-*` independem do upstream.
 
-Repita a entrada Claude trocando `id` e nome conforme a tabela. Inclua somente modelos aprovados no gate e presentes em `/v1/models`:
+Repita a entrada Claude trocando `id` e nome conforme a tabela. Inclua somente modelos presentes em `/v1/models`, preferindo os aprovados no gate:
 
-| ID Qwen | Modelo | Efforts expostos | Default | Gate 18/07/2026 |
+| ID Qwen | Modelo | Efforts expostos | Default | Gate |
 |---|---|---|---|---|
-| `claude-cli-fable-5` | Fable 5 | low, medium, high, xhigh, max | high | aprovado |
-| `claude-cli-sonnet-5` | Sonnet 5 | low, medium, high, xhigh, max | high | aprovado |
-| `claude-cli-opus-4.8` | Opus 4.8 | low, medium, high, xhigh, max | high | aprovado |
-| `claude-cli-opus-4.7` | Opus 4.7 | low, medium, high, xhigh, max | xhigh | reprovado; não configurar |
-| `claude-cli-opus-4.6` | Opus 4.6 | low, medium, high, max | high | aprovado |
-| `claude-cli-sonnet-4.6` / `claude-cli` | Sonnet 4.6 | low, medium, high, max | high | reprovado; não configurar |
-| `claude-cli-sonnet-4.5` | Sonnet 4.5 | nenhum | omitir | aprovado |
-| `claude-cli-haiku-4.5` | Haiku 4.5 | nenhum | omitir | reprovado; não configurar |
+| `claude-cli-opus-5.5` / `claude-cli` | Opus 5.5 | low, medium, high, xhigh, max | medium | pendente |
+| `claude-cli-opus-5` | Opus 5 | low, medium, high, xhigh, max | high | pendente |
+| `claude-cli-fable-5.1` | Fable 5.1 | low, medium, high, xhigh, max | high | pendente |
+| `claude-cli-sonnet-5` | Sonnet 5 | low, medium, high, xhigh, max | high | aprovado em 18/07/2026 |
+| `claude-cli-haiku-4.5` | Haiku 4.5 | nenhum | omitir | reprovado em 18/07/2026; não configurar |
+
+O catálogo segue o [ADR-021](../../adr/ADR-021-catalogo-claude-geracao-5.md). Os aliases
+removidos (Fable 5, Opus 4.8/4.7/4.6, Sonnet 4.6/4.5) agora recebem `400 invalid_model`:
+atualize `modelProviders` e `ALLOWED_MODELS`.
 
 ## Selecionar o effort
 
@@ -179,7 +180,7 @@ export AZIGATE_API_KEY='CHAVE_DO_GATEWAY'
 qwen
 ```
 
-Dentro do Qwen, use `/model` para selecionar um modelo do upstream, um alias `codex-cli-*` ou um alias Claude aprovado. Effort omitido ou incompatível usa o default da tabela; Sonnet 4.5 e Haiku 4.5 ignoram qualquer effort. Todos usam a mesma `baseUrl` e chave. `codex-cli` continua selecionando GPT-5.4. O alias `claude-cli` representa Sonnet 4.6, mas permanece fora da publicação atual porque seu gate falhou. Mantenha approval interativo e não use YOLO/auto-approval.
+Dentro do Qwen, use `/model` para selecionar um modelo do upstream, um alias `codex-cli-*` ou um alias Claude aprovado. Effort omitido ou incompatível usa o default da tabela; Haiku 4.5 ignora qualquer effort. Todos usam a mesma `baseUrl` e chave. `codex-cli` continua selecionando GPT-5.4. O alias `claude-cli` representa Opus 5.5. Mantenha approval interativo e não use YOLO/auto-approval.
 
 Nos aliases CLI, mantenha `generationConfig.maxRetries: 0`. O gateway só repete a
 chamada ao provedor antes do início da resposta e apenas para status
@@ -197,7 +198,7 @@ export OPENAI_MODEL='codex-cli-luna'
 qwen
 ```
 
-Esse fallback seleciona um modelo por processo. Use um ID do upstream, Codex ou Claude aprovado, por exemplo `OPENAI_MODEL=claude-cli-opus-4.8`. Não é preciso atualizar o Qwen apenas para esta integração.
+Esse fallback seleciona um modelo por processo. Use um ID do upstream, Codex ou Claude aprovado, por exemplo `OPENAI_MODEL=claude-cli-opus-5.5`. Não é preciso atualizar o Qwen apenas para esta integração.
 
 ## Smoke manual em repositório descartável
 

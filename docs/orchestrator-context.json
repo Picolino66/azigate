@@ -1,7 +1,7 @@
 {
   "orchestration_id": "c16a8ea6-06e8-4ec2-bb2c-7ac4cd272dc5",
   "created_at": "2026-07-14T13:35:00Z",
-  "updated_at": "2026-07-30T00:00:00-03:00",
+  "updated_at": "2026-09-23T15:00:00-03:00",
   "mode": "feature-evolution",
   "current_phase": "F7",
   "snapshot_version": "O6",
@@ -149,7 +149,7 @@
       "ssrf": "todos os adaptadores com paths fixos; nenhum aceita URL/path do cliente",
       "execution": "agente cliente único executor; gateway nunca executa ferramentas nem subprocessos"
     },
-    "adrs": ["ADR-001", "ADR-002", "ADR-003", "ADR-004", "ADR-005", "ADR-006", "ADR-007", "ADR-008", "ADR-009", "ADR-010", "ADR-011", "ADR-012", "ADR-013", "ADR-014", "ADR-015", "ADR-016", "ADR-017", "ADR-018"]
+    "adrs": ["ADR-001", "ADR-002", "ADR-003", "ADR-004", "ADR-005", "ADR-006", "ADR-007", "ADR-008", "ADR-009", "ADR-010", "ADR-011", "ADR-012", "ADR-013", "ADR-014", "ADR-015", "ADR-016", "ADR-017", "ADR-018", "ADR-019", "ADR-020", "ADR-021"]
   },
   "contracts": {
     "api_version": "v1",
@@ -264,17 +264,24 @@
       "F7-runbook-wsl2-docker-engine-oficial-e-compose-v2-documentado",
       "F7-runbook-wsl2-nodejs-24-lts-nodesource-documentado",
       "F7-runbook-wsl2-nat-lan-portproxy-firewall-e-recuperacao-bashrc-documentado",
-      "F7-erros-comuns-wsl2-e-permissoes-oauth-documentados"
+      "F7-erros-comuns-wsl2-e-permissoes-oauth-documentados",
+      "F7-oauth-refresh-diagnostico-check-230-testes",
+      "F7-oauth-refresh-diagnostico-cobertura-acima-dos-limiares",
+      "F7-oauth-refresh-diagnostico-links-internos-10-arquivos",
+      "F7-catalogo-claude-geracao-5-check-238-testes",
+      "F7-catalogo-claude-geracao-5-cobertura-acima-dos-limiares",
+      "F7-catalogo-claude-geracao-5-links-internos-18-arquivos"
     ],
     "gates_failed": [
       "F5-claude-opus-4.7-estrutura-19-de-20",
       "F5-claude-sonnet-4.6-estrutura-18-de-20",
-      "F5-claude-haiku-4.5-estrutura-19-de-20-categoria-11-de-20"
+      "F5-claude-haiku-4.5-estrutura-19-de-20-categoria-11-de-20",
+      "F7-oauth-refresh-diagnostico-audit-fast-uri-high-preexistente"
     ],
-    "gates_pending": ["F8-smoke-real-cliente-openai-compatible-codex-claude-tools-streaming-multiturn", "F8-validar-risco-deteccao-cliente-nao-oficial-anthropic-sem-cloaking"],
-    "test_results": { "files": 15, "tests_passed": 184, "tests_failed": 0 },
-    "coverage_report": { "statements": 84.01, "branches": 76.76, "functions": 85.29, "lines": 87.47 },
-    "security_report": "npm audit --omit=dev --audit-level=high: 0 vulnerabilidades (27/07/2026, após bump find-my-way/brace-expansion)"
+    "gates_pending": ["F5-claude-gate-real-opus-5.5-opus-5-fable-5.1-pendente", "F8-smoke-real-cliente-openai-compatible-codex-claude-tools-streaming-multiturn", "F8-validar-risco-deteccao-cliente-nao-oficial-anthropic-sem-cloaking"],
+    "test_results": { "files": 16, "tests_passed": 238, "tests_failed": 0 },
+    "coverage_report": { "statements": 85.88, "branches": 80.14, "functions": 86.11, "lines": 88.91 },
+    "security_report": "npm audit --omit=dev --audit-level=high: FALHA em 23/09/2026 — fast-uri (transitiva) com advisories high GHSA-7p8r-x3mc-p8w7, GHSA-5jgf-p345-68v8, GHSA-f65p-4m7j-42xc e GHSA-fph4-wmhf-6fwf; pré-existente, dependências não alteradas pelo INC-2026-09-23; correção pendente"
   },
   "operations": {
     "deployment_record": "broker e gateway v5 implantados pelo operador em 20/07/2026 às 11:11 BRT; Codex atualizou para 0.144.6 às 11:43 e o novo check de catálogo aguarda instalação antes do próximo restart",
@@ -355,6 +362,14 @@
         "cause": "decisionJsonSchema gerava oneOf na raiz com tools + tool_choice auto; o structured outputs da OpenAI rejeita oneOf/anyOf na raiz e arrays sem items, gerando erro terminal willRetry=false em toda requisição do Qwen",
         "evidence": "reprodução manual do turn/start retornou invalid_json_schema oneOf is not permitted; schema plano aceito pela API real nas três variantes com decisão de tool call válida; 185 testes verdes; errorCode sanitizado adicionado ao JSONL",
         "record": "docs/operations/incidents/2026-07-23-output-schema-rejeitado-structured-outputs.md"
+      },
+      {
+        "id": "INC-2026-09-23-OAUTH-REFRESH-CLAUDE-SEM-DIAGNOSTICO",
+        "severity": "P2",
+        "status": "correcao-no-gateway-validada-recuperacao-exige-novo-login-e-deploy",
+        "cause": "refresh token Claude provavelmente expirado/revogado/rotacionado (arquivo inalterado desde 25/08/2026); o gateway descartava status/código OAuth, mantinha o cache após a falha (novo login exigia restart) e perdia o refresh token rotacionado se a gravação falhasse",
+        "evidence": "oauthRefreshStatus/oauthRefreshError sanitizados por allowlist no log; cache descartado na falha; token em memória antes da gravação; resposta pública inalterada; 230 testes verdes",
+        "record": "docs/operations/incidents/2026-09-23-oauth-refresh-claude-sem-diagnostico.md"
       }
     ]
   },
@@ -543,6 +558,22 @@
         "mode": "coordenadora-principal",
         "phase": "F7",
         "timestamp": "2026-07-23T15:15:00-03:00"
+      },
+      {
+        "skill_name": "autonomous-software-orchestrator",
+        "source": "~/.claude/skills/autonomous-software-orchestrator",
+        "reason": "incident-response para oauth_refresh_failed do claude-cli-opus-4.8 sem diagnóstico no log",
+        "mode": "coordenadora-principal",
+        "phase": "F7",
+        "timestamp": "2026-09-23T15:00:00-03:00"
+      },
+      {
+        "skill_name": "claude-api",
+        "source": "bundled",
+        "reason": "IDs, matriz de effort e restrição de tool_choice forçado de Opus 5.5, Opus 5, Fable 5.1, Sonnet 5 e Haiku 4.5 para o ADR-021",
+        "mode": "referência-oficial",
+        "phase": "F7",
+        "timestamp": "2026-09-23T15:20:00-03:00"
       }
     ]
   }

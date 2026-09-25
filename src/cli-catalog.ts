@@ -23,10 +23,11 @@ export type ClaudeEffortLevel = CliEffortLevel
 interface CliModelConfiguration {
   efforts: readonly CliEffortLevel[]
   defaultEffort?: CliEffortLevel
+  // `false` quando a API rejeita `tool_choice` `any`/`tool` com 400 (ADR-021).
+  forcedToolChoice?: boolean
 }
 
 const ALL_EFFORTS = CLI_EFFORT_LEVELS
-const STANDARD_EFFORTS = ['low', 'medium', 'high', 'max'] as const
 const CODEX_EFFORTS = ['low', 'medium', 'high', 'xhigh'] as const
 
 export const CODEX_MODEL_CATALOG: Readonly<Record<CodexCliModel, CliModelConfiguration>> = {
@@ -38,15 +39,12 @@ export const CODEX_MODEL_CATALOG: Readonly<Record<CodexCliModel, CliModelConfigu
 }
 
 const CLAUDE_MODELS = {
-  'claude-fable-5': { efforts: ALL_EFFORTS, defaultEffort: 'high' },
+  'claude-opus-5-5': { efforts: ALL_EFFORTS, defaultEffort: 'medium', forcedToolChoice: false },
+  'claude-opus-5': { efforts: ALL_EFFORTS, defaultEffort: 'high' },
+  'claude-fable-5-1': { efforts: ALL_EFFORTS, defaultEffort: 'high', forcedToolChoice: false },
   'claude-sonnet-5': { efforts: ALL_EFFORTS, defaultEffort: 'high' },
-  'claude-opus-4-8': { efforts: ALL_EFFORTS, defaultEffort: 'high' },
-  'claude-opus-4-7': { efforts: ALL_EFFORTS, defaultEffort: 'xhigh' },
-  'claude-opus-4-6': { efforts: STANDARD_EFFORTS, defaultEffort: 'high' },
-  'claude-sonnet-4-6': { efforts: STANDARD_EFFORTS, defaultEffort: 'high' },
-  'claude-sonnet-4-5': { efforts: [] },
   'claude-haiku-4-5': { efforts: [] },
-} as const
+} as const satisfies Record<string, CliModelConfiguration>
 
 export type ClaudeCliModel = keyof typeof CLAUDE_MODELS
 export const CLAUDE_MODEL_CATALOG: Readonly<Record<ClaudeCliModel, CliModelConfiguration>> = CLAUDE_MODELS
@@ -60,15 +58,12 @@ export const CLI_ALIAS_CATALOG = {
   'codex-cli-5.5': { provider: 'codex', model: 'gpt-5.5' },
   'codex-cli-5.4': { provider: 'codex', model: 'gpt-5.4' },
   'codex-cli': { provider: 'codex', model: 'gpt-5.4' },
-  'claude-cli-fable-5': { provider: 'claude', model: 'claude-fable-5' },
+  'claude-cli-opus-5.5': { provider: 'claude', model: 'claude-opus-5-5' },
+  'claude-cli-opus-5': { provider: 'claude', model: 'claude-opus-5' },
+  'claude-cli-fable-5.1': { provider: 'claude', model: 'claude-fable-5-1' },
   'claude-cli-sonnet-5': { provider: 'claude', model: 'claude-sonnet-5' },
-  'claude-cli-opus-4.8': { provider: 'claude', model: 'claude-opus-4-8' },
-  'claude-cli-opus-4.7': { provider: 'claude', model: 'claude-opus-4-7' },
-  'claude-cli-opus-4.6': { provider: 'claude', model: 'claude-opus-4-6' },
-  'claude-cli-sonnet-4.6': { provider: 'claude', model: 'claude-sonnet-4-6' },
-  'claude-cli-sonnet-4.5': { provider: 'claude', model: 'claude-sonnet-4-5' },
   'claude-cli-haiku-4.5': { provider: 'claude', model: 'claude-haiku-4-5' },
-  'claude-cli': { provider: 'claude', model: 'claude-sonnet-4-6' },
+  'claude-cli': { provider: 'claude', model: 'claude-opus-5-5' },
 } as const satisfies Record<string, { provider: CliProviderName; model: CliModel }>
 
 export type CliAlias = keyof typeof CLI_ALIAS_CATALOG
@@ -83,4 +78,9 @@ export function isClaudeCliModel(value: unknown): value is ClaudeCliModel {
 
 export function isCliEffortLevel(value: unknown): value is CliEffortLevel {
   return typeof value === 'string' && CLI_EFFORT_LEVELS.includes(value as CliEffortLevel)
+}
+
+export function claudeAcceptsForcedToolChoice(model: ClaudeCliModel): boolean {
+  const configuration: CliModelConfiguration = CLAUDE_MODEL_CATALOG[model]
+  return configuration.forcedToolChoice !== false
 }

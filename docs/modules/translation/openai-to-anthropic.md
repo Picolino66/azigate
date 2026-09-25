@@ -39,7 +39,7 @@ Nenhuma (função pura).
 | `role:"tool"` + `tool_call_id` | mensagem `user` com bloco `tool_result` |
 | `stop` (string ou array) | `stop_sequences` (sempre array) |
 | `tools[].function` | `tools[]` como `{name,description,input_schema}` |
-| `tool_choice` | `auto`→`{type:auto}`, `required`→`{type:any}`, `none`→`{type:none}`, função nomeada→`{type:tool,name}` |
+| `tool_choice` | `auto`→`{type:auto}`, `required`→`{type:any}`, `none`→`{type:none}`, função nomeada→`{type:tool,name}`; com `forcedToolChoice: false` (Opus 5.5, Fable 5.1), `any`/`tool` viram `{type:auto}` ([ADR-021](../../../adr/ADR-021-catalogo-claude-geracao-5.md)) |
 | `effort` | `thinking:{type:adaptive}` + `output_config.effort`, ou `{type:enabled,budget_tokens}` quando uma tabela de budget é fornecida |
 
 Regras adicionais:

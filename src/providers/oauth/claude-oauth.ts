@@ -1,4 +1,5 @@
 import { fetch } from 'undici'
+import { OAuthHttpError, readOAuthErrorCode } from './oauth-http-error.js'
 import type { PkceCodes } from './pkce.js'
 import type { StoredOAuthToken } from './token-store.js'
 
@@ -65,10 +66,9 @@ function isTokenResponse(value: unknown): value is ClaudeTokenResponse {
   )
 }
 
-export class ClaudeOAuthHttpError extends Error {
-  constructor(public readonly status: number) {
-    super(`Troca/renovação de token Claude falhou com status ${status}`)
-    this.name = 'ClaudeOAuthHttpError'
+export class ClaudeOAuthHttpError extends OAuthHttpError {
+  constructor(status: number, oauthError?: string) {
+    super(`Troca/renovação de token Claude falhou com status ${status}`, status, oauthError)
   }
 }
 
@@ -82,9 +82,11 @@ async function requestClaudeToken(tokenUrl: string, payload: Record<string, unkn
     },
     body: JSON.stringify(payload),
   })
-  if (response.status < 200 || response.status >= 300) throw new ClaudeOAuthHttpError(response.status)
+  if (response.status < 200 || response.status >= 300) {
+    throw new ClaudeOAuthHttpError(response.status, await readOAuthErrorCode(response))
+  }
   const parsed: unknown = await response.json()
-  if (!isTokenResponse(parsed)) throw new ClaudeOAuthHttpError(response.status)
+  if (!isTokenResponse(parsed)) throw new ClaudeOAuthHttpError(response.status, 'resposta_invalida')
   const email = parsed.account?.email_address
   return {
     accessToken: parsed.access_token,

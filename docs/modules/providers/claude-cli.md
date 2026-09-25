@@ -4,8 +4,9 @@
 
 Aliases Claude que falam diretamente com a **Messages API** da Anthropic
 (`https://api.anthropic.com/v1/messages`), autenticados pela assinatura do
-operador via OAuth — não por API key. Oito modelos versionados mais o sinônimo
-legado `claude-cli`.
+operador via OAuth — não por API key. Cinco modelos versionados (Opus 5.5, Opus 5,
+Fable 5.1, Sonnet 5 e Haiku 4.5) mais o sinônimo `claude-cli` (Opus 5.5), conforme o
+[ADR-021](../../../adr/ADR-021-catalogo-claude-geracao-5.md).
 
 ## Localização no código
 
@@ -36,9 +37,12 @@ Token OAuth da assinatura salvo em `CLAUDE_TOKEN_FILE` (obtido uma vez com
 - `max_tokens` é obrigatório na Messages API; o gateway aplica um default fixo
   quando o cliente não o envia.
 - Cada alias mapeia para um único `model` completo enviado à API;
-  `claude-cli` equivale a Sonnet 4.6.
-- Omissão ou effort incompatível aplica o padrão do catálogo. Sonnet 4.5 e
-  Haiku 4.5 nunca recebem `thinking`. Quando `thinking` está ativo, `temperature`
+  `claude-cli` equivale a Opus 5.5. Alias `claude-cli-*` fora do catálogo recebe
+  `400 invalid_model`, sem fallback para o upstream.
+- Omissão ou effort incompatível aplica o padrão do catálogo: `medium` no Opus 5.5
+  e `high` no Opus 5, Fable 5.1 e Sonnet 5. Haiku 4.5 nunca recebe `thinking`.
+- Opus 5.5 e Fable 5.1 recusam `tool_choice` forçado: `required` e função nomeada
+  são enviados como `{type:auto}`, e `auto`/`none` passam inalterados. Quando `thinking` está ativo, `temperature`
   e `top_p` são omitidos (a API rejeita a combinação em alguns modelos).
 - O formato plano (`reasoning_effort`) tem precedência sobre o aninhado
   (`reasoning.effort`); `reasoning: false` usa o default do modelo.
@@ -75,7 +79,9 @@ acumulado.
 ## Possíveis erros
 
 `invalid_reasoning_effort`, `cli_unavailable`, `oauth_not_logged_in`,
-`oauth_refresh_failed`, `anthropic_upstream_error`, `anthropic_timeout` e
-`anthropic_connection_error`. Bloqueio de detecção de cliente não-oficial pela
+`invalid_model` (alias fora do catálogo), `oauth_refresh_failed`, `anthropic_upstream_error`, `anthropic_timeout` e
+`anthropic_connection_error`. A causa de `oauth_refresh_failed` aparece no log
+em `oauthRefreshStatus`/`oauthRefreshError` — ver
+[Renovação de token OAuth](./oauth-token-renewal.md). Bloqueio de detecção de cliente não-oficial pela
 Anthropic aparece como `anthropic_upstream_error` com status `403`/`429` —
 consulte o risco residual no threat model.

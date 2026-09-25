@@ -115,4 +115,24 @@ describe('codex oauth', () => {
 
     await mock.close()
   })
+
+  it('extrai o código do formato de erro aninhado no refresh Codex', async () => {
+    const mock = new MockUpstream()
+    const base = await mock.start()
+    const endpoints: CodexOAuthEndpoints = {
+      authUrl: 'https://auth.openai.com/oauth/authorize',
+      tokenUrl: new URL('/oauth/token', base).toString(),
+      clientId: 'app_test',
+      redirectUri: 'http://localhost:1455/auth/callback',
+    }
+    mock.setHandler((_request, response) => {
+      jsonResponse(response, 401, { error: { code: 'refresh_token_reused', message: 'MENSAGEM_LIVRE' } })
+    })
+
+    const error: unknown = await refreshCodexToken('refresh-1', endpoints).catch((caught: unknown) => caught)
+    expect(error).toBeInstanceOf(CodexOAuthHttpError)
+    expect(error).toMatchObject({ status: 401, oauthError: 'refresh_token_reused' })
+
+    await mock.close()
+  })
 })

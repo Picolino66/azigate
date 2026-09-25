@@ -79,6 +79,8 @@ export interface OpenAiToAnthropicOptions {
   defaultMaxTokens: number
   effort?: CliEffortLevel
   thinkingBudgetTokens?: Readonly<Record<CliEffortLevel, number>>
+  // Modelos que rejeitam `tool_choice` `any`/`tool` recebem `auto` (ADR-021).
+  forcedToolChoice?: boolean
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -296,7 +298,11 @@ export function translateOpenAiToAnthropic(body: ChatBody, options: OpenAiToAnth
 
   const { thinking, output_config } = convertThinking(options.effort, options.thinkingBudgetTokens)
   const tools = convertTools(body.tools)
-  const toolChoice = convertToolChoice(body.tool_choice)
+  const convertedToolChoice = convertToolChoice(body.tool_choice)
+  const toolChoice =
+    options.forcedToolChoice === false && (convertedToolChoice?.type === 'any' || convertedToolChoice?.type === 'tool')
+      ? { type: 'auto' as const }
+      : convertedToolChoice
   const stopSequences = convertStop(body.stop)
   const topP = typeof body.top_p === 'number' ? body.top_p : undefined
   const temperature = typeof body.temperature === 'number' ? body.temperature : undefined

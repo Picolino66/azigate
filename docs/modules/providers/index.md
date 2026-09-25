@@ -61,4 +61,5 @@ e `codex_connection_error`/`anthropic_connection_error`.
 - [Upstream OpenAI-compatible (DeepSeek por padrão)](./deepseek.md)
 - [Codex CLI](./codex-cli.md)
 - [Claude CLI](./claude-cli.md)
+- [Renovação de token OAuth](./oauth-token-renewal.md)
 - [Camada de tradução](../translation/index.md)

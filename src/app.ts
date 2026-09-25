@@ -23,6 +23,7 @@ import { FixedWindowRateLimiter } from './security/rate-limiter.js'
 import { DeepSeekClient } from './upstream/client.js'
 import { AnthropicClient } from './providers/anthropic-client.js'
 import { CodexClient } from './providers/codex-client.js'
+import { OAuthRefreshFailedError } from './providers/errors.js'
 import { refreshClaudeToken } from './providers/oauth/claude-oauth.js'
 import { refreshCodexToken } from './providers/oauth/codex-oauth.js'
 import { createTokenManager, type TokenManager } from './providers/oauth/token-store.js'
@@ -186,10 +187,20 @@ export function createApp(config: AppConfig, dependencies: AppDependencies = {})
         : { toolSchemaBytes: request.telemetry.toolSchemaBytes }),
       ...(request.telemetry.retryCount === undefined ? {} : { retryCount: request.telemetry.retryCount }),
       ...(request.telemetry.error === undefined ? {} : { error: request.telemetry.error }),
+      ...(request.telemetry.oauthRefreshStatus === undefined
+        ? {}
+        : { oauthRefreshStatus: request.telemetry.oauthRefreshStatus }),
+      ...(request.telemetry.oauthRefreshError === undefined
+        ? {}
+        : { oauthRefreshError: request.telemetry.oauthRefreshError }),
     })
   })
   app.addHook('onError', async (request, _reply, error) => {
     request.telemetry.error = safeError(error)
+    if (error instanceof OAuthRefreshFailedError) {
+      if (error.diagnostic.status !== undefined) request.telemetry.oauthRefreshStatus = error.diagnostic.status
+      request.telemetry.oauthRefreshError = error.diagnostic.oauthError
+    }
   })
 
   const protectedHook: onRequestHookHandler = (

@@ -1,4 +1,5 @@
 import { fetch } from 'undici'
+import { OAuthHttpError, readOAuthErrorCode } from './oauth-http-error.js'
 import type { PkceCodes } from './pkce.js'
 import type { StoredOAuthToken } from './token-store.js'
 
@@ -78,10 +79,9 @@ function isTokenResponse(value: unknown): value is CodexTokenResponse {
   )
 }
 
-export class CodexOAuthHttpError extends Error {
-  constructor(public readonly status: number) {
-    super(`Troca/renovação de token Codex falhou com status ${status}`)
-    this.name = 'CodexOAuthHttpError'
+export class CodexOAuthHttpError extends OAuthHttpError {
+  constructor(status: number, oauthError?: string) {
+    super(`Troca/renovação de token Codex falhou com status ${status}`, status, oauthError)
   }
 }
 
@@ -95,9 +95,11 @@ async function requestCodexToken(tokenUrl: string, body: URLSearchParams): Promi
     },
     body: body.toString(),
   })
-  if (response.status < 200 || response.status >= 300) throw new CodexOAuthHttpError(response.status)
+  if (response.status < 200 || response.status >= 300) {
+    throw new CodexOAuthHttpError(response.status, await readOAuthErrorCode(response))
+  }
   const parsed: unknown = await response.json()
-  if (!isTokenResponse(parsed)) throw new CodexOAuthHttpError(response.status)
+  if (!isTokenResponse(parsed)) throw new CodexOAuthHttpError(response.status, 'resposta_invalida')
   const { accountId, email } = decodeCodexIdToken(parsed.id_token)
   return {
     accessToken: parsed.access_token,

@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
-import { OAuthNotLoggedInError, OAuthRefreshFailedError } from '../errors.js'
+import { OAuthNotLoggedInError, OAuthRefreshFailedError, type OAuthRefreshDiagnostic } from '../errors.js'
+import { OAuthHttpError } from './oauth-http-error.js'
 
 export interface StoredOAuthToken {
   accessToken: string
@@ -48,6 +49,13 @@ export async function tokenFileExists(filePath: string): Promise<boolean> {
   return (await readTokenFile(filePath)) !== undefined
 }
 
+function refreshDiagnostic(error: unknown): OAuthRefreshDiagnostic {
+  if (error instanceof OAuthHttpError) {
+    return { status: error.status, oauthError: error.oauthError ?? 'nao_informado' }
+  }
+  return { oauthError: 'falha_de_transporte' }
+}
+
 export interface TokenManager {
   getAccessToken(): Promise<StoredOAuthToken>
 }
@@ -76,11 +84,16 @@ export function createTokenManager(options: TokenManagerOptions): TokenManager {
     let refreshed: StoredOAuthToken
     try {
       refreshed = await options.refresh(current.refreshToken)
-    } catch {
-      throw new OAuthRefreshFailedError(options.provider)
+    } catch (error) {
+      // Descarta o cache para que a próxima requisição releia o arquivo: um novo
+      // `npm run login:*` passa a valer sem reiniciar o processo.
+      cached = undefined
+      throw new OAuthRefreshFailedError(options.provider, refreshDiagnostic(error))
     }
-    await writeTokenFile(options.filePath, refreshed)
+    // O fornecedor pode rotacionar o refresh token; mantê-lo em memória antes de gravar
+    // evita perdê-lo se a persistência falhar.
     cached = refreshed
+    await writeTokenFile(options.filePath, refreshed)
     return refreshed
   }
 

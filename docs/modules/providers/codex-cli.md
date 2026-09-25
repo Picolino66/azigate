@@ -90,4 +90,6 @@ evento -> gateway devolve streaming incremental ou `chat.completion` acumulado.
 
 `invalid_reasoning_effort`, `cli_unavailable`, `oauth_not_logged_in`,
 `oauth_refresh_failed`, `codex_upstream_error`, `codex_timeout` e
-`codex_connection_error`.
+`codex_connection_error`. A causa de `oauth_refresh_failed` aparece no log em
+`oauthRefreshStatus`/`oauthRefreshError` — ver
+[Renovação de token OAuth](./oauth-token-renewal.md).

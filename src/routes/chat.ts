@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyRequest, onRequestHookHandler } from 'fastify'
+import { claudeAcceptsForcedToolChoice, isClaudeCliModel } from '../cli-catalog.js'
 import type { AppConfig } from '../config.js'
 import { publicError } from '../http/errors.js'
 import { createClientAbortSignal } from '../http/client-abort.js'
@@ -104,6 +105,10 @@ export function registerChatRoute(
       const selection = resolveProvider(model, config)
 
       try {
+        if (selection.kind === 'unknown-cli') {
+          request.telemetry.error = 'UnknownCliAlias'
+          return reply.code(400).send(publicError('Alias CLI desconhecido; consulte GET /v1/models', 'invalid_model'))
+        }
         if (selection.kind === 'deepseek') {
           request.telemetry.effort = deepseekEffortForLog(chatBody.reasoning_effort)
           const exchange = await client.request({
@@ -141,6 +146,7 @@ export function registerChatRoute(
             model: selection.model,
             defaultMaxTokens: ANTHROPIC_DEFAULT_MAX_TOKENS,
             ...(effort === undefined ? {} : { effort }),
+            forcedToolChoice: isClaudeCliModel(selection.model) && claudeAcceptsForcedToolChoice(selection.model),
           })
           const exchange = await anthropicClient.request({
             requestId: request.id,

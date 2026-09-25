@@ -185,10 +185,9 @@ e defaults no [guia de agentes](docs/operations/openai-compatible-agents.md)):
 | `codex-cli-sol` / `-terra` / `-luna` | Codex (Responses API) | GPT-5.6 Sol / Terra / Luna |
 | `codex-cli-5.5` / `codex-cli-5.4` | Codex (Responses API) | GPT-5.5 / GPT-5.4 |
 | `codex-cli` | Codex (Responses API) | sinônimo legado de GPT-5.4 |
-| `claude-cli-fable-5` / `-sonnet-5` / `-opus-4.8` | Claude (Messages API) | efforts low..max |
-| `claude-cli-opus-4.7` / `-opus-4.6` / `-sonnet-4.6` | Claude (Messages API) | ver gate por modelo |
-| `claude-cli-sonnet-4.5` / `-haiku-4.5` | Claude (Messages API) | sem effort |
-| `claude-cli` | Claude (Messages API) | sinônimo legado de Sonnet 4.6 |
+| `claude-cli-opus-5.5` / `-opus-5` / `-fable-5.1` / `-sonnet-5` | Claude (Messages API) | efforts low..max |
+| `claude-cli-haiku-4.5` | Claude (Messages API) | sem effort |
+| `claude-cli` | Claude (Messages API) | sinônimo de Opus 5.5 |
 
 Aliases desabilitados ou sem login OAuth retornam `503 cli_unavailable`; nunca há
 fallback automático. Quando `ALLOWED_MODELS` estiver preenchida, inclua

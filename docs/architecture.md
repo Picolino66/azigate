@@ -74,7 +74,7 @@ ou local via Ollama/LM Studio/vLLM) que exponha `models` e `chat/completions`.
 
 - Os aliases Codex e Claude definidos no catálogo central são reservados mesmo quando desabilitados; nunca caem no upstream.
 - Os aliases Codex escolhem modelos internos fixos por allowlist; `codex-cli` permanece sinônimo de `gpt-5.4`. Effort público é normalizado em código puro (`src/providers/reasoning-effort.ts`) antes de virar `reasoning.effort` no corpo da Responses API.
-- Os aliases Claude escolhem oito modelos completos; `claude-cli` permanece sinônimo de `claude-sonnet-4-6`. A `ALLOWED_MODELS` publica somente modelos aprovados nos gates reais.
+- Os aliases Claude escolhem cinco modelos completos; `claude-cli` é sinônimo de `claude-opus-5-5` ([ADR-021](../adr/ADR-021-catalogo-claude-geracao-5.md)). Os prefixos `codex-cli`/`claude-cli` são reservados: alias desconhecido recebe `400 invalid_model` e nunca segue para o upstream. A `ALLOWED_MODELS` publica somente modelos aprovados nos gates reais.
 - Qualquer outro ID permitido é encaminhado ao adaptador de upstream.
 - Não existe fallback automático entre provedores.
 - `/v1/models` combina o catálogo do upstream com aliases habilitados cujo arquivo de token OAuth existe em disco (`CODEX_TOKEN_FILE`/`CLAUDE_TOKEN_FILE`).

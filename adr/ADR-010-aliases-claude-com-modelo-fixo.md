@@ -2,7 +2,7 @@
 
 ## Status
 
-Aceita em 18/07/2026. Supersede parcialmente o ADR-009 quanto ao alias único, modelo padrão da conta e tratamento de effort incompatível.
+Aceita em 18/07/2026. Supersede parcialmente o ADR-009 quanto ao alias único, modelo padrão da conta e tratamento de effort incompatível. A lista de aliases e o alvo de `claude-cli` foram supersedidos pelo [ADR-021](./ADR-021-catalogo-claude-geracao-5.md) em 23/09/2026; o princípio de alias com modelo fixo continua valendo.
 
 ## Contexto
 

@@ -17,6 +17,7 @@
   - [Upstream OpenAI-compatible (DeepSeek por padrão)](./modules/providers/deepseek.md)
   - [Codex CLI](./modules/providers/codex-cli.md)
   - [Claude CLI](./modules/providers/claude-cli.md)
+  - [Renovação de token OAuth](./modules/providers/oauth-token-renewal.md)
 - [Camada de tradução](./modules/translation/index.md)
   - [OpenAI → Anthropic (requisição)](./modules/translation/openai-to-anthropic.md)
   - [Anthropic → OpenAI (stream)](./modules/translation/anthropic-to-openai.md)
@@ -67,6 +68,7 @@
 - [ADR-018 — credencial OAuth da assinatura](../adr/ADR-018-credencial-oauth-da-assinatura.md)
 - [ADR-019 — adaptadores CLI sempre consomem SSE](../adr/ADR-019-adaptadores-cli-sempre-consomem-sse.md)
 - [ADR-020 — `prompt_cache_key` derivada da conversa](../adr/ADR-020-prompt-cache-key-derivada-da-conversa.md)
+- [ADR-021 — catálogo Claude da geração 5](../adr/ADR-021-catalogo-claude-geracao-5.md)
 
 ## Regra de sincronização
 

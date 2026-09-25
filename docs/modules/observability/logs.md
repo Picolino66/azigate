@@ -49,6 +49,16 @@ semântica.
 Todos são contagens ou digests unidirecionais. Nenhum permite reconstruir mensagem,
 prompt, argumento de ferramenta ou schema.
 
+### Diagnóstico de renovação OAuth (Codex e Claude)
+
+| Campo | Significado |
+|---|---|
+| `oauthRefreshStatus` | Status HTTP do endpoint de token quando `oauth_refresh_failed` teve resposta HTTP |
+| `oauthRefreshError` | Código OAuth devolvido (ex.: `invalid_grant`), aceito só por allowlist, ou `nao_informado`/`resposta_invalida`/`falha_de_transporte` |
+
+`error_description`, mensagens livres e tokens nunca são registrados. Detalhes em
+[Renovação de token OAuth](../providers/oauth-token-renewal.md).
+
 ## Dependências
 
 Fastify, Pino e a camada de tradução (para extrair usage dos chunks OpenAI).

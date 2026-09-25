@@ -51,7 +51,7 @@ curl --fail -H "Authorization: Bearer SUA_CHAVE_DO_GATEWAY" \
 
 curl -N -H "Authorization: Bearer SUA_CHAVE_DO_GATEWAY" \
   -H "Content-Type: application/json" \
-  -d '{"model":"claude-cli-opus-4.8","messages":[{"role":"user","content":"diga ola"}]}' \
+  -d '{"model":"claude-cli-opus-5.5","messages":[{"role":"user","content":"diga ola"}]}' \
   https://ia.meudominio.com/v1/chat/completions
 ```
 
@@ -85,20 +85,20 @@ Os aliases Codex aceitam `reasoning_effort` ou `reasoning.effort` com `low`, `me
 
 ### Aliases Claude e effort
 
-Para os aliases Claude, `reasoning_effort` ou `reasoning.effort` aceita `low`, `medium`, `high`, `xhigh` ou `max`. Um valor omitido ou incompatível é substituído pelo **default do modelo**. Sonnet 4.5 e Haiku 4.5 nunca recebem effort.
+Para os aliases Claude, `reasoning_effort` ou `reasoning.effort` aceita `low`, `medium`, `high`, `xhigh` ou `max`. Um valor omitido ou incompatível é substituído pelo **default do modelo**. Haiku 4.5 nunca recebe effort.
 
 Em ambos os providers CLI, o campo plano tem precedência sobre o aninhado. `reasoning: false`, ausência ou objeto sem `effort` usa o default. Valor desconhecido ou estrutura malformada recebe `400 invalid_cli_request`; o passthrough do upstream não passa por essa normalização.
 
 | `model` | Modelo | Efforts | Default |
 |---|---|---|---|
-| `claude-cli-fable-5` | Fable 5 | low, medium, high, xhigh, max | high |
+| `claude-cli-opus-5.5` / `claude-cli` | Opus 5.5 | low, medium, high, xhigh, max | medium |
+| `claude-cli-opus-5` | Opus 5 | low, medium, high, xhigh, max | high |
+| `claude-cli-fable-5.1` | Fable 5.1 | low, medium, high, xhigh, max | high |
 | `claude-cli-sonnet-5` | Sonnet 5 | low, medium, high, xhigh, max | high |
-| `claude-cli-opus-4.8` | Opus 4.8 | low, medium, high, xhigh, max | high |
-| `claude-cli-opus-4.7` | Opus 4.7 | low, medium, high, xhigh, max | xhigh |
-| `claude-cli-opus-4.6` | Opus 4.6 | low, medium, high, max | high |
-| `claude-cli-sonnet-4.6` / `claude-cli` | Sonnet 4.6 | low, medium, high, max | high |
-| `claude-cli-sonnet-4.5` | Sonnet 4.5 | nenhum | omitir |
 | `claude-cli-haiku-4.5` | Haiku 4.5 | nenhum | omitir |
+
+Opus 5.5 e Fable 5.1 não aceitam `tool_choice` forçado: `required` ou função nomeada
+viram `auto` ([ADR-021](../../adr/ADR-021-catalogo-claude-geracao-5.md)).
 
 > Importante: nem todo alias fica publicado. Um alias só aparece em `/v1/models` se
 > estiver habilitado, aprovado no gate real, com o login OAuth feito
@@ -143,7 +143,7 @@ por `id`. Em versões sem `modelProviders`, use o fallback:
 ```bash
 export OPENAI_BASE_URL='https://ia.meudominio.com/v1'
 export OPENAI_API_KEY='CHAVE_DO_GATEWAY'
-export OPENAI_MODEL='claude-cli-opus-4.8'
+export OPENAI_MODEL='claude-cli-opus-5.5'
 qwen
 ```
 
@@ -160,7 +160,7 @@ Ao adicionar o modelo customizado, preencha:
 - **Base URL:** `https://ia.meudominio.com/v1`;
 - **API Key:** a chave do gateway (`GATEWAY_API_KEYS`);
 - **Model / deployment:** o ID do catálogo, por exemplo `codex-cli-luna` ou
-  `claude-cli-opus-4.8`.
+  `claude-cli-opus-5.5`.
 
 Se a sua versão do Copilot não expõe endpoint customizado, use o passthrough do
 upstream por outro cliente OpenAI-compatible desta lista.
@@ -187,9 +187,9 @@ o gateway:
 {
   "models": [
     {
-      "title": "azigate — Opus 4.8",
+      "title": "azigate — Opus 5.5",
       "provider": "openai",
-      "model": "claude-cli-opus-4.8",
+      "model": "claude-cli-opus-5.5",
       "apiBase": "https://ia.meudominio.com/v1",
       "apiKey": "CHAVE_DO_GATEWAY"
     }
