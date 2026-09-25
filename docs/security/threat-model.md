@@ -12,6 +12,13 @@ subprocesso, Bubblewrap e socket Unix **deixou de existir**; em seu lugar nasce 
 superfície de dois upstreams adicionais com segredos próprios (tokens OAuth) e uma
 camada de tradução que manipula conteúdo do usuário em código do gateway.
 
+Revisão de 25/09/2026: acrescenta o **Agent Plane** (`azigate-agentd`, workers e ponte
+MCP) — ver [ADR-022](../../adr/ADR-022-agent-plane-nativo.md),
+[ADR-023](../../adr/ADR-023-worker-remoto-e-isolamento-de-workspace.md) e
+[ADR-024](../../adr/ADR-024-persistencia-de-sessoes-e-dependencias-do-agent-plane.md) e a
+seção [Agent Plane](#agent-plane) abaixo. As seções anteriores continuam válidas para o
+Model Plane.
+
 ## Ativos
 
 - chave do upstream, chaves Bearer do gateway e tokens OAuth (access + refresh) de
@@ -73,3 +80,64 @@ camada de tradução que manipula conteúdo do usuário em código do gateway.
 - O smoke completo com um cliente OpenAI-compatible real (tools, streaming,
   multi-turn) depende de execução manual e permanece pendente até a Fase 8 da
   migração ser concluída pelo operador.
+
+## Agent Plane
+
+Diferença fundamental: no Model Plane nada é executado no servidor; no Agent Plane o
+agente nativo **executa ferramentas** — no host A (workspace local) ou na máquina B (via
+worker). O controle deixa de ser "ausência de execução" e passa a ser "execução
+confinada, autorizada e aprovada".
+
+### Ativos adicionais
+
+- chaves `AGENT_API_KEYS`, `WORKER_TOKEN_SECRET` e tokens de worker;
+- tokens de capacidade MCP por sessão;
+- login das CLIs no HOME do usuário do agentd (gerido pelas CLIs, nunca lido pelo Azigate);
+- repositórios configurados como workspaces (host A e máquina B);
+- banco `agentd.db` (metadados) e eventos em memória (conteúdo).
+
+### Fronteiras
+
+1. Cliente de agentes → Nginx → agentd: TLS, Bearer do Agent Plane, allowlist, rate limit.
+2. agentd → CLIs (Codex, Claude, AGY): subprocessos no host A.
+3. azigate-worker (B) → agentd: WebSocket de saída autenticado por token HMAC.
+4. Claude → azigate-mcp-bridge → agentd: stdio e socket Unix privado.
+5. Worker → sistema de arquivos e processos da máquina B.
+
+### Ameaças e controles
+
+| Ameaça | Impacto | Controle implementado | Evidência |
+|---|---|---|---|
+| Reuso de credencial entre planos | acesso a agentes com a chave de modelos | três credenciais disjuntas; o startup falha se `AGENT_API_KEYS` repetir `GATEWAY_API_KEYS` ou o segredo de worker | `agent-config-security.test.ts`, `agentd.integration.test.ts` |
+| BOLA/IDOR em sessões e aprovações | ler eventos, aprovar ou cancelar sessão alheia | recursos pertencem à credencial criadora; outra recebe `404` | `agent-sessions.test.ts`, `agentd.integration.test.ts` |
+| Path traversal / workspace arbitrário | agente atuando em `/etc`, `~/.ssh` | cliente só informa ID; paths vêm do operador; worker faz `realpath` e checa prefixo; recusa absoluto, `~`, byte nulo e symlink para fora; `delete` não segue symlink | `worker-ops.test.ts` |
+| Injeção de flag/comando nas CLIs | desligar permissões, executar comando | argv montado em código; `model` e IDs nativos validados (não começam com `-`); `spawn` sem shell; nunca `--dangerously-skip-permissions`/`bypassPermissions`/`danger-full-access` | `agents-providers.test.ts` |
+| Ferramentas locais do host A em sessão remota | agente lendo/alterando a máquina errada | Claude com `--tools ""`, `--strict-mcp-config`, cwd vazio e privado | `agents-providers.test.ts` |
+| JSON-RPC arbitrário no Codex via endpoint nativo | `command/exec`, `fs/writeFile`, `account/logout` no host A | `WS /native` somente de saída; mensagens do cliente ignoradas | `agentd.integration.test.ts` |
+| Execução de código via configuração do Git | `git status` rodando fsmonitor/filtros escritos pelo agente | `.git` imutável pelo agente; fsmonitor, hooks, diff externo e textconv desligados; `GIT_CEILING_DIRECTORIES` | `worker-ops.test.ts` |
+| Execução remota abusiva | comando destrutivo na máquina B | execução desligada por padrão; allowlist de `argv[0]`; sem shell; aprovação no agente; timeout, limite de saída e de processos | `worker-ops.test.ts` |
+| Worker impostor ou fora de escopo | expor workspace não autorizado | token HMAC com `workerId`, escopos e expiração; registro com outro ID recusado; conexão encerrada na expiração | `agent-workers-mcp.test.ts`, `agentd.integration.test.ts` |
+| Uso da ponte MCP por outro processo | acesso ao worker sem sessão | socket `0600` (criado com `umask 0177`), token aleatório por sessão revogado no fim; `mcp-config.json` `0600` em diretório `0700`, nunca em argv | `agentd.integration.test.ts` |
+| Aprovação indevida | ação sem consentimento | qualquer desfecho que não seja `allow` explícito nega (expiração, cancelamento, reinício) | `agent-sessions.test.ts` |
+| Vazamento de conteúdo | prompts, código e dados da conta em disco/log | banco só com metadados; eventos só em memória e só para o dono; handshake do Claude (e-mail/organização) nunca vira evento; logs só com IDs e códigos; stderr das CLIs apenas contado | `agent-sessions.test.ts`, `agents-providers.test.ts` |
+| Segredos herdados pelas CLIs | CLI ou ferramenta lendo chaves do gateway | ambiente mínimo por allowlist, sem `*_API_KEYS`, `WORKER_TOKEN_SECRET` ou `DEEPSEEK_API_KEY` | `agent-config-security.test.ts` |
+| DoS por processo, saída ou evento | memória/CPU do host | limites global e por provider, timeout de turno e ociosidade, linha NDJSON ≤ 16 MiB, buffer de eventos por quantidade e bytes, `O_NONBLOCK` contra FIFO | testes de núcleo, sessões e worker |
+| Retomada que perde contexto | agente seguindo sem histórico em silêncio | AGY: `conversation_id` do `init` comparado ao pedido; Codex/Claude: erro de retomada vira sessão `failed` | `agents-providers.test.ts` |
+| Protocolo nativo mudar | eventos perdidos ou mal interpretados | matriz certificada com `fail-closed` em produção; contract tests por versão; `provider.event` preserva o desconhecido | `agents-contracts.test.ts` |
+
+### Risco residual
+
+- Workspaces locais dão ao agente os privilégios do usuário do agentd, limitados pelo
+  sistema de permissões da própria CLI e pelas aprovações. Recomenda-se um usuário
+  dedicado.
+- A jail do worker protege operações de arquivo, não o efeito de um programa permitido:
+  com `exec.enabled`, um comando aprovado roda com os privilégios do usuário do worker.
+- Condições de corrida (TOCTOU) entre a verificação de `realpath` e a operação são
+  mitigadas por `O_NOFOLLOW` no último componente, não eliminadas.
+- O formato interno do `step_update` do AGY foi inferido do changelog oficial; a suíte
+  manual `test:agents:real` é o gate de validação.
+- AGY headless não tem canal de aprovação: o modo `review` equivale a negar o que exigiria
+  revisão.
+- `node:sqlite` é experimental no Node 22.
+- Rate limit, buffer de eventos e aprovações continuam locais a uma instância.
+

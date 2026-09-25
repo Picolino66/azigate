@@ -22,6 +22,12 @@ O serviço **não é um proxy aberto**. A superfície HTTP é fechada e permanec
 limitada a quatro rotas: `GET /health`, `GET /ready`, `GET /v1/models` e
 `POST /v1/chat/completions`.
 
+Opcionalmente, um segundo serviço — o **Agent Plane** (`azigate-agentd`) — opera Codex,
+Claude Code e Google Antigravity (AGY) como **agentes completos**, pelo protocolo nativo
+de cada CLI, com sessões, eventos, aprovações e execução remota em outra máquina via
+`azigate-worker`. Ele roda em processo, porta e credenciais separados e não altera o
+gateway de modelos. Veja [Agent Plane](#agent-plane-azigate-agentd).
+
 ## Como funciona
 
 O agente cliente roda no seu computador (junto do VS Code e dos repositórios). Ele
@@ -115,7 +121,8 @@ Não é um proxy aberto.
 
 - Linux, macOS ou Windows (WSL2) — o gateway não depende mais de Bubblewrap/user
   namespaces, apenas de rede de saída para os provedores.
-- Node.js `>=20.18.1` para desenvolvimento; a imagem usa Node.js 22.
+- Node.js `>=20.18.1` para desenvolvimento; a imagem usa Node.js 22. O Agent Plane
+  (`azigate-agentd`) exige Node.js `>=22.13`.
 - Docker/Compose e (opcional) Nginx para publicar o gateway.
 - Uma chave do upstream escolhido (DeepSeek, OpenAI, etc.).
 - Para habilitar os aliases Codex/Claude: uma conta com assinatura ativa (ChatGPT
@@ -200,6 +207,36 @@ outputs — sem o limite fixo de transcript nem o regime de heartbeat da arquite
 anterior (ver [ADR-016](adr/ADR-016-substituicao-do-broker-por-adaptadores-http.md)
 e [ADR-017](adr/ADR-017-fim-do-regime-sintetico-de-sse.md)).
 
+## Agent Plane (azigate-agentd)
+
+Para usar Codex, Claude Code e AGY como agentes completos — com as ferramentas, sessões,
+subagentes e permissões deles — sem convertê-los para Chat Completions
+([ADR-022](adr/ADR-022-agent-plane-nativo.md)):
+
+| | Model Plane (`azigate`) | Agent Plane (`azigate-agentd`) |
+|---|---|---|
+| API | `/v1/models`, `/v1/chat/completions` | `/agent/v1/sessions`, turnos, eventos (SSE), aprovações, `WS /native/*` |
+| Quem executa ferramentas | o seu agente, no seu computador | o agente nativo, no workspace escolhido por ID |
+| Credencial | `GATEWAY_API_KEYS` | `AGENT_API_KEYS` (nunca as mesmas) |
+| Login dos fornecedores | OAuth próprio (`npm run login:*`) | o da própria CLI (`codex login`, `claude`, `agy`) |
+| Estado | stateless | metadados de sessão em SQLite; eventos só em memória |
+| Onde roda | container | host (usa o login das CLIs do operador) |
+
+```bash
+# host A, com as CLIs logadas pelo mesmo usuário
+AGENT_GATEWAY_ENABLED=true AGENT_API_KEYS=... CLAUDE_AGENT_ENABLED=true \
+AGENT_WORKSPACES_FILE=/opt/azigate/agent-workspaces.json npm run start:agentd
+```
+
+Para trabalhar num projeto que está em **outra máquina**, rode o `azigate-worker` nela:
+ele conecta de saída (sem porta aberta), expõe só os workspaces declarados, protege
+`.git`, mantém a execução de programas desligada por padrão e é usado pelo Claude via MCP
+([ADR-023](adr/ADR-023-worker-remoto-e-isolamento-de-workspace.md)).
+
+Contrato em [specs/agent-api.md](specs/agent-api.md), operação passo a passo em
+[docs/operations/agent-plane.md](docs/operations/agent-plane.md) e módulos em
+[docs/modules/agents/](docs/modules/agents/index.md).
+
 ## Desenvolvimento e gates automatizados
 
 ```bash
@@ -209,8 +246,10 @@ npm run test:coverage
 npm audit --omit=dev --audit-level=high
 ```
 
-Os testes usam upstream/Anthropic/Codex falsos (servidores HTTP locais) e nunca
-consomem serviços reais.
+Os testes usam upstream/Anthropic/Codex falsos (servidores HTTP locais) e CLIs de
+agente falsas (`test/fixtures/agents/`), e nunca consomem serviços reais. A validação real
+do Agent Plane é manual e consome cota:
+`AZIGATE_REAL_AGENTS=1 npm run test:agents:real`.
 
 ## Segurança e Nginx
 
@@ -226,9 +265,11 @@ YOLO/auto-approval).
 
 - [Índice docs-first](docs/index.md)
 - [Arquitetura](docs/architecture.md)
-- [Providers](docs/modules/providers/index.md)
+- [Providers do Model Plane](docs/modules/providers/index.md)
+- [Agent Plane](docs/modules/agents/index.md)
 - [Camada de tradução](docs/modules/translation/index.md)
 - [Contrato público](specs/gateway-api.md)
+- [Contrato do Agent Plane](specs/agent-api.md)
 - [Threat model](docs/security/threat-model.md)
 
 ## Rollback
@@ -236,3 +277,7 @@ YOLO/auto-approval).
 Desabilite os dois aliases (`ENABLE_CODEX_CLI=false`, `ENABLE_CLAUDE_CLI=false`) e
 recrie o container. O upstream continua funcionando independentemente dos aliases
 Codex/Claude.
+
+Para o Agent Plane, pare o `azigate-agentd` (ou `AGENT_GATEWAY_ENABLED=false`) e remova
+os blocos `/agent/v1/`, `/native/` e `/worker/` do Nginx; o gateway de modelos não
+depende dele.

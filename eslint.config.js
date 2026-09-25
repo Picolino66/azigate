@@ -21,4 +21,13 @@ export default tseslint.config(
       '@typescript-eslint/require-await': 'off',
     },
   },
+  {
+    // Executáveis falsos das CLIs de agente (JS puro, fora do projeto TypeScript).
+    files: ['test/fixtures/**/*.mjs'],
+    ...tseslint.configs.disableTypeChecked,
+    languageOptions: {
+      ...tseslint.configs.disableTypeChecked.languageOptions,
+      globals: { process: 'readonly', setTimeout: 'readonly' },
+    },
+  },
 )

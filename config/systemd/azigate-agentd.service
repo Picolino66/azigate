@@ -1,0 +1,33 @@
+# Exemplo de unidade para o azigate-agentd no host A (ADR-022/ADR-024).
+# Rode como o usuário que fez `codex login`, `claude` e `agy` (as CLIs guardam o login no
+# HOME dele). Ajuste User, WorkingDirectory e os caminhos antes de habilitar.
+[Unit]
+Description=azigate-agentd (Agent Plane)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=azigate
+WorkingDirectory=/opt/azigate
+EnvironmentFile=/opt/azigate/.env
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node /opt/azigate/dist/agentd/server.js
+Restart=on-failure
+RestartSec=5
+KillMode=control-group
+TimeoutStopSec=30
+UMask=0077
+
+# Endurecimento compatível com as CLIs, que precisam escrever no HOME do usuário.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+
+[Install]
+WantedBy=multi-user.target

@@ -23,3 +23,7 @@ A saída final segue schema fechado. O gateway rejeita nomes de ferramentas não
 ## Trade-offs e consequências
 
 O histórico completo e os resultados de tools precisam voltar em cada requisição stateless. A qualidade depende da aderência do CLI ao schema e é comprovada por gate sintético; uma versão que não ofereça todos os controles mantém o alias indisponível.
+
+## Escopo (25/09/2026)
+
+Esta decisão vale para o **Model Plane**. O Agent Plane, criado pelo [ADR-022](./ADR-022-agent-plane-nativo.md), executa agentes nativos confinados a workspaces escolhidos por ID; lá o executor é o agente, sob as permissões da CLI e as aprovações do Azigate.

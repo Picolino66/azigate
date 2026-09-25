@@ -6,7 +6,16 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],
-      exclude: ['src/server.ts', 'src/types.ts', 'src/broker/viability-gate.ts'],
+      exclude: [
+        'src/server.ts',
+        'src/types.ts',
+        'src/broker/viability-gate.ts',
+        // Entrypoints de CLI do Agent Plane: cobertos por smoke tests em subprocesso.
+        'src/agentd/server.ts',
+        'src/agentd/worker-token.ts',
+        'src/worker/main.ts',
+        'src/mcp-bridge/main.ts',
+      ],
       reporter: ['text', 'json-summary'],
       thresholds: {
         lines: 80,

@@ -8,12 +8,25 @@
 - [Contexto canônico do orquestrador](./orchestrator-context.json)
 - [Contrato público](../specs/gateway-api.md)
 - [OpenAPI](../specs/openapi.yaml)
+- [Contrato do Agent Plane](../specs/agent-api.md) e [OpenAPI do Agent Plane](../specs/agent-openapi.yaml)
+- [Protocolo do worker e da ponte MCP](../specs/worker-protocol.md)
 - [Plano rastreável](../tasks/implementation-plan.md)
 - [Plano de confiabilidade de execução CLI](../tasks/cli-execution-reliability-plan.md)
+- [Plano do Native Agent Plane](../tasks/native-agent-plane-plan.md)
 
 ## Módulos
 
-- [Providers](./modules/providers/index.md)
+- [Agent Plane (agentes nativos)](./modules/agents/index.md)
+  - [Serviço azigate-agentd](./modules/agents/agentd.md)
+  - [Sessões e turnos](./modules/agents/sessions.md)
+  - [Eventos e endpoint nativo](./modules/agents/events.md)
+  - [Aprovações](./modules/agents/approvals.md)
+  - [Provider Codex](./modules/agents/codex-agent.md)
+  - [Provider Claude Code](./modules/agents/claude-agent.md)
+  - [Provider AGY](./modules/agents/agy-agent.md)
+  - [Worker remoto](./modules/agents/worker.md)
+  - [Workspace remoto via MCP](./modules/agents/remote-workspace-mcp.md)
+- [Providers do Model Plane (model adapters)](./modules/providers/index.md)
   - [Upstream OpenAI-compatible (DeepSeek por padrão)](./modules/providers/deepseek.md)
   - [Codex CLI](./modules/providers/codex-cli.md)
   - [Claude CLI](./modules/providers/claude-cli.md)
@@ -35,6 +48,7 @@
 
 - [Configurar um agente OpenAI-compatible](./operations/openai-compatible-agents.md)
 - [Configuração do Qwen Code](./operations/qwen-code.md)
+- [Runbook do Agent Plane](./operations/agent-plane.md)
 - [Incidentes operacionais](./operations/incidents/index.md)
 
 ## Segurança
@@ -53,7 +67,7 @@
 - [ADR-003 — streaming byte a byte](../adr/ADR-003-streaming-byte-a-byte.md)
 - [ADR-004 — segredos e observabilidade](../adr/ADR-004-segredos-e-observabilidade-minima.md)
 - [ADR-005 — registry e broker local](../adr/ADR-005-registro-multiprovedor-e-broker-local.md)
-- [ADR-006 — Agente cliente como único executor](../adr/ADR-006-qwen-como-unico-executor.md)
+- [ADR-006 — Agente cliente como único executor (Model Plane)](../adr/ADR-006-qwen-como-unico-executor.md)
 - [ADR-007 — streaming dividido](../adr/ADR-007-streaming-dividido-por-provedor.md)
 - [ADR-008 — aliases Codex com modelo fixo](../adr/ADR-008-aliases-codex-com-modelo-fixo.md)
 - [ADR-009 — Claude CLI com esforço configurável](../adr/ADR-009-claude-cli-esforco-configuravel.md)
@@ -69,6 +83,9 @@
 - [ADR-019 — adaptadores CLI sempre consomem SSE](../adr/ADR-019-adaptadores-cli-sempre-consomem-sse.md)
 - [ADR-020 — `prompt_cache_key` derivada da conversa](../adr/ADR-020-prompt-cache-key-derivada-da-conversa.md)
 - [ADR-021 — catálogo Claude da geração 5](../adr/ADR-021-catalogo-claude-geracao-5.md)
+- [ADR-022 — Agent Plane nativo e separado](../adr/ADR-022-agent-plane-nativo.md)
+- [ADR-023 — worker remoto e isolamento de workspace](../adr/ADR-023-worker-remoto-e-isolamento-de-workspace.md)
+- [ADR-024 — persistência de sessões e dependências do Agent Plane](../adr/ADR-024-persistencia-de-sessoes-e-dependencias-do-agent-plane.md)
 
 ## Regra de sincronização
 

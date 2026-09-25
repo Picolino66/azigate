@@ -31,7 +31,7 @@ export interface AppConfig {
   claudeTokenFile: string
 }
 
-function readValue(env: NodeJS.ProcessEnv, name: string): string | undefined {
+export function readValue(env: NodeJS.ProcessEnv, name: string): string | undefined {
   const file = env[`${name}_FILE`]
   if (file?.trim()) {
     try {
@@ -43,13 +43,13 @@ function readValue(env: NodeJS.ProcessEnv, name: string): string | undefined {
   return env[name]
 }
 
-function requiredSecret(env: NodeJS.ProcessEnv, name: string): string {
+export function requiredSecret(env: NodeJS.ProcessEnv, name: string): string {
   const value = readValue(env, name)?.trim()
   if (!value) throw new Error(`Variável obrigatória ausente: ${name} ou ${name}_FILE`)
   return value
 }
 
-function integer(env: NodeJS.ProcessEnv, name: string, fallback: number, min: number, max: number): number {
+export function integer(env: NodeJS.ProcessEnv, name: string, fallback: number, min: number, max: number): number {
   const raw = env[name]
   const value = raw === undefined || raw === '' ? fallback : Number(raw)
   if (!Number.isSafeInteger(value) || value < min || value > max) {
@@ -58,7 +58,7 @@ function integer(env: NodeJS.ProcessEnv, name: string, fallback: number, min: nu
   return value
 }
 
-function boolean(env: NodeJS.ProcessEnv, name: string, fallback: boolean): boolean {
+export function boolean(env: NodeJS.ProcessEnv, name: string, fallback: boolean): boolean {
   const raw = env[name]
   if (raw === undefined || raw === '') return fallback
   if (raw === 'true') return true
@@ -66,7 +66,7 @@ function boolean(env: NodeJS.ProcessEnv, name: string, fallback: boolean): boole
   throw new Error(`${name} deve ser true ou false`)
 }
 
-function csv(value: string | undefined): string[] {
+export function csv(value: string | undefined): string[] {
   return (value ?? '')
     .split(',')
     .map((item) => item.trim())

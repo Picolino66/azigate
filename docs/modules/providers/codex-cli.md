@@ -1,5 +1,9 @@
 # Provider Codex CLI
 
+> **Model adapter** do Model Plane: `codex-cli-sol` significa "usar o modelo do Codex
+> pelo gateway", não "executar o Codex CLI". Para o Codex como agente completo, use o
+> provider `codex` do [Agent Plane](../agents/codex-agent.md).
+
 ## Descrição
 
 Aliases Codex que falam diretamente com a **Responses API** da OpenAI

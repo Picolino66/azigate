@@ -36,3 +36,36 @@ gateway fala HTTPS diretamente com `api.anthropic.com` e
 - O upstream aceita campos extras intencionalmente para preservar o contrato opaco, mas o destino continua fixo.
 - Codex/Claude usam tradução determinística (`src/translation/`): mensagens, tools, `tool_choice`, `parallel_tool_calls`, modelo interno fixo e effort normalizado são convertidos para o corpo nativo de cada provedor; nenhum campo HTTP do cliente escolhe host, path ou credencial.
 - Catálogo, health e erros não expõem token OAuth, account ID bruto do provedor ou secrets.
+
+## Agent Plane (`azigate-agentd`)
+
+Data: 25/09/2026 ([ADR-022](../../adr/ADR-022-agent-plane-nativo.md)). Serviço separado,
+porta própria (`127.0.0.1:3100`), credenciais próprias.
+
+| Método | Rota | Auth | Recurso | Validação e exposição | Evidência | Status |
+|---|---|---|---|---|---|---|
+| GET | `/health` | não | liveness | nome/status estáticos | integração agentd | OK |
+| GET | `/ready` | não | prontidão | banco e ao menos um provider disponível | integração agentd | OK |
+| GET | `/agent/v1/providers` | `AGENT_API_KEYS` | status das CLIs | sem path, conta ou token | integração agentd | OK |
+| GET | `/agent/v1/workers` | `AGENT_API_KEYS` | workers conectados | só IDs, versões, capacidades e workspaces | integração agentd | OK |
+| POST | `/agent/v1/sessions` | `AGENT_API_KEYS` | sessão | corpo estrito, workspace por ID, limites | sessões e integração | OK |
+| GET | `/agent/v1/sessions/:id` | `AGENT_API_KEYS` + dono | sessão | `404` para outra credencial | sessões e integração | OK |
+| POST | `/agent/v1/sessions/:id/turns` | `AGENT_API_KEYS` + dono | turno | `input` limitado; um turno por vez | sessões e integração | OK |
+| GET | `/agent/v1/sessions/:id/events` | `AGENT_API_KEYS` + dono | eventos (conteúdo) | SSE; replay limitado ao buffer | integração agentd | OK |
+| POST | `/agent/v1/sessions/:id/cancel` | `AGENT_API_KEYS` + dono | turno | idempotente durante o cancelamento | sessões e integração | OK |
+| DELETE | `/agent/v1/sessions/:id` | `AGENT_API_KEYS` + dono | sessão | idempotente; nega aprovações pendentes | sessões e integração | OK |
+| POST | `/agent/v1/approvals/:id` | `AGENT_API_KEYS` + dono | aprovação | `allow`/`deny`; `409` se já resolvida | sessões e integração | OK |
+| WS | `/native/:provider/:sessionId` | `AGENT_API_KEYS` + dono | eventos nativos | somente saída; `401` antes do upgrade | integração agentd | OK |
+| WS | `/worker/v1/connect` | token de worker | canal RPC | token HMAC antes do upgrade; registro validado; `maxPayload` 8 MiB | hub e integração | OK |
+
+Superfície privada nova:
+
+| Canal | Controle |
+|---|---|
+| socket Unix `AGENT_MCP_SOCKET` | `0600`, token de capacidade por sessão, modo `plan` reaplicado |
+| stdin/stdout das CLIs | processo filho sem shell, ambiente mínimo, grupo de processos |
+
+Operações críticas: executar ferramenta do agente (aprovação + modo), executar programa
+no worker (desligado por padrão, allowlist, aprovação), alterar arquivo remoto (jail,
+`.git` protegido).
+

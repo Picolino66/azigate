@@ -1,5 +1,10 @@
 # Providers
 
+> Estes são os **model providers** do Model Plane (API de modelos). Os agentes completos
+> (Codex, Claude Code e AGY executando ferramentas) ficam no Agent Plane:
+> [docs/modules/agents/](../agents/index.md). Os aliases `codex-cli-*` e `claude-cli-*`
+> são **model adapters**: usam o modelo via HTTP e não executam a CLI completa.
+
 ## Descrição
 
 Registry multiprovedor que mantém um upstream OpenAI-compatible (DeepSeek por

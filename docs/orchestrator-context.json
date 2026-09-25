@@ -1,48 +1,74 @@
 {
   "orchestration_id": "c16a8ea6-06e8-4ec2-bb2c-7ac4cd272dc5",
   "created_at": "2026-07-14T13:35:00Z",
-  "updated_at": "2026-09-23T15:00:00-03:00",
+  "updated_at": "2026-09-25T16:30:00-03:00",
   "mode": "feature-evolution",
-  "current_phase": "F7",
-  "snapshot_version": "O6",
+  "current_phase": "F6",
+  "snapshot_version": "O5",
   "last_stable_snapshot": "O5",
   "evolution_cycle": {
-    "name": "broker-cli-para-adaptadores-http",
-    "status": "fases-0-a-7-concluidas-check-verde-184-testes-coverage-e-audit-ok-fase-8-aguarda-validacao-manual-do-operador",
-    "reassessed_phases": ["F2", "F3", "F5", "F6", "F7"],
-    "next_snapshot": "pending-translation-layer-e-clientes-http",
-    "spec": "migracao.md",
-    "migration_phases": {
-      "fase-0-decisao-e-adrs": "concluida",
-      "fase-1-camada-de-traducao": "concluida-src-translation-91-a-100-por-cento-cobertura-branches-84-por-cento",
-      "fase-2-clientes-http-oauth": "concluida-oauth-codex-e-claude-sem-cloaking-clientes-http-com-retry-check-verde-300-testes",
-      "fase-3-configuracao": "concluida-codex-claude-base-url-e-token-file-broker-cli-marcados-deprecated-check-verde-302-testes",
-      "fase-4-roteamento": "concluida-chat-ts-despacha-codex-claude-para-clientes-http",
-      "fase-5-streaming": "concluida-streaming-incremental-real-via-cli-completion-ts-sem-heartbeat",
-      "fase-6-remocao-broker": "concluida-src-broker-broker-client-cli-request-openai-response-systemd-apparmor-removidos",
-      "fase-7-documentacao": "concluida-arquitetura-modulos-operacao-seguranca-specs-incidentes-atualizados",
-      "fase-8-validacao-real": "pendente-requer-acao-manual-do-operador"
+    "name": "native-agent-plane",
+    "spec": "v2.md (fornecido pelo operador, fora do versionamento)",
+    "status": "F2-F5-concluidas-F6-parcial-check-verde-341-testes-cobertura-89-81-89-93-deploy-e-validacao-real-pendentes",
+    "reassessed_phases": [
+      "F2",
+      "F3",
+      "F4",
+      "F5",
+      "F6"
+    ],
+    "plan": "tasks/native-agent-plane-plan.md",
+    "v2_phases": {
+      "fase-0-arquitetura": "concluida-ADR-022-ADR-023-ADR-024",
+      "fase-1-agent-core": "concluida-src-agents-core-src-agent-control-src-agentd",
+      "fase-2-agy": "concluida-stream-json-verificado-na-cli-1.2.10-e-1.2.11-step_update-inferido",
+      "fase-3-claude": "concluida-stream-json-e-controle-verificados-na-cli-2.1.280-handshake-real-local-e-remoto-ok",
+      "fase-4-codex": "concluida-app-server-v2-schema-gerado-pela-cli-0.144.6",
+      "fase-5-worker": "concluida-azigate-worker-ws-de-saida-token-hmac-jail",
+      "fase-6-claude-remote-workspace": "concluida-mcp-bridge-socket-unix-0600-token-por-sessao",
+      "fase-7-agy-remote-workspace": "adiada-sem-mcp-por-sessao-nem-aprovacao-headless-ADR-023",
+      "fase-8-codex-exec-server": "adiada-registro-remoto-experimental-e-acoplado-a-identidade-openai-ADR-023"
     },
-    "credential_decision": {
-      "decided_by": "dono-do-projeto",
-      "option": "B-oauth-da-assinatura",
-      "adr": "ADR-018",
-      "date": "2026-07-27"
+    "evidence": {
+      "cli_versions_probed_without_quota": {
+        "codex": "0.144.6",
+        "claude": "2.1.280",
+        "agy": [
+          "1.2.10",
+          "1.2.11"
+        ]
+      },
+      "agy_autoupdate": "1.2.10->1.2.11 durante o ciclo; detectado como nao certificado e recertificado por sondagem",
+      "real_turns_executed": 0
     }
   },
   "product": {
     "name": "azigate",
     "domain": "gateway OpenAI Compatible multiprovedor para uso pessoal em LAN/VPN",
     "personas": [
-      { "name": "Operador", "goal": "publicar provedores com isolamento e rollback independente" },
-      { "name": "Desenvolvedor Qwen Code", "goal": "receber texto/tool calls e executar alterações somente no PC da VPN" }
+      {
+        "name": "Operador",
+        "goal": "publicar provedores com isolamento e rollback independente"
+      },
+      {
+        "name": "Desenvolvedor Qwen Code",
+        "goal": "receber texto/tool calls e executar alterações somente no PC da VPN"
+      },
+      {
+        "name": "Operador de agentes nativos",
+        "goal": "usar Codex, Claude Code e AGY completos no host A sobre projetos locais ou da maquina B, com aprovacoes e sem expor credenciais"
+      }
     ],
     "business_rules": [
       "o cliente nunca controla URL, path, comando, argv, ambiente ou cwd upstream",
       "DeepSeek, Codex e Claude nunca fazem fallback automático entre si",
       "Qwen Code é o único executor de leitura, shell e edição",
       "credenciais do gateway/DeepSeek e sessões CLI permanecem em processos separados",
-      "DeepSeek continua opaca; CLIs usam somente texto e function tools validados"
+      "DeepSeek continua opaca; CLIs usam somente texto e function tools validados",
+      "Model Plane e Agent Plane sao processos, portas e credenciais separados (ADR-022)",
+      "agentes nativos usam o protocolo da propria CLI e o login oficial; o Azigate nunca toca credenciais das CLIs",
+      "workspace e worker sao escolhidos somente por ID; nunca cwd/path/comando do cliente",
+      "aprovacao so vale com allow explicito do dono; qualquer outro desfecho nega"
     ],
     "mvp_hypothesis": "Qwen Code usa codex-cli como decisor remoto sem expor ou alterar o servidor gateway"
   },
@@ -53,7 +79,11 @@
       "catálogo combinado com degradação parcial",
       "DeepSeek JSON/SSE transparente",
       "Codex e Claude JSON/SSE sintéticos",
-      "protocolo Unix v6 health/execute com modelos/efforts fechados, usage provider-specific e metadados seguros de sessão"
+      "protocolo Unix v6 health/execute com modelos/efforts fechados, usage provider-specific e metadados seguros de sessão",
+      "Agent Plane: sessoes, turnos, eventos SSE com native, cancelamento, aprovacoes, WS nativo somente de saida",
+      "providers nativos codex (app-server), claude (stream-json + controle) e agy (stream-json)",
+      "worker remoto por WebSocket de saida com RPC de arquivos, git e execucao por argv",
+      "Claude sobre workspace remoto via MCP"
     ],
     "non_functional": [
       "Qwen como único executor",
@@ -62,7 +92,10 @@
       "cancelamento do grupo de processo",
       "concorrência global 1 sem fila",
       "timeout 10 minutos, saída 4 MiB por turno e transcript CLI 256 KiB",
-      "sessões CLI efêmeras somente em RAM com TTL, LRU e prefixo semântico exato"
+      "sessões CLI efêmeras somente em RAM com TTL, LRU e prefixo semântico exato",
+      "agentd: Node >=22.13, SQLite so com metadados, eventos em memoria limitados",
+      "subprocessos sem shell, ambiente minimo, grupo de processos, limites de sessao/turno/ociosidade",
+      "matriz de versoes certificadas com fail-closed em producao"
     ],
     "constraints": [
       "uso pessoal single-user em LAN/IP allowlist",
@@ -84,7 +117,11 @@
       "Codex CLI e Claude CLI isolados",
       "testes e gates de viabilidade",
       "Docker/Compose/systemd",
-      "configuração Qwen e documentação"
+      "configuração Qwen e documentação",
+      "azigate-agentd",
+      "azigate-worker",
+      "azigate-mcp-bridge",
+      "providers nativos Codex/Claude/AGY"
     ],
     "excluded": [
       "YOLO/auto-approval",
@@ -92,7 +129,11 @@
       "fallback automático",
       "deploy real",
       "edição do PC da VPN pelo broker",
-      "teste automatizado consumindo provedores reais"
+      "teste automatizado consumindo provedores reais",
+      "AGY com worker remoto (Fase 7 do v2)",
+      "Codex exec-server remoto (Fase 8 do v2)",
+      "endpoint nativo bidirecional",
+      "PostgreSQL/multiplas instancias do agentd"
     ],
     "boundaries": "Somente quatro rotas públicas; DeepSeek em HTTPS fixo e CLIs por Unix socket privado sem ferramentas"
   },
@@ -106,14 +147,30 @@
       "passed": true,
       "post_deploy_model_smokes": {
         "version": "0.144.6",
-        "passed": ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-5.4"],
+        "passed": [
+          "gpt-5.6-sol",
+          "gpt-5.6-terra",
+          "gpt-5.6-luna",
+          "gpt-5.5",
+          "gpt-5.4"
+        ],
         "gpt_5_6_evidence": "1/1 estrutura, 1/1 categoria e zero ferramenta local por modelo no effort medium"
       }
     },
     "claude_gate": {
       "version": "2.1.214",
-      "passed_models": ["claude-fable-5", "claude-sonnet-5", "claude-opus-4-8", "claude-opus-4-6", "claude-sonnet-4-5"],
-      "failed_models": ["claude-opus-4-7", "claude-sonnet-4-6", "claude-haiku-4-5"],
+      "passed_models": [
+        "claude-fable-5",
+        "claude-sonnet-5",
+        "claude-opus-4-8",
+        "claude-opus-4-6",
+        "claude-sonnet-4-5"
+      ],
+      "failed_models": [
+        "claude-opus-4-7",
+        "claude-sonnet-4-6",
+        "claude-haiku-4-5"
+      ],
       "local_tool_executions": 0,
       "effort_smokes": "Fable 4/4, Sonnet 5 4/4, Opus 4.8 4/4, Opus 4.7 4/4, Opus 4.6 3/3 e Sonnet 4.6 3/3; Sonnet 4.5 e Haiku 4.5 não possuem effort",
       "publication": "somente cinco modelos aprovados; deploy v4 conjunto pendente"
@@ -127,48 +184,132 @@
     ]
   },
   "architecture": {
-    "pattern": "modular-monolith-http-adapters",
+    "pattern": "modular-monolith-http-adapters (Model Plane) + agent-plane-service stateful (azigate-agentd)",
     "tech_stack": {
       "runtime": "Node.js >=20; imagem Node.js 22",
       "language": "TypeScript ESM NodeNext strict",
       "web": "Fastify",
       "http": "Undici",
       "isolation": "nenhuma (sem subprocesso/sandbox; garantia estrutural)",
-      "tests": "Vitest"
+      "tests": "Vitest",
+      "agent_plane_persistence": "node:sqlite (Node >=22.13)",
+      "websocket": "ws 8.21.3 + @fastify/websocket 11.3.1",
+      "agent_clis": "codex app-server, claude -p stream-json, agy stream-json"
     },
     "integration_contracts": [
       "Qwen Code OpenAI Compatible /v1",
       "DeepSeek /models e /chat/completions",
       "Anthropic Messages API /v1/messages (OAuth da assinatura)",
-      "OpenAI Responses API via Codex /backend-api/codex/responses (OAuth da assinatura)"
+      "OpenAI Responses API via Codex /backend-api/codex/responses (OAuth da assinatura)",
+      "Codex app-server JSON-RPC v2 (stdio)",
+      "Claude Code stream-json + control protocol (stdio)",
+      "AGY stream-json headless (stdio)",
+      "azigate-worker protocolo v1 (WebSocket)",
+      "MCP stdio (azigate-mcp-bridge)"
     ],
     "security_model": {
       "authentication": "Bearer gateway; token OAuth da assinatura por adaptador (Codex/Claude)",
       "authorization": "IP/model/tool allowlists e aliases reservados",
       "secrets": "gateway/upstream/Codex/Claude com credenciais separadas; token OAuth em arquivo 0600",
       "ssrf": "todos os adaptadores com paths fixos; nenhum aceita URL/path do cliente",
-      "execution": "agente cliente único executor; gateway nunca executa ferramentas nem subprocessos"
+      "execution": "agente cliente único executor; gateway nunca executa ferramentas nem subprocessos",
+      "agent_plane": {
+        "authentication": "AGENT_API_KEYS disjuntas; token HMAC de worker com escopo e expiracao; token de capacidade MCP por sessao",
+        "authorization": "recursos por credencial (404 para outras); workspace por ID; modo plan so leitura; aprovacoes explicitas",
+        "execution": "agente nativo confinado ao workspace; nunca modos sem permissao; worker com jail realpath, .git protegido, git endurecido, exec desligado por padrao",
+        "data": "SQLite so metadados; eventos e aprovacoes em memoria; logs sem conteudo"
+      }
     },
-    "adrs": ["ADR-001", "ADR-002", "ADR-003", "ADR-004", "ADR-005", "ADR-006", "ADR-007", "ADR-008", "ADR-009", "ADR-010", "ADR-011", "ADR-012", "ADR-013", "ADR-014", "ADR-015", "ADR-016", "ADR-017", "ADR-018", "ADR-019", "ADR-020", "ADR-021"]
+    "adrs": [
+      "ADR-001",
+      "ADR-002",
+      "ADR-003",
+      "ADR-004",
+      "ADR-005",
+      "ADR-006",
+      "ADR-007",
+      "ADR-008",
+      "ADR-009",
+      "ADR-010",
+      "ADR-011",
+      "ADR-012",
+      "ADR-013",
+      "ADR-014",
+      "ADR-015",
+      "ADR-016",
+      "ADR-017",
+      "ADR-018",
+      "ADR-019",
+      "ADR-020",
+      "ADR-021",
+      "ADR-022",
+      "ADR-023",
+      "ADR-024"
+    ]
   },
   "contracts": {
     "api_version": "v1",
     "api_spec": "specs/openapi.yaml",
-    "consistency_model": "gateway HTTP totalmente stateless; nenhuma sessão entre requisições",
+    "consistency_model": "gateway HTTP totalmente stateless; nenhuma sessão entre requisições; Agent Plane: sessoes com metadados persistidos localmente (SQLite, instancia unica), eventos/aprovacoes em memoria",
     "schemas": [
       "payload DeepSeek aberto com validação mínima",
       "payload Codex/Claude traduzido em código puro (src/translation/) para o formato nativo de cada provedor",
       "lista OpenAI de modelos combinada"
-    ]
+    ],
+    "agent_api": {
+      "version": "agent/v1",
+      "spec": "specs/agent-api.md",
+      "openapi": "specs/agent-openapi.yaml",
+      "worker_protocol": "specs/worker-protocol.md (v1)"
+    }
   },
   "engineering": {
     "module_map": {
-      "edge": ["config", "auth", "rate-limit", "routes"],
-      "providers": ["registry", "deepseek-upstream", "anthropic-client", "codex-client", "oauth", "reasoning-effort", "cli-completion", "sse-reader"],
-      "translation": ["openai-to-anthropic", "anthropic-to-openai", "openai-to-responses", "responses-to-openai", "state"],
-      "operations": ["Docker", "Compose", "Nginx"]
+      "edge": [
+        "config",
+        "auth",
+        "rate-limit",
+        "routes"
+      ],
+      "providers": [
+        "registry",
+        "deepseek-upstream",
+        "anthropic-client",
+        "codex-client",
+        "oauth",
+        "reasoning-effort",
+        "cli-completion",
+        "sse-reader"
+      ],
+      "translation": [
+        "openai-to-anthropic",
+        "anthropic-to-openai",
+        "openai-to-responses",
+        "responses-to-openai",
+        "state"
+      ],
+      "operations": [
+        "Docker",
+        "Compose",
+        "Nginx"
+      ],
+      "agent_plane": [
+        "agents/core",
+        "agents/codex",
+        "agents/claude",
+        "agents/agy",
+        "agent-control",
+        "agentd",
+        "worker",
+        "worker-protocol",
+        "mcp-bridge"
+      ]
     },
-    "backlog": ["GW-01..GW-10", "MP-01..MP-15"],
+    "backlog": [
+      "GW-01..GW-10",
+      "MP-01..MP-15",
+      "NA-01..NA-14"
+    ],
     "test_coverage_thresholds": {
       "statements": 80,
       "branches": 70,
@@ -177,19 +318,43 @@
     }
   },
   "agentic": {
-    "project_structure": { "docs": true, "specs": true, "tasks": true, "skills": true, "agents": true, "adr": true },
+    "project_structure": {
+      "docs": true,
+      "specs": true,
+      "tasks": true,
+      "skills": true,
+      "agents": true,
+      "adr": true
+    },
     "docs_map": {
       "architecture": "docs/architecture.md",
       "providers": "docs/modules/providers/index.md",
       "translation": "docs/modules/translation/index.md",
       "security": "docs/security/threat-model.md",
-      "qwen_operations": "docs/operations/qwen-code.md"
+      "qwen_operations": "docs/operations/qwen-code.md",
+      "agent_plane": "docs/modules/agents/index.md",
+      "agent_plane_operations": "docs/operations/agent-plane.md"
     },
-    "specs_map": { "gateway": "specs/gateway-api.md", "openapi": "specs/openapi.yaml" },
-    "tasks_workflow": { "plan": "tasks/implementation-plan.md" },
-    "agents_map": { "ownership": "agents/README.md" },
-    "skills_map": { "activated": "skills/README.md" },
-    "traceability_rules": ["requisito -> ADR/spec -> arquivo -> teste/gate -> evidência operacional"]
+    "specs_map": {
+      "gateway": "specs/gateway-api.md",
+      "openapi": "specs/openapi.yaml",
+      "agent_api": "specs/agent-api.md",
+      "agent_openapi": "specs/agent-openapi.yaml",
+      "worker_protocol": "specs/worker-protocol.md"
+    },
+    "tasks_workflow": {
+      "plan": "tasks/implementation-plan.md",
+      "native_agent_plane": "tasks/native-agent-plane-plan.md"
+    },
+    "agents_map": {
+      "ownership": "agents/README.md"
+    },
+    "skills_map": {
+      "activated": "skills/README.md"
+    },
+    "traceability_rules": [
+      "requisito -> ADR/spec -> arquivo -> teste/gate -> evidência operacional"
+    ]
   },
   "quality": {
     "gates_passed": [
@@ -270,18 +435,58 @@
       "F7-oauth-refresh-diagnostico-links-internos-10-arquivos",
       "F7-catalogo-claude-geracao-5-check-238-testes",
       "F7-catalogo-claude-geracao-5-cobertura-acima-dos-limiares",
-      "F7-catalogo-claude-geracao-5-links-internos-18-arquivos"
+      "F7-catalogo-claude-geracao-5-links-internos-18-arquivos",
+      "F2-native-agent-plane-ADR-022-023-024",
+      "F3-native-agent-plane-contratos-agent-api-openapi-worker-protocol",
+      "F4-native-agent-plane-plano-NA-01-a-NA-14",
+      "F5-native-agent-plane-check-lint-typecheck-341-testes-build",
+      "F5-native-agent-plane-cobertura-89.35-81.31-89.5-92.89",
+      "F5-native-agent-plane-contract-tests-codex-0.144.6-claude-2.1.280-agy-1.2.10-1.2.11",
+      "F6-native-agent-plane-revisao-seguranca-4-endurecimentos-com-regressao",
+      "F6-native-agent-plane-links-internos-202-links-0-problemas",
+      "F6-native-agent-plane-docker-build-e-compose-config",
+      "F6-native-agent-plane-nginx-t-em-container",
+      "F6-native-agent-plane-systemd-analyze-verify",
+      "F6-native-agent-plane-smoke-real-sem-cota-health-3-providers-handshake-claude-local-e-remoto"
     ],
     "gates_failed": [
       "F5-claude-opus-4.7-estrutura-19-de-20",
       "F5-claude-sonnet-4.6-estrutura-18-de-20",
       "F5-claude-haiku-4.5-estrutura-19-de-20-categoria-11-de-20",
-      "F7-oauth-refresh-diagnostico-audit-fast-uri-high-preexistente"
+      "F7-oauth-refresh-diagnostico-audit-fast-uri-high-preexistente",
+      "F6-native-agent-plane-audit-high-preexistente-fast-uri-undici-fastify-identico-ao-HEAD-sem-contribuicao-das-dependencias-novas"
     ],
-    "gates_pending": ["F5-claude-gate-real-opus-5.5-opus-5-fable-5.1-pendente", "F8-smoke-real-cliente-openai-compatible-codex-claude-tools-streaming-multiturn", "F8-validar-risco-deteccao-cliente-nao-oficial-anthropic-sem-cloaking"],
-    "test_results": { "files": 16, "tests_passed": 238, "tests_failed": 0 },
-    "coverage_report": { "statements": 85.88, "branches": 80.14, "functions": 86.11, "lines": 88.91 },
-    "security_report": "npm audit --omit=dev --audit-level=high: FALHA em 23/09/2026 — fast-uri (transitiva) com advisories high GHSA-7p8r-x3mc-p8w7, GHSA-5jgf-p345-68v8, GHSA-f65p-4m7j-42xc e GHSA-fph4-wmhf-6fwf; pré-existente, dependências não alteradas pelo INC-2026-09-23; correção pendente"
+    "gates_pending": [
+      "F5-claude-gate-real-opus-5.5-opus-5-fable-5.1-pendente",
+      "F8-smoke-real-cliente-openai-compatible-codex-claude-tools-streaming-multiturn",
+      "F8-validar-risco-deteccao-cliente-nao-oficial-anthropic-sem-cloaking",
+      "F6-native-agent-plane-test-agents-real-com-turnos-reais-(consome-cota-do-operador)",
+      "F6-native-agent-plane-deploy-agentd-no-host-e-nginx",
+      "F6-native-agent-plane-worker-real-em-maquina-B"
+    ],
+    "test_results": {
+      "files": 16,
+      "tests_passed": 238,
+      "tests_failed": 0
+    },
+    "coverage_report": {
+      "statements": 85.88,
+      "branches": 80.14,
+      "functions": 86.11,
+      "lines": 88.91
+    },
+    "security_report": "npm audit --omit=dev --audit-level=high: FALHA em 23/09/2026 — fast-uri (transitiva) com advisories high GHSA-7p8r-x3mc-p8w7, GHSA-5jgf-p345-68v8, GHSA-f65p-4m7j-42xc e GHSA-fph4-wmhf-6fwf; pré-existente, dependências não alteradas pelo INC-2026-09-23; correção pendente",
+    "native_agent_plane": {
+      "test_results": "24 arquivos, 341 testes verdes (238 anteriores + 103 novos)",
+      "coverage_report": {
+        "statements": 89.35,
+        "branches": 81.31,
+        "functions": 89.5,
+        "lines": 92.89,
+        "note": "entrypoints de CLI excluidos e cobertos por smoke em subprocesso"
+      },
+      "security_report": "threat model e inventario atualizados; endurecimentos com regressao: O_NONBLOCK contra FIFO, .git imutavel pelo agente, conexao de worker encerrada na expiracao do token, retencao limitada de sessoes historicas"
+    }
   },
   "operations": {
     "deployment_record": "broker e gateway v5 implantados pelo operador em 20/07/2026 às 11:11 BRT; Codex atualizou para 0.144.6 às 11:43 e o novo check de catálogo aguarda instalação antes do próximo restart",
@@ -294,7 +499,12 @@
       "broker": "serviço v5 ativo; subprocessos já usam Codex 0.144.6, mas o dist com check de catálogo precisa ser instalado antes de reiniciar",
       "gateway_restart": "container v5 recriado e DeepSeek validada; Sol/Terra/Luna podem permanecer na allowlist"
     },
-    "runbooks": ["docs/installation/linux.md", "docs/operations/qwen-code.md", "docs/operations/openai-compatible-agents.md"],
+    "runbooks": [
+      "docs/installation/linux.md",
+      "docs/operations/qwen-code.md",
+      "docs/operations/openai-compatible-agents.md",
+      "docs/operations/agent-plane.md"
+    ],
     "rollback": "desabilitar aliases e recriar o gateway preserva DeepSeek",
     "slos": [],
     "alerts": [],
@@ -371,7 +581,13 @@
         "evidence": "oauthRefreshStatus/oauthRefreshError sanitizados por allowlist no log; cache descartado na falha; token em memória antes da gravação; resposta pública inalterada; 230 testes verdes",
         "record": "docs/operations/incidents/2026-09-23-oauth-refresh-claude-sem-diagnostico.md"
       }
-    ]
+    ],
+    "agent_plane": {
+      "status": "implementado localmente; nao implantado",
+      "unit": "config/systemd/azigate-agentd.service",
+      "nginx": "blocos /agent/v1/, /native/, /worker/v1/connect",
+      "rollback": "parar azigate-agentd e remover blocos do Nginx; Model Plane independente"
+    }
   },
   "orchestration": {
     "external_skills_activated": [
@@ -574,7 +790,71 @@
         "mode": "referência-oficial",
         "phase": "F7",
         "timestamp": "2026-09-23T15:20:00-03:00"
+      },
+      {
+        "skill_name": "autonomous-software-orchestrator",
+        "source": "~/.agents/skills/autonomous-software-orchestrator",
+        "reason": "coordenar o Native Agent Plane do v2.md (feature-evolution F2->F6)",
+        "mode": "coordenadora-principal",
+        "phase": "F2-F6",
+        "timestamp": "2026-09-25T16:30:00-03:00"
+      },
+      {
+        "skill_name": "task-breakdown-engine",
+        "source": "~/.agents/skills/task-breakdown-engine",
+        "reason": "plano rastreavel NA-01..NA-14",
+        "mode": "complementar",
+        "phase": "F4",
+        "timestamp": "2026-09-25T16:30:00-03:00"
+      },
+      {
+        "skill_name": "defensive-security-auditor",
+        "source": "~/.agents/skills/defensive-security-auditor",
+        "reason": "threat model do Agent Plane, inventario de endpoints e revisao que gerou 4 endurecimentos",
+        "mode": "complementar",
+        "phase": "F2-F6",
+        "timestamp": "2026-09-25T16:30:00-03:00"
+      },
+      {
+        "skill_name": "ai-docs-self-healing",
+        "source": "~/.agents/skills/ai-docs-self-healing",
+        "reason": "docs/modules/agents, specs, runbook, arquitetura, indices, CLAUDE.md/AGENTS.md e validacao de links",
+        "mode": "complementar",
+        "phase": "F5-F6",
+        "timestamp": "2026-09-25T16:30:00-03:00"
       }
     ]
-  }
+  },
+  "previous_cycles": [
+    {
+      "name": "broker-cli-para-adaptadores-http",
+      "status": "fases-0-a-7-concluidas-check-verde-184-testes-coverage-e-audit-ok-fase-8-aguarda-validacao-manual-do-operador",
+      "reassessed_phases": [
+        "F2",
+        "F3",
+        "F5",
+        "F6",
+        "F7"
+      ],
+      "next_snapshot": "pending-translation-layer-e-clientes-http",
+      "spec": "migracao.md",
+      "migration_phases": {
+        "fase-0-decisao-e-adrs": "concluida",
+        "fase-1-camada-de-traducao": "concluida-src-translation-91-a-100-por-cento-cobertura-branches-84-por-cento",
+        "fase-2-clientes-http-oauth": "concluida-oauth-codex-e-claude-sem-cloaking-clientes-http-com-retry-check-verde-300-testes",
+        "fase-3-configuracao": "concluida-codex-claude-base-url-e-token-file-broker-cli-marcados-deprecated-check-verde-302-testes",
+        "fase-4-roteamento": "concluida-chat-ts-despacha-codex-claude-para-clientes-http",
+        "fase-5-streaming": "concluida-streaming-incremental-real-via-cli-completion-ts-sem-heartbeat",
+        "fase-6-remocao-broker": "concluida-src-broker-broker-client-cli-request-openai-response-systemd-apparmor-removidos",
+        "fase-7-documentacao": "concluida-arquitetura-modulos-operacao-seguranca-specs-incidentes-atualizados",
+        "fase-8-validacao-real": "pendente-requer-acao-manual-do-operador"
+      },
+      "credential_decision": {
+        "decided_by": "dono-do-projeto",
+        "option": "B-oauth-da-assinatura",
+        "adr": "ADR-018",
+        "date": "2026-07-27"
+      }
+    }
+  ]
 }

@@ -1,0 +1,11 @@
+{"id":1,"result":{"userAgent":"azigate/0.144.6 (Linux; x86_64) (azigate; 1)","codexHome":"/home/operador/.codex","platformFamily":"unix","platformOs":"linux"}}
+{"method":"remoteControl/status/changed","params":{"status":"disabled","serverName":"host-a","installationId":"00000000-0000-0000-0000-000000000000","environmentId":null}}
+{"method":"item/agentMessage/delta","params":{"threadId":"t1","turnId":"u1","itemId":"m1","delta":"Olá"}}
+{"method":"item/reasoning/summaryTextDelta","params":{"threadId":"t1","turnId":"u1","itemId":"r1","delta":"resumo"}}
+{"method":"item/started","params":{"threadId":"t1","turnId":"u1","item":{"type":"mcpToolCall","id":"c1","server":"docs","tool":"search","status":"inProgress","arguments":{}},"startedAtMs":0}}
+{"method":"item/completed","params":{"threadId":"t1","turnId":"u1","item":{"type":"mcpToolCall","id":"c1","server":"docs","tool":"search","status":"failed","arguments":{}},"completedAtMs":0}}
+{"method":"item/started","params":{"threadId":"t1","turnId":"u1","item":{"type":"collabAgentToolCall","id":"s1","status":"inProgress"},"startedAtMs":0}}
+{"method":"item/completed","params":{"threadId":"t1","turnId":"u1","item":{"type":"collabAgentToolCall","id":"s1","status":"completed"},"completedAtMs":0}}
+{"method":"item/completed","params":{"threadId":"t1","turnId":"u1","item":{"type":"agentMessage","id":"m1","text":"Olá, terminei."},"completedAtMs":0}}
+{"method":"thread/tokenUsage/updated","params":{"threadId":"t1","turnId":"u1","tokenUsage":{"total":{"totalTokens":900,"inputTokens":800,"cachedInputTokens":600,"outputTokens":100,"reasoningOutputTokens":40},"last":{"totalTokens":300,"inputTokens":250,"cachedInputTokens":200,"outputTokens":50,"reasoningOutputTokens":20},"modelContextWindow":null}}}
+{"method":"turn/completed","params":{"threadId":"t1","turn":{"id":"u1","items":[],"status":"completed","error":null}}}

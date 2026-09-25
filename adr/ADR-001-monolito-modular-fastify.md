@@ -22,3 +22,6 @@ Usar Node.js 20+, TypeScript, Fastify, Undici e Vitest em um processo modular ú
 
 O deploy é simples e testável. Cache e rate limit em memória não são globalmente consistentes; escala horizontal futura exigirá armazenamento compartilhado e uma nova ADR.
 
+## Escopo (25/09/2026)
+
+"Gateway stateless… nenhuma persistência" vale para o **Model Plane**. O Agent Plane é um processo separado com persistência mínima de metadados em SQLite ([ADR-022](./ADR-022-agent-plane-nativo.md), [ADR-024](./ADR-024-persistencia-de-sessoes-e-dependencias-do-agent-plane.md)).

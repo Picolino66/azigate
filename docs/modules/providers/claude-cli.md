@@ -1,5 +1,9 @@
 # Provider Claude CLI
 
+> **Model adapter** do Model Plane: `claude-cli-*` usa o modelo Claude pelo gateway, não
+> executa o Claude Code. Para o Claude Code como agente completo (login oficial, sem OAuth
+> próprio), use o provider `claude` do [Agent Plane](../agents/claude-agent.md).
+
 ## Descrição
 
 Aliases Claude que falam diretamente com a **Messages API** da Anthropic

@@ -1,6 +1,26 @@
 # Arquitetura do azigate
 
-## Contexto
+## Dois planos
+
+Desde o [ADR-022](../adr/ADR-022-agent-plane-nativo.md) o azigate tem dois produtos
+lógicos, em processos separados:
+
+| Plano | Processo | Finalidade | Estado |
+|---|---|---|---|
+| Model Plane | `azigate` (container) | API de modelos OpenAI-compatible (`/v1/...`) | stateless |
+| Agent Plane | `azigate-agentd` (host A) | Codex, Claude Code e AGY como agentes completos | sessões em SQLite |
+
+```text
+                      ┌──────────── Nginx (TLS) ────────────┐
+Agente OpenAI-compat. ─► /health /ready /v1/models /v1/chat/completions ─► azigate :3000
+Cliente de agentes    ─► /agent/v1/*  /native/*                          ─► azigate-agentd :3100
+azigate-worker (B)    ─► /worker/v1/connect (WS de saída)                ─► azigate-agentd :3100
+```
+
+As seções abaixo descrevem o **Model Plane**. O Agent Plane está em
+[Agent Plane](#agent-plane) e em [docs/modules/agents/](modules/agents/index.md).
+
+## Contexto (Model Plane)
 
 Um agente cliente OpenAI-compatible (por exemplo Qwen Code, GitHub Copilot, Cline ou
 Continue) usa uma API no formato OpenAI. O gateway escolhe um provedor pelo `model`,
@@ -38,8 +58,9 @@ API real por HTTPS e traduz a resposta de volta. Essa migração está registrad
 
 ## Padrão e módulos
 
-O gateway continua um monólito modular e **totalmente stateless**: nenhum módulo
-mantém sessão, cache de conversa ou processo de longa duração entre requisições.
+O Model Plane continua um monólito modular e **totalmente stateless**: nenhum módulo
+mantém sessão, cache de conversa ou processo de longa duração entre requisições. Nenhum
+módulo do Model Plane importa código do Agent Plane.
 
 - `config`: configuração e secrets do processo;
 - `security`: autenticação, allowlist e rate limit local;
@@ -142,10 +163,53 @@ início do stream vira um evento `error` sanitizado e encerra sem `[DONE]`.
    assinatura, nunca a credencial Bearer do cliente).
 4. Container -> arquivo de token OAuth: leitura/escrita local `0600`, nunca logado.
 
+## Agent Plane
+
+O `azigate-agentd` integra cada agente pela interface programática natural dele e nunca
+converte eventos para Chat Completions:
+
+| Provider | Interface | Sessão nativa | Worker remoto |
+|---|---|---|---|
+| Codex | `codex app-server` (JSON-RPC stdio) | `threadId` | não |
+| Claude Code | `claude -p` `stream-json` + protocolo de controle | `session_id` | sim, via MCP |
+| AGY | `agy` `stream-json` headless | `conversation_id` | não |
+
+- `src/agents/core/`: contrato `AgentProvider` (sessão, turno, evento, aprovação — sem
+  `messages`/`choices`), processos sem shell com grupo próprio, NDJSON limitado,
+  JSON-RPC e matriz de versões certificadas.
+- `src/agent-control/`: `SessionService` (limites, ociosidade, timeout, retomada),
+  aprovações, buffer de eventos em memória, `SessionStore` SQLite só com metadados
+  ([ADR-024](../adr/ADR-024-persistencia-de-sessoes-e-dependencias-do-agent-plane.md)),
+  `WorkerHub` e ferramentas remotas.
+- `src/agentd/`: serviço Fastify com credenciais próprias (`AGENT_API_KEYS`), SSE e
+  WebSocket nativo somente de saída.
+- `src/worker/`, `src/worker-protocol/`, `src/mcp-bridge/`: execução remota na máquina do
+  projeto por conexão de saída, com jail por `realpath`
+  ([ADR-023](../adr/ADR-023-worker-remoto-e-isolamento-de-workspace.md)).
+
+A autenticação de cada agente é da própria CLI oficial. Os aliases `codex-cli-*` e
+`claude-cli-*` do Model Plane são **model adapters** (usam o modelo via HTTP); os agent
+providers `codex`, `claude` e `agy` executam a CLI completa.
+
+Fronteiras adicionais do Agent Plane:
+
+5. Cliente de agentes → Nginx → agentd: TLS, `AGENT_API_KEYS`, allowlist de IP, rate
+   limit, isolamento de recursos por credencial.
+6. agentd → CLIs: `spawn` sem shell, argv montado em código, ambiente mínimo, cwd no
+   workspace escolhido por ID; nunca modos que pulam permissões.
+7. Worker (B) → agentd: WebSocket de saída com token HMAC de escopo por workspace;
+   `wss://` fora de loopback.
+8. Ponte MCP → agentd: socket Unix `0600` e token de capacidade por sessão.
+9. Worker → projeto: jail de caminhos, `.git` protegido, Git endurecido, execução por
+   argv desligada por padrão.
+
 ## Decisões
 
+- [ADR-022](../adr/ADR-022-agent-plane-nativo.md): Agent Plane nativo, stateful e separado.
+- [ADR-023](../adr/ADR-023-worker-remoto-e-isolamento-de-workspace.md): worker remoto, jail e MCP.
+- [ADR-024](../adr/ADR-024-persistencia-de-sessoes-e-dependencias-do-agent-plane.md): SQLite de metadados e dependências WebSocket.
 - [ADR-005](../adr/ADR-005-registro-multiprovedor-e-broker-local.md): registry multiprovedor (parte do broker substituída pelo ADR-016).
-- [ADR-006](../adr/ADR-006-qwen-como-unico-executor.md): agente cliente como único executor.
+- [ADR-006](../adr/ADR-006-qwen-como-unico-executor.md): agente cliente como único executor (vale para o Model Plane; ver ADR-022).
 - [ADR-007](../adr/ADR-007-streaming-dividido-por-provedor.md): streaming por tipo de provedor (substituído pelo ADR-017).
 - [ADR-008](../adr/ADR-008-aliases-codex-com-modelo-fixo.md): seleção Codex por aliases fechados.
 - [ADR-009](../adr/ADR-009-claude-cli-esforco-configuravel.md): Claude no modelo padrão com esforço fechado.
@@ -160,3 +224,5 @@ início do stream vira um evento `error` sanitizado e encerra sem `[DONE]`.
 - [Anthropic Messages API](https://docs.anthropic.com/en/api/messages)
 - [OpenAI Responses API](https://developers.openai.com/codex/app-server/)
 - [Qwen Code model providers](https://qwenlm.github.io/qwen-code-docs/en/users/configuration/model-providers/)
+- [Codex app-server](https://developers.openai.com/codex/app-server/) (schema gerado por `codex app-server generate-json-schema`)
+- [Claude Code headless/SDK](https://docs.anthropic.com/en/docs/claude-code/sdk)

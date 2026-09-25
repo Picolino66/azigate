@@ -1,0 +1,353 @@
+openapi: 3.1.0
+info:
+  title: AziGate Agent Plane
+  version: 1.0.0
+  description: >-
+    Serviço azigate-agentd (ADR-022). API de ciclo de vida de agentes nativos (Codex,
+    Claude Code, AGY). Não é OpenAI-compatible. Especificação funcional em agent-api.md.
+paths:
+  /health:
+    get:
+      responses:
+        '200':
+          description: Processo saudável
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, service]
+                properties:
+                  status: { const: ok }
+                  service: { const: azigate-agentd }
+  /ready:
+    get:
+      responses:
+        '200':
+          description: Banco acessível e ao menos um provider disponível
+        '503':
+          description: Não pronto
+  /agent/v1/providers:
+    get:
+      security: [{ agentAuth: [] }]
+      responses:
+        '200':
+          description: Estado por provider
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: { $ref: '#/components/schemas/ProviderHealth' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /agent/v1/workers:
+    get:
+      security: [{ agentAuth: [] }]
+      responses:
+        '200':
+          description: Workers conectados
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Worker' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /agent/v1/sessions:
+    post:
+      security: [{ agentAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateSession' }
+      responses:
+        '201':
+          description: Sessão criada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Session' }
+        '400': { $ref: '#/components/responses/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+        '502': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /agent/v1/sessions/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, pattern: '^agt_[a-f0-9]{24}$' } }
+    get:
+      security: [{ agentAuth: [] }]
+      responses:
+        '200':
+          description: Sessão
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Session' }
+        '404': { $ref: '#/components/responses/Error' }
+    delete:
+      security: [{ agentAuth: [] }]
+      responses:
+        '200':
+          description: Sessão encerrada (idempotente)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Session' }
+        '404': { $ref: '#/components/responses/Error' }
+  /agent/v1/sessions/{id}/turns:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    post:
+      security: [{ agentAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [input]
+              additionalProperties: false
+              properties:
+                input: { type: string, minLength: 1 }
+      responses:
+        '202':
+          description: Turno iniciado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TurnAccepted' }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+        '429': { $ref: '#/components/responses/Error' }
+        '502': { $ref: '#/components/responses/Error' }
+        '503': { $ref: '#/components/responses/Error' }
+  /agent/v1/sessions/{id}/events:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+      - { name: after, in: query, required: false, schema: { type: integer, minimum: 0 } }
+      - { name: Last-Event-ID, in: header, required: false, schema: { type: string } }
+    get:
+      security: [{ agentAuth: [] }]
+      responses:
+        '200':
+          description: >-
+            Server-Sent Events. Cada evento tem `id`, `event` (tipo universal) e `data`
+            com o objeto AgentEvent.
+          content:
+            text/event-stream:
+              schema: { $ref: '#/components/schemas/AgentEvent' }
+        '404': { $ref: '#/components/responses/Error' }
+  /agent/v1/sessions/{id}/cancel:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string } }
+    post:
+      security: [{ agentAuth: [] }]
+      responses:
+        '202':
+          description: Cancelamento solicitado
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sessionId, turnId, status]
+                properties:
+                  sessionId: { type: string }
+                  turnId: { type: string }
+                  status: { const: cancelling }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+  /agent/v1/approvals/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, pattern: '^apr_[a-f0-9]{24}$' } }
+    post:
+      security: [{ agentAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              additionalProperties: false
+              properties:
+                decision: { enum: [allow, deny] }
+      responses:
+        '200':
+          description: Aprovação resolvida
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Approval' }
+        '400': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+components:
+  securitySchemes:
+    agentAuth:
+      type: http
+      scheme: bearer
+      description: Uma das AGENT_API_KEYS (nunca GATEWAY_API_KEYS nem token de worker).
+  responses:
+    Unauthorized:
+      description: Credencial do Agent Plane ausente ou inválida
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Error:
+      description: Erro do Agent Plane
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [message, type, code]
+          properties:
+            message: { type: string }
+            type: { const: agent_error }
+            code: { type: string }
+    ProviderHealth:
+      type: object
+      required: [enabled, installed, authenticated, version, certified, available, adapterVersion, protocol, remoteWorkspace]
+      properties:
+        enabled: { type: boolean }
+        installed: { type: boolean }
+        authenticated: { type: [boolean, 'null'] }
+        version: { type: [string, 'null'] }
+        certified: { type: boolean }
+        available: { type: boolean }
+        adapterVersion: { type: string }
+        protocol: { type: string }
+        remoteWorkspace: { type: boolean }
+    Worker:
+      type: object
+      required: [id, connectedAt, lastHeartbeatAt, capabilities, workspaces]
+      properties:
+        id: { type: string }
+        connectedAt: { type: string, format: date-time }
+        lastHeartbeatAt: { type: string, format: date-time }
+        workerVersion: { type: string }
+        capabilities: { type: array, items: { enum: [filesystem, git, exec] } }
+        workspaces: { type: array, items: { type: string } }
+    CreateSession:
+      type: object
+      required: [provider, workspace]
+      additionalProperties: false
+      properties:
+        provider: { enum: [codex, claude, agy, codex-agent, claude-agent, agy-agent] }
+        workspace: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$' }
+        worker: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$' }
+        model: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$' }
+        effort: { enum: [low, medium, high, xhigh, max] }
+        permissionMode: { enum: [review, acceptEdits, plan] }
+    TurnSummary:
+      type: object
+      required: [id, status, startedAt]
+      properties:
+        id: { type: string }
+        status: { enum: [running, cancelling] }
+        startedAt: { type: string, format: date-time }
+    Session:
+      type: object
+      required: [id, provider, status, nativeSessionId, workspace, worker, model, effort, permissionMode, providerVersion, adapterVersion, protocolVersion, createdAt, updatedAt, currentTurn, pendingApprovals]
+      properties:
+        id: { type: string }
+        provider: { enum: [codex, claude, agy] }
+        status: { enum: [starting, ready, running, suspended, failed, closed] }
+        nativeSessionId: { type: [string, 'null'] }
+        workspace: { type: string }
+        worker: { type: [string, 'null'] }
+        model: { type: [string, 'null'] }
+        effort: { type: [string, 'null'] }
+        permissionMode: { enum: [review, acceptEdits, plan] }
+        providerVersion: { type: [string, 'null'] }
+        adapterVersion: { type: string }
+        protocolVersion: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        currentTurn:
+          oneOf:
+            - { $ref: '#/components/schemas/TurnSummary' }
+            - { type: 'null' }
+        pendingApprovals:
+          type: array
+          items: { $ref: '#/components/schemas/Approval' }
+    TurnAccepted:
+      type: object
+      required: [sessionId, turnId, status]
+      properties:
+        sessionId: { type: string }
+        turnId: { type: string }
+        status: { const: running }
+    Approval:
+      type: object
+      required: [id, sessionId, turnId, provider, tool, summary, status, createdAt, resolvedAt]
+      properties:
+        id: { type: string }
+        sessionId: { type: string }
+        turnId: { type: [string, 'null'] }
+        provider: { enum: [codex, claude, agy] }
+        tool: { type: string }
+        summary: { type: string, maxLength: 500 }
+        status: { enum: [pending, allowed, denied, expired, cancelled] }
+        createdAt: { type: string, format: date-time }
+        resolvedAt: { type: [string, 'null'], format: date-time }
+    AgentEvent:
+      type: object
+      required: [id, event, sessionId, provider, timestamp]
+      properties:
+        id: { type: integer }
+        event:
+          enum:
+            - session.started
+            - turn.started
+            - message.delta
+            - reasoning.delta
+            - tool.started
+            - tool.completed
+            - approval.required
+            - approval.resolved
+            - subagent.started
+            - subagent.completed
+            - usage
+            - turn.completed
+            - turn.failed
+            - session.closed
+            - provider.event
+        sessionId: { type: string }
+        provider: { enum: [codex, claude, agy] }
+        turnId: { type: string }
+        timestamp: { type: string, format: date-time }
+        text: { type: string }
+        tool: { type: string }
+        toolCallId: { type: string }
+        status: { type: string }
+        approvalId: { type: string }
+        summary: { type: string }
+        decision: { enum: [allow, deny] }
+        reason: { enum: [client, timeout, session_closed, cancelled] }
+        nativeSessionId: { type: string }
+        model: { type: string }
+        output: { type: string }
+        usage:
+          type: object
+          properties:
+            inputTokens: { type: integer }
+            outputTokens: { type: integer }
+            cachedInputTokens: { type: integer }
+            reasoningTokens: { type: integer }
+            totalTokens: { type: integer }
+            costUsd: { type: number }
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string }
+            message: { type: string }
+        native:
+          description: Mensagem original da CLI, sem transformação.
+      additionalProperties: false
