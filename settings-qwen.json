@@ -1,0 +1,477 @@
+{
+  "$version": 4,
+  "env": {
+    "QWEN_CUSTOM_API_KEY_OPENAI_HTTP_192_168_2_4_3000_V1_763735AF7394": "e31be2691a42c942ee3bdbc8e43a23edc2cb32ddea29d365f06dfffbdf86eb73"
+  },
+  "modelProviders": {
+    "openai": [
+      {
+        "id": "deepseek-flash",
+        "name": "DeepSeek V4.1 Flash",
+        "description": "DeepSeek V4.1 Flash (API oficial deepseek-flash); texto e imagem; roteamento via Azigate deve aceitar este ID",
+        "baseUrl": "http://192.168.3.161:3050/v1",
+        "envKey": "QWEN_CUSTOM_API_KEY_OPENAI_HTTP_192_168_2_4_3000_V1_763735AF7394",
+        "generationConfig": {
+          "timeout": 610000,
+          "maxRetries": 0,
+          "extra_body": {
+            "enable_thinking": true
+          },
+          "contextWindowSize": 1048576,
+          "modalities": {
+            "image": true
+          }
+        },
+        "capabilities": {
+          "agent": true,
+          "vision": true
+        }
+      },
+      {
+        "id": "deepseek-v4-pro",
+        "name": "DeepSeek V4 Pro",
+        "description": "DeepSeek V4 Pro; somente texto na API oficial (sem entrada de imagem)",
+        "baseUrl": "http://192.168.3.161:3050/v1",
+        "envKey": "QWEN_CUSTOM_API_KEY_OPENAI_HTTP_192_168_2_4_3000_V1_763735AF7394",
+        "generationConfig": {
+          "timeout": 610000,
+          "maxRetries": 0,
+          "extra_body": {
+            "enable_thinking": true
+          },
+          "contextWindowSize": 1048576,
+          "modalities": {
+            "image": false
+          }
+        },
+        "capabilities": {
+          "agent": true,
+          "vision": false
+        }
+      },
+      {
+        "id": "codex-cli-6-astra",
+        "name": "Codex GPT-6 Astra",
+        "description": "Assinatura ChatGPT via Azigate (Responses API); texto, imagem, arquivo e áudio; efforts low..max",
+        "baseUrl": "http://192.168.3.161:3050/v1",
+        "envKey": "QWEN_CUSTOM_API_KEY_OPENAI_HTTP_192_168_2_4_3000_V1_763735AF7394",
+        "generationConfig": {
+          "timeout": 610000,
+          "maxRetries": 0,
+          "modalities": {
+            "image": true,
+            "pdf": true,
+            "audio": true
+          },
+          "contextWindowSize": 1050000
+        },
+        "capabilities": {
+          "agent": true,
+          "vision": true,
+          "reasoning": {
+            "profile": "openai-effort",
+            "efforts": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ],
+            "defaultEffort": "medium"
+          }
+        }
+      },
+      {
+        "id": "codex-cli-6.1-terra",
+        "name": "Codex GPT-6.1 Terra",
+        "description": "Assinatura ChatGPT via Azigate (Responses API); texto, imagem, arquivo e áudio; efforts none..max",
+        "baseUrl": "http://192.168.3.161:3050/v1",
+        "envKey": "QWEN_CUSTOM_API_KEY_OPENAI_HTTP_192_168_2_4_3000_V1_763735AF7394",
+        "generationConfig": {
+          "timeout": 610000,
+          "maxRetries": 0,
+          "modalities": {
+            "image": true,
+            "pdf": true,
+            "audio": true
+          },
+          "contextWindowSize": 1050000
+        },
+        "capabilities": {
+          "agent": true,
+          "vision": true,
+          "reasoning": {
+            "profile": "openai-effort",
+            "efforts": [
+              "none",
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ],
+            "defaultEffort": "medium"
+          }
+        }
+      },
+      {
+        "id": "codex-cli-6-sol",
+        "name": "Codex GPT-6 Sol",
+        "description": "Assinatura ChatGPT via Azigate (Responses API); texto, imagem, arquivo e áudio; efforts none..max",
+        "baseUrl": "http://192.168.3.161:3050/v1",
+        "envKey": "QWEN_CUSTOM_API_KEY_OPENAI_HTTP_192_168_2_4_3000_V1_763735AF7394",
+        "generationConfig": {
+          "timeout": 610000,
+          "maxRetries": 0,
+          "modalities": {
+            "image": true,
+            "pdf": true,
+            "audio": true
+          },
+          "contextWindowSize": 1050000
+        },
+        "capabilities": {
+          "agent": true,
+          "vision": true,
+          "reasoning": {
+            "profile": "openai-effort",
+            "efforts": [
+              "none",
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ],
+            "defaultEffort": "medium"
+          }
+        }
+      },
+      {
+        "id": "codex-cli-6-luna",
+        "name": "Codex GPT-6 Luna",
+        "description": "Assinatura ChatGPT via Azigate (Responses API); texto, imagem, arquivo e áudio; efforts none..max",
+        "baseUrl": "http://192.168.3.161:3050/v1",
+        "envKey": "QWEN_CUSTOM_API_KEY_OPENAI_HTTP_192_168_2_4_3000_V1_763735AF7394",
+        "generationConfig": {
+          "timeout": 610000,
+          "maxRetries": 0,
+          "modalities": {
+            "image": true,
+            "pdf": true,
+            "audio": true
+          },
+          "contextWindowSize": 1050000
+        },
+        "capabilities": {
+          "agent": true,
+          "vision": true,
+          "reasoning": {
+            "profile": "openai-effort",
+            "efforts": [
+              "none",
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ],
+            "defaultEffort": "medium"
+          }
+        }
+      },
+      {
+        "id": "codex-cli-sol",
+        "name": "Codex GPT-5.6 Sol",
+        "description": "Assinatura ChatGPT via Azigate (Responses API); texto, imagem, arquivo e áudio; efforts none..max",
+        "baseUrl": "http://192.168.3.161:3050/v1",
+        "envKey": "QWEN_CUSTOM_API_KEY_OPENAI_HTTP_192_168_2_4_3000_V1_763735AF7394",
+        "generationConfig": {
+          "timeout": 610000,
+          "maxRetries": 0,
+          "modalities": {
+            "image": true,
+            "pdf": true,
+            "audio": true
+          },
+          "contextWindowSize": 1050000
+        },
+        "capabilities": {
+          "agent": true,
+          "vision": true,
+          "reasoning": {
+            "profile": "openai-effort",
+            "efforts": [
+              "none",
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ],
+            "defaultEffort": "medium"
+          }
+        }
+      },
+      {
+        "id": "codex-cli-terra",
+        "name": "Codex GPT-5.6 Terra",
+        "description": "Assinatura ChatGPT via Azigate (Responses API); texto, imagem, arquivo e áudio; efforts none..max",
+        "baseUrl": "http://192.168.3.161:3050/v1",
+        "envKey": "QWEN_CUSTOM_API_KEY_OPENAI_HTTP_192_168_2_4_3000_V1_763735AF7394",
+        "generationConfig": {
+          "timeout": 610000,
+          "maxRetries": 0,
+          "modalities": {
+            "image": true,
+            "pdf": true,
+            "audio": true
+          },
+          "contextWindowSize": 1050000
+        },
+        "capabilities": {
+          "agent": true,
+          "vision": true,
+          "reasoning": {
+            "profile": "openai-effort",
+            "efforts": [
+              "none",
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ],
+            "defaultEffort": "medium"
+          }
+        }
+      },
+      {
+        "id": "codex-cli-luna",
+        "name": "Codex GPT-5.6 Luna",
+        "description": "Assinatura ChatGPT via Azigate (Responses API); texto, imagem, arquivo e áudio; efforts none..max",
+        "baseUrl": "http://192.168.3.161:3050/v1",
+        "envKey": "QWEN_CUSTOM_API_KEY_OPENAI_HTTP_192_168_2_4_3000_V1_763735AF7394",
+        "generationConfig": {
+          "timeout": 610000,
+          "maxRetries": 0,
+          "modalities": {
+            "image": true,
+            "pdf": true,
+            "audio": true
+          },
+          "contextWindowSize": 1050000
+        },
+        "capabilities": {
+          "agent": true,
+          "vision": true,
+          "reasoning": {
+            "profile": "openai-effort",
+            "efforts": [
+              "none",
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ],
+            "defaultEffort": "medium"
+          }
+        }
+      },
+      {
+        "id": "codex-cli-5.5",
+        "name": "Codex GPT-5.5",
+        "description": "Assinatura ChatGPT via Azigate (Responses API); texto, imagem, arquivo e áudio; efforts none..xhigh",
+        "baseUrl": "http://192.168.3.161:3050/v1",
+        "envKey": "QWEN_CUSTOM_API_KEY_OPENAI_HTTP_192_168_2_4_3000_V1_763735AF7394",
+        "generationConfig": {
+          "timeout": 610000,
+          "maxRetries": 0,
+          "modalities": {
+            "image": true,
+            "pdf": true,
+            "audio": true
+          },
+          "contextWindowSize": 1050000
+        },
+        "capabilities": {
+          "agent": true,
+          "vision": true,
+          "reasoning": {
+            "profile": "openai-effort",
+            "efforts": [
+              "none",
+              "low",
+              "medium",
+              "high",
+              "xhigh"
+            ],
+            "defaultEffort": "medium"
+          }
+        }
+      },
+      {
+        "id": "codex-cli-5.4",
+        "name": "Codex GPT-5.4",
+        "description": "Assinatura ChatGPT via Azigate (Responses API); texto, imagem, arquivo e áudio; efforts none..xhigh",
+        "baseUrl": "http://192.168.3.161:3050/v1",
+        "envKey": "QWEN_CUSTOM_API_KEY_OPENAI_HTTP_192_168_2_4_3000_V1_763735AF7394",
+        "generationConfig": {
+          "timeout": 610000,
+          "maxRetries": 0,
+          "modalities": {
+            "image": true,
+            "pdf": true,
+            "audio": true
+          },
+          "contextWindowSize": 1050000
+        },
+        "capabilities": {
+          "agent": true,
+          "vision": true,
+          "reasoning": {
+            "profile": "openai-effort",
+            "efforts": [
+              "none",
+              "low",
+              "medium",
+              "high",
+              "xhigh"
+            ],
+            "defaultEffort": "medium"
+          }
+        }
+      },
+      {
+        "id": "claude-cli-opus-5.5",
+        "name": "Claude Opus 5.5",
+        "description": "Assinatura Claude via Azigate (Messages API); texto, imagem e PDF; efforts low..max.",
+        "baseUrl": "http://192.168.3.161:3050/v1",
+        "envKey": "QWEN_CUSTOM_API_KEY_OPENAI_HTTP_192_168_2_4_3000_V1_763735AF7394",
+        "generationConfig": {
+          "timeout": 610000,
+          "maxRetries": 0,
+          "modalities": {
+            "image": true,
+            "pdf": true
+          },
+          "contextWindowSize": 1000000
+        },
+        "capabilities": {
+          "agent": true,
+          "vision": true,
+          "reasoning": {
+            "profile": "openai-effort",
+            "efforts": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ],
+            "defaultEffort": "medium"
+          }
+        }
+      },
+      {
+        "id": "claude-cli-fable-5.1",
+        "name": "Claude Fable 5.1",
+        "description": "Assinatura Claude via Azigate (Messages API); texto, imagem e PDF; efforts low..max.",
+        "baseUrl": "http://192.168.3.161:3050/v1",
+        "envKey": "QWEN_CUSTOM_API_KEY_OPENAI_HTTP_192_168_2_4_3000_V1_763735AF7394",
+        "generationConfig": {
+          "timeout": 610000,
+          "maxRetries": 0,
+          "modalities": {
+            "image": true,
+            "pdf": true
+          },
+          "contextWindowSize": 1000000
+        },
+        "capabilities": {
+          "agent": true,
+          "vision": true,
+          "reasoning": {
+            "profile": "openai-effort",
+            "efforts": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ],
+            "defaultEffort": "high"
+          }
+        }
+      },
+      {
+        "id": "claude-cli-sonnet-5",
+        "name": "Claude Sonnet 5",
+        "description": "Assinatura Claude via Azigate (Messages API); texto, imagem e PDF; efforts low..max. Gate aprovado.",
+        "baseUrl": "http://192.168.3.161:3050/v1",
+        "envKey": "QWEN_CUSTOM_API_KEY_OPENAI_HTTP_192_168_2_4_3000_V1_763735AF7394",
+        "generationConfig": {
+          "timeout": 610000,
+          "maxRetries": 0,
+          "modalities": {
+            "image": true,
+            "pdf": true
+          },
+          "contextWindowSize": 1000000
+        },
+        "capabilities": {
+          "agent": true,
+          "vision": true,
+          "reasoning": {
+            "profile": "openai-effort",
+            "efforts": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ],
+            "defaultEffort": "high"
+          }
+        }
+      },
+      {
+        "id": "claude-cli-haiku-4.5",
+        "name": "Claude Haiku 4.5",
+        "description": "Assinatura Claude via Azigate; sem effort. Gate reprovado em 18/07/2026 para uso agêntico.",
+        "baseUrl": "http://192.168.3.161:3050/v1",
+        "envKey": "QWEN_CUSTOM_API_KEY_OPENAI_HTTP_192_168_2_4_3000_V1_763735AF7394",
+        "generationConfig": {
+          "timeout": 610000,
+          "maxRetries": 0,
+          "modalities": {
+            "image": true,
+            "pdf": true
+          },
+          "contextWindowSize": 200000
+        },
+        "capabilities": {
+          "agent": true,
+          "vision": true
+        }
+      }
+    ]
+  },
+  "security": {
+    "auth": {
+      "selectedType": "openai"
+    }
+  },
+  "model": {
+    "name": "codex-cli-luna",
+    "baseUrl": "http://192.168.3.161:3050/v1",
+    "reasoningEffort": "medium",
+    "sessionTokenLimit": -1,
+    "skipStartupContext": false,
+    "visionModel": "openai:codex-cli-luna"
+  },
+  "context": {
+    "autoCompactThreshold": 0.35
+  }
+}

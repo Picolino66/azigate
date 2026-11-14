@@ -23,6 +23,11 @@ describe('providers CLI', () => {
 
   it('publica todos os aliases Codex quando o provider está habilitado', () => {
     expect(enabledCliAliases(createTestConfig({ enableCodexCli: true }))).toEqual([
+      { alias: 'codex-cli-6-astra', provider: 'codex' },
+      { alias: 'codex-cli-6.1-sol', provider: 'codex' },
+      { alias: 'codex-cli-6.1-terra', provider: 'codex' },
+      { alias: 'codex-cli-6-sol', provider: 'codex' },
+      { alias: 'codex-cli-6-luna', provider: 'codex' },
       { alias: 'codex-cli-sol', provider: 'codex' },
       { alias: 'codex-cli-terra', provider: 'codex' },
       { alias: 'codex-cli-luna', provider: 'codex' },
@@ -33,10 +38,10 @@ describe('providers CLI', () => {
   })
 
   it('reserva e publica os aliases Claude com modelos versionados', () => {
-    expect(resolveProvider('claude-cli-opus-5', createTestConfig())).toMatchObject({
+    expect(resolveProvider('claude-cli-sonnet-5', createTestConfig())).toMatchObject({
       kind: 'cli',
       provider: 'claude',
-      model: 'claude-opus-5',
+      model: 'claude-sonnet-5',
       enabled: false,
     })
     expect(resolveProvider('claude-cli', createTestConfig())).toMatchObject({
@@ -45,10 +50,10 @@ describe('providers CLI', () => {
       model: 'claude-opus-5-5',
     })
     expect(resolveProvider('claude-cli-opus-4.8', createTestConfig())).toEqual({ kind: 'unknown-cli' })
+    expect(resolveProvider('claude-cli-opus-5', createTestConfig())).toEqual({ kind: 'unknown-cli' })
     expect(resolveProvider('codex-cli-inexistente', createTestConfig())).toEqual({ kind: 'unknown-cli' })
     expect(enabledCliAliases(createTestConfig({ enableClaudeCli: true }))).toEqual([
       { alias: 'claude-cli-opus-5.5', provider: 'claude' },
-      { alias: 'claude-cli-opus-5', provider: 'claude' },
       { alias: 'claude-cli-fable-5.1', provider: 'claude' },
       { alias: 'claude-cli-sonnet-5', provider: 'claude' },
       { alias: 'claude-cli-haiku-4.5', provider: 'claude' },
@@ -56,14 +61,13 @@ describe('providers CLI', () => {
     ])
   })
 
-  it('mapeia os seis aliases Claude para modelos internos fixos', () => {
+  it('mapeia os cinco aliases Claude para modelos internos fixos', () => {
     expect(Object.fromEntries(
       Object.entries(CLI_ALIASES)
         .filter(([, configuration]) => configuration.provider === 'claude')
         .map(([alias, configuration]) => [alias, configuration.model]),
     )).toEqual({
       'claude-cli-opus-5.5': 'claude-opus-5-5',
-      'claude-cli-opus-5': 'claude-opus-5',
       'claude-cli-fable-5.1': 'claude-fable-5-1',
       'claude-cli-sonnet-5': 'claude-sonnet-5',
       'claude-cli-haiku-4.5': 'claude-haiku-4-5',
@@ -72,13 +76,21 @@ describe('providers CLI', () => {
   })
 
   it('catálogo Codex define defaults e efforts efetivos', () => {
-    expect(CODEX_MODEL_CATALOG).toEqual({
-      'gpt-5.6-sol': { efforts: ['low', 'medium', 'high', 'xhigh'], defaultEffort: 'medium' },
-      'gpt-5.6-terra': { efforts: ['low', 'medium', 'high', 'xhigh'], defaultEffort: 'medium' },
-      'gpt-5.6-luna': { efforts: ['low', 'medium', 'high', 'xhigh'], defaultEffort: 'medium' },
-      'gpt-5.5': { efforts: ['low', 'medium', 'high', 'xhigh'], defaultEffort: 'medium' },
-      'gpt-5.4': { efforts: ['low', 'medium', 'high', 'xhigh'], defaultEffort: 'medium' },
-    })
+    const full = ['none', 'low', 'medium', 'high', 'xhigh', 'max']
+    const withoutNone = full.slice(1)
+    const withoutMax = full.slice(0, -1)
+    expect(CODEX_MODEL_CATALOG).toEqual(Object.fromEntries(Object.entries({
+      'gpt-6-astra': withoutNone,
+      'gpt-6.1-sol': withoutNone,
+      'gpt-6.1-terra': full,
+      'gpt-6-sol': full,
+      'gpt-6-luna': full,
+      'gpt-5.6-sol': full,
+      'gpt-5.6-terra': full,
+      'gpt-5.6-luna': full,
+      'gpt-5.5': withoutMax,
+      'gpt-5.4': withoutMax,
+    }).map(([model, efforts]) => [model, { efforts, defaultEffort: 'medium' }])))
   })
 
   it('catálogo Claude define a matriz de effort esperada', () => {
@@ -88,7 +100,6 @@ describe('providers CLI', () => {
         defaultEffort: 'medium',
         forcedToolChoice: false,
       },
-      'claude-opus-5': { efforts: ['low', 'medium', 'high', 'xhigh', 'max'], defaultEffort: 'high' },
       'claude-fable-5-1': {
         efforts: ['low', 'medium', 'high', 'xhigh', 'max'],
         defaultEffort: 'high',

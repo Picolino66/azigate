@@ -64,6 +64,7 @@ export class ScriptedProvider implements AgentProvider {
   readonly adapterVersion = '1'
   readonly protocolVersion = 'scripted-v1'
   readonly efforts = ['low', 'high'] as const
+  readonly remoteApprovals: 'native' | 'gateway' = 'gateway'
   runtimes: ScriptedRuntime[] = []
   resumeCalls: string[] = []
   failCreate = false

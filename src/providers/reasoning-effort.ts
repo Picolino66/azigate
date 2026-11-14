@@ -43,10 +43,13 @@ export function resolveCliEffort(
     if (!isCodexCliModel(model)) throw new InvalidReasoningEffortError('Modelo Codex interno inválido')
     const configuration = CODEX_MODEL_CATALOG[model]
     if (value === undefined) return configuration.defaultEffort
-    if (value === 'max') return 'xhigh'
-    return configuration.efforts.includes(value) ? value : configuration.defaultEffort
+    if (!configuration.efforts.includes(value)) {
+      throw new InvalidReasoningEffortError('reasoning effort não suportado pelo modelo Codex')
+    }
+    return value
   }
 
+  if (value === 'none') throw new InvalidReasoningEffortError('reasoning effort não suportado pelo Claude')
   if (!isClaudeCliModel(model)) throw new InvalidReasoningEffortError('Modelo Claude interno inválido')
   const configuration = CLAUDE_MODEL_CATALOG[model]
   if (value === undefined) return configuration.defaultEffort

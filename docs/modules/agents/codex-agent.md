@@ -15,7 +15,8 @@ os aliases `codex-cli-*` do Model Plane, que são **model adapters** HTTP.
 
 ## Entrada
 
-`model`, `effort` (`low`, `medium`, `high`, `xhigh`), `permissionMode` e workspace local.
+`model`, `effort` (`none`, `low`, `medium`, `high`, `xhigh`, `max`), `permissionMode` e workspace local ou
+remoto (máquina B).
 
 ## Saída
 
@@ -36,15 +37,23 @@ Binário `codex` (`CODEX_BINARY`) autenticado pelo próprio `codex login`; `CODE
 - Política: `review` → `approvalPolicy: untrusted` + `sandbox: workspace-write`;
   `acceptEdits` → `on-request` + `workspace-write`; `plan` → `untrusted` + `read-only`.
   Nunca `never` nem `danger-full-access`.
+- O agentd valida a enum geral de effort; a compatibilidade entre modelo e effort é decidida pela CLI nativa.
 - Turno: `turn/start` com `input: [{type:"text", text, text_elements: []}]` e `effort`.
   Cancelamento: `turn/interrupt`. `turn/completed` com `interrupted` → `turn_cancelled`;
   `failed` → `agent_turn_failed`.
 - Itens `commandExecution`, `fileChange`, `mcpToolCall` (`mcp__<servidor>__<ferramenta>`),
   `dynamicToolCall`, `webSearch`, `imageGeneration`, `imageView` viram `tool.*`;
   `collabAgentToolCall` vira `subagent.*`.
-- Pedidos do servidor suportados: aprovações de comando, arquivo, permissões e os legados
-  `execCommandApproval`/`applyPatchApproval`. Os demais recebem `-32601`.
-- Workspace remoto não é suportado (ADR-023).
+- Pedidos do servidor suportados: aprovações de comando, arquivo, permissões, os legados
+  `execCommandApproval`/`applyPatchApproval` e elicitação MCP. Os demais recebem `-32601`.
+- Workspace remoto (ADR-025): `codex app-server --disable shell_tool --disable unified_exec
+  --disable browser_use --disable browser_use_external --disable computer_use --disable
+  in_app_browser`, servidor MCP por `-c mcp_servers.azigate_workspace.{command,args,env}` com
+  `default_tools_approval_mode="approve"` (o agentd aprova), os outros servidores MCP do usuário
+  desligados (reenviando o transporte, como o Codex 0.144.6 exige), thread com cwd vazio,
+  `sandbox: read-only` e `developerInstructions`. Pedidos nativos de comando/arquivo — que
+  rodariam na máquina A — são sempre negados. `mcpServer/elicitation/request` vira aprovação do
+  Azigate (modo URL recusado).
 - Saúde: `codex --version` e `codex login status` (código 0 = autenticado).
 
 ## Fluxo resumido

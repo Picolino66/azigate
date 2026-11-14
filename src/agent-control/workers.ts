@@ -6,14 +6,26 @@ import {
   parseWorkerMessage,
   type WorkerCapability,
   type WorkerMethod,
-} from '../worker-protocol/protocol.js'
-import type { WorkerIdentity } from '../worker-protocol/security.js'
-import { CLOSE_CODES, frameToText, sendJson, type WorkerSocket } from '../worker-protocol/transport.js'
+} from '../workspace/protocol/protocol.js'
+import type { WorkerIdentity } from '../workspace/security/token.js'
+import { CLOSE_CODES, frameToText, sendJson, type WorkerSocket } from '../workspace/protocol/transport.js'
 
 interface PendingCall {
   resolve(result: unknown): void
   reject(error: WorkerRpcError): void
   timer: NodeJS.Timeout
+}
+
+export interface McpChannelHandlers {
+  onMessage(message: Record<string, unknown>): void
+  onClose(): void
+}
+
+/** Canal MCP aberto com um workspace do worker; mensagens JSON-RPC vão e voltam opacas. */
+export interface McpChannel {
+  readonly id: string
+  send(message: Record<string, unknown>): boolean
+  close(): void
 }
 
 interface ConnectedWorker {
@@ -25,6 +37,7 @@ interface ConnectedWorker {
   connectedAt: number
   lastHeartbeatAt: number
   pending: Map<string, PendingCall>
+  channels: Map<string, McpChannelHandlers>
 }
 
 export interface WorkerView {
@@ -95,6 +108,16 @@ export class WorkerHub {
         worker.lastHeartbeatAt = this.now()
         return
       }
+      if (message.type === 'mcp.message') {
+        worker.channels.get(message.channel)?.onMessage(message.message)
+        return
+      }
+      if (message.type === 'mcp.closed') {
+        const handlers = worker.channels.get(message.channel)
+        worker.channels.delete(message.channel)
+        handlers?.onClose()
+        return
+      }
       if (message.type === 'rpc.response') {
         const pending = worker.pending.get(message.id)
         if (!pending) return
@@ -133,6 +156,10 @@ export class WorkerHub {
     return this.workers.has(workerId)
   }
 
+  hasCapability(workerId: string, capability: WorkerCapability): boolean {
+    return this.workers.get(workerId)?.capabilities.has(capability) ?? false
+  }
+
   hasWorkspace(workerId: string, workspace: string): boolean {
     return this.workers.get(workerId)?.workspaces.has(workspace) ?? false
   }
@@ -166,6 +193,27 @@ export class WorkerHub {
         reject(new WorkerRpcError('worker_unavailable', 'Worker não conectado'))
       }
     })
+  }
+
+  /** Abre um canal MCP com o servidor de workspace do worker (ADR-025). */
+  openMcpChannel(workerId: string, workspace: string, handlers: McpChannelHandlers): McpChannel {
+    const worker = this.workers.get(workerId)
+    if (!worker) throw new WorkerRpcError('worker_unavailable', 'Workspace server não conectado')
+    if (!worker.capabilities.has('mcp')) {
+      throw new WorkerRpcError('worker_unavailable', 'Workspace server sem suporte a MCP; atualize o azigate-workspace')
+    }
+    if (!worker.workspaces.has(workspace)) throw new WorkerRpcError('workspace_not_found', 'Workspace não disponível')
+    const id = newId('rpc').replace('rpc_', 'mcp_')
+    worker.channels.set(id, handlers)
+    sendJson(worker.socket, { type: 'mcp.open', channel: id, workspace })
+    return {
+      id,
+      send: (message) => worker.channels.has(id) && sendJson(worker.socket, { type: 'mcp.message', channel: id, message }),
+      close: () => {
+        if (!worker.channels.delete(id)) return
+        sendJson(worker.socket, { type: 'mcp.close', channel: id })
+      },
+    }
   }
 
   closeAll(): void {
@@ -209,6 +257,7 @@ export class WorkerHub {
       connectedAt: now,
       lastHeartbeatAt: now,
       pending: new Map(),
+      channels: new Map(),
     }
     this.workers.set(worker.id, worker)
     sendJson(socket, {
@@ -238,5 +287,8 @@ export class WorkerHub {
       pending.reject(new WorkerRpcError('worker_unavailable', 'Worker desconectado'))
     }
     worker.pending.clear()
+    const channels = [...worker.channels.values()]
+    worker.channels.clear()
+    for (const handlers of channels) handlers.onClose()
   }
 }

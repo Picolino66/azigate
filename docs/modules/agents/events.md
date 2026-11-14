@@ -40,6 +40,9 @@ SSE (`id`, `event`, `data`) ou frames `{id, event, native}`. Tipos:
   `inputTokens` e expõe `cache_read` em `cachedInputTokens`; Codex usa o breakdown
   `last` de `thread/tokenUsage/updated`; AGY usa `result.usage`
   (`thinking_tokens` → `reasoningTokens`, `cache_read_tokens` → `cachedInputTokens`).
+- `tool.started.summary` resume a chamada (caminho, argv, consulta). Ferramentas do workspace
+  remoto aparecem como `mcp__azigate_workspace__<ferramenta>` nos três providers (inclusive o
+  `call_mcp_tool` do AGY).
 - `turn.completed.output` traz o texto final quando o provider informa (`result.result`
   do Claude, `result.response` do AGY, última `agentMessage` do Codex).
 - O endpoint nativo é somente de saída: mensagens do cliente são ignoradas, porque o

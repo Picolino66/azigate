@@ -165,7 +165,7 @@ CODEX_TOKEN_FILE=secrets/codex-oauth.json
 CLAUDE_TOKEN_FILE=secrets/claude-oauth.json
 # ATENÇÃO: ALLOWED_MODELS filtra TODO o catálogo (upstream + aliases). Se preenchida,
 # inclua também os IDs do upstream que quer manter, senão só os aliases habilitados aparecem.
-ALLOWED_MODELS=deepseek-v4-pro,deepseek-v4-flash,claude-cli-opus-5.5
+ALLOWED_MODELS=deepseek-v4-pro,deepseek-flash,codex-cli-6-sol,claude-cli-opus-5.5
 ```
 
 O container precisa montar o diretório `secrets/` para ler e renovar o token —
@@ -227,7 +227,7 @@ via Nginx.
 - **`/v1/models` retorna 401:** falta o header `Authorization: Bearer <chave>` com
   uma das chaves definidas em `GATEWAY_API_KEYS`.
 - **403 `ip_not_allowed`:** o IP de origem não está em `ALLOWED_IPS`.
-- **403 `model_not_allowed`:** o `model` não está em `ALLOWED_MODELS`.
+- **403 `model_not_allowed`:** inclua o alias exato enviado pelo cliente (por exemplo, `codex-cli-6-sol`) em `ALLOWED_MODELS`, preservando os demais IDs, e recrie o serviço com `docker compose up -d --force-recreate gateway`. A validação ocorre antes da seleção do provedor e do effort. Se a imagem ainda não contiver o alias, atualize o código e reconstrua com `docker compose up -d --build gateway`.
 - **Alias retorna 503 `cli_unavailable`:** o provedor está desabilitado ou o login
   OAuth não foi feito (`CODEX_TOKEN_FILE`/`CLAUDE_TOKEN_FILE` ausente). Refaça o
   passo 4.1.

@@ -3,6 +3,7 @@ import { defineConfig } from 'vitest/config'
 export default defineConfig({
   test: {
     environment: 'node',
+    setupFiles: ['test/setup-home.ts'],
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],
@@ -14,7 +15,13 @@ export default defineConfig({
         'src/agentd/server.ts',
         'src/agentd/worker-token.ts',
         'src/worker/main.ts',
-        'src/mcp-bridge/main.ts',
+        'src/workspace/server/main.ts',
+        'src/agentd/mcp-bridge/main.ts',
+        'src/agentd/agy-remote.ts',
+        'src/agent-client/main.ts',
+        'src/agentd/client-setup-cli.ts',
+        // Ponto de entrada da extensão VS Code: só liga a API do editor ao SessionController.
+        'src/vscode-extension/extension.ts',
       ],
       reporter: ['text', 'json-summary'],
       thresholds: {

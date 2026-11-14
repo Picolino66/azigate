@@ -1,6 +1,6 @@
 # ADR-021 — Catálogo Claude da geração 5 e `tool_choice` forçado rebaixado
 
-- Status: aceito
+- Status: aceito (lista de aliases substituída pelo [ADR-027](ADR-027-catalogo-claude-espelha-seletor.md))
 - Fase: F7 (evolução de catálogo)
 - Data: 23/09/2026
 - Relaciona-se com: ADR-010 (supersede a lista de aliases e o alvo de `claude-cli`), ADR-016, ADR-018

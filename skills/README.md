@@ -15,3 +15,8 @@ O backend Fastify/TypeScript foi implementado pelo fluxo de engenharia do orques
 - `task-breakdown-engine` (complementar, F4): plano rastreável [NA-01..NA-14](../tasks/native-agent-plane-plan.md).
 - `defensive-security-auditor` (complementar, F2/F6): threat model do Agent Plane e quatro endurecimentos encontrados na revisão (FIFO, `.git`, expiração de token, retenção de sessões).
 - `ai-docs-self-healing` (complementar, F5/F6): módulo `docs/modules/agents/`, specs, runbook, índices e `CLAUDE.md`/`AGENTS.md`.
+
+## Ciclo `native-agent-plane-workspace` (25/09/2026)
+
+- `autonomous-software-orchestrator` (coordenadora, modos `architecture-review` → `feature-evolution`): reavaliação da arquitetura remota, ADR-025, NA-15..NA-19 e gates.
+- Nenhuma skill externa foi ativada neste ciclo; segurança e documentação seguiram os critérios de `defensive-security-auditor` e `ai-docs-self-healing` registrados no ciclo anterior.

@@ -2,23 +2,48 @@
 
 ## Dois planos
 
-Desde o [ADR-022](../adr/ADR-022-agent-plane-nativo.md) o azigate tem dois produtos
-lógicos, em processos separados:
+> **Model Plane permite que agentes locais usem modelos remotos. Native Agent Plane permite
+> que agentes remotos completos usem ambientes de execução locais.**
 
-| Plano | Processo | Finalidade | Estado |
-|---|---|---|---|
-| Model Plane | `azigate` (container) | API de modelos OpenAI-compatible (`/v1/...`) | stateless |
-| Agent Plane | `azigate-agentd` (host A) | Codex, Claude Code e AGY como agentes completos | sessões em SQLite |
+O azigate separa três níveis ([ADR-025](../adr/ADR-025-workspace-server-mcp-para-os-tres-agentes.md)):
+
+| Nível | Exemplos |
+|---|---|
+| Modelo | GPT, Claude, Gemini, DeepSeek |
+| Harness de agente | Qwen Code, Cline, Continue, Copilot, Claude Code, Codex, AGY |
+| Ambiente de execução | arquivos, shell, git, npm, testes, o projeto |
+
+E dois produtos, em processos separados ([ADR-022](../adr/ADR-022-agent-plane-nativo.md)):
+
+| Plano | Processo | Quem é o agente | Onde fica o projeto | Estado |
+|---|---|---|---|---|
+| Model Plane | `azigate` (container) | Qwen/Cline/IDE na máquina B | máquina B | stateless |
+| Native Agent Plane | `azigate-agentd` (host A) + `azigate-workspace` (máquina B) | Claude Code, Codex ou AGY na máquina A | máquina B (ou A, se local) | sessões em SQLite |
+
+```text
+MODEL PLANE                                  NATIVE AGENT PLANE
+Qwen/Cline (B)                               Claude / Codex / AGY (A)
+      │ /v1/chat/completions                          │ MCP
+      ▼                                               ▼
+Azigate A ──► modelo (upstream, Codex,        Workspace Server (B)
+               Claude via HTTP)                       │
+                                                      ▼
+                                                   projeto
+```
 
 ```text
                       ┌──────────── Nginx (TLS) ────────────┐
 Agente OpenAI-compat. ─► /health /ready /v1/models /v1/chat/completions ─► azigate :3000
 Cliente de agentes    ─► /agent/v1/*  /native/*                          ─► azigate-agentd :3100
-azigate-worker (B)    ─► /worker/v1/connect (WS de saída)                ─► azigate-agentd :3100
+azigate-workspace (B) ─► /worker/v1/connect (WS de saída)                ─► azigate-agentd :3100
 ```
 
+A separação é também de código: regras de ESLint (`no-restricted-imports`) impedem o Model Plane
+de importar o Agent Plane e vice-versa; só `config`, `security` e `observability` são comuns.
+
 As seções abaixo descrevem o **Model Plane**. O Agent Plane está em
-[Agent Plane](#agent-plane) e em [docs/modules/agents/](modules/agents/index.md).
+[Agent Plane](#agent-plane), em [docs/modules/agents/](modules/agents/index.md) e em
+[docs/modules/workspace/](modules/workspace/index.md).
 
 ## Contexto (Model Plane)
 
@@ -168,24 +193,37 @@ início do stream vira um evento `error` sanitizado e encerra sem `[DONE]`.
 O `azigate-agentd` integra cada agente pela interface programática natural dele e nunca
 converte eventos para Chat Completions:
 
-| Provider | Interface | Sessão nativa | Worker remoto |
+| Provider | Interface | Sessão nativa | Projeto na máquina B |
 |---|---|---|---|
-| Codex | `codex app-server` (JSON-RPC stdio) | `threadId` | não |
-| Claude Code | `claude -p` `stream-json` + protocolo de controle | `session_id` | sim, via MCP |
-| AGY | `agy` `stream-json` headless | `conversation_id` | não |
+| Codex | `codex app-server` (JSON-RPC stdio) | `threadId` | MCP via `-c mcp_servers.*`, recursos locais desligados |
+| Claude Code | `claude -p` `stream-json` + protocolo de controle | `session_id` | MCP via `--mcp-config`, `--tools` sem acesso local |
+| AGY | `agy` `stream-json` headless | `conversation_id` | MCP global + agente `azigate-workspace` sem componentes embutidos |
 
 - `src/agents/core/`: contrato `AgentProvider` (sessão, turno, evento, aprovação — sem
-  `messages`/`choices`), processos sem shell com grupo próprio, NDJSON limitado,
-  JSON-RPC e matriz de versões certificadas.
+  `messages`/`choices`), processos sem shell com grupo próprio, NDJSON limitado, JSON-RPC,
+  matriz de versões e instruções de workspace remoto.
 - `src/agent-control/`: `SessionService` (limites, ociosidade, timeout, retomada),
   aprovações, buffer de eventos em memória, `SessionStore` SQLite só com metadados
   ([ADR-024](../adr/ADR-024-persistencia-de-sessoes-e-dependencias-do-agent-plane.md)),
-  `WorkerHub` e ferramentas remotas.
-- `src/agentd/`: serviço Fastify com credenciais próprias (`AGENT_API_KEYS`), SSE e
-  WebSocket nativo somente de saída.
-- `src/worker/`, `src/worker-protocol/`, `src/mcp-bridge/`: execução remota na máquina do
-  projeto por conexão de saída, com jail por `realpath`
-  ([ADR-023](../adr/ADR-023-worker-remoto-e-isolamento-de-workspace.md)).
+  `WorkerHub` (conexões e canais MCP) e `WorkspaceRelay` (token por sessão e política).
+- `src/agentd/`: serviço Fastify com credenciais próprias (`AGENT_API_KEYS`), SSE, WebSocket
+  nativo somente de saída, socket MCP privado e a ponte `azigate-mcp-bridge`.
+- `src/workspace/`: o **Workspace Server** da máquina B — servidor MCP genérico, jail, Git
+  endurecido e execução por argv ([ADR-023](../adr/ADR-023-worker-remoto-e-isolamento-de-workspace.md),
+  [ADR-025](../adr/ADR-025-workspace-server-mcp-para-os-tres-agentes.md)).
+- `src/agent-client/`: `azigate-agent`, o chat de terminal.
+- `src/vscode-extension/`: extensão VS Code da máquina B, com painel de agentes e controle do
+  Workspace Server local, cliente da mesma Agent API
+  ([ADR-028](../adr/ADR-028-extensao-vscode-maquina-b.md)).
+
+Fluxos suportados:
+
+```text
+A) Qwen Code B ──/v1──► Azigate Model Plane A ──► modelo
+B) Claude Code A ──MCP──► Workspace Server B ──► projeto
+C) Codex A ──────MCP──► Workspace Server B ──► projeto
+D) AGY A ────────MCP──► Workspace Server B ──► projeto
+```
 
 A autenticação de cada agente é da própria CLI oficial. Os aliases `codex-cli-*` e
 `claude-cli-*` do Model Plane são **model adapters** (usam o modelo via HTTP); os agent
@@ -193,14 +231,15 @@ providers `codex`, `claude` e `agy` executam a CLI completa.
 
 Fronteiras adicionais do Agent Plane:
 
-5. Cliente de agentes → Nginx → agentd: TLS, `AGENT_API_KEYS`, allowlist de IP, rate
-   limit, isolamento de recursos por credencial.
-6. agentd → CLIs: `spawn` sem shell, argv montado em código, ambiente mínimo, cwd no
-   workspace escolhido por ID; nunca modos que pulam permissões.
-7. Worker (B) → agentd: WebSocket de saída com token HMAC de escopo por workspace;
-   `wss://` fora de loopback.
-8. Ponte MCP → agentd: socket Unix `0600` e token de capacidade por sessão.
-9. Worker → projeto: jail de caminhos, `.git` protegido, Git endurecido, execução por
+5. Cliente de agentes → Nginx/túnel → agentd: `AGENT_API_KEYS`, allowlist de IP, rate limit,
+   isolamento de recursos por credencial.
+6. agentd → CLIs: `spawn` sem shell, argv montado em código, ambiente mínimo, cwd no workspace
+   local ou num diretório vazio da sessão; nunca modos que pulam permissões.
+7. Workspace Server (B) → agentd: WebSocket de saída com token HMAC de escopo por workspace;
+   `wss://` fora de loopback (em LAN, túnel SSH).
+8. Agente → ponte MCP → relay: socket Unix `0600`, token de capacidade por sessão lido de um
+   arquivo `0600`; política (`plan`, aprovações) aplicada no relay.
+9. Workspace Server → projeto: jail de caminhos, `.git` protegido, Git endurecido, execução por
    argv desligada por padrão.
 
 ## Decisões
@@ -208,6 +247,7 @@ Fronteiras adicionais do Agent Plane:
 - [ADR-022](../adr/ADR-022-agent-plane-nativo.md): Agent Plane nativo, stateful e separado.
 - [ADR-023](../adr/ADR-023-worker-remoto-e-isolamento-de-workspace.md): worker remoto, jail e MCP.
 - [ADR-024](../adr/ADR-024-persistencia-de-sessoes-e-dependencias-do-agent-plane.md): SQLite de metadados e dependências WebSocket.
+- [ADR-025](../adr/ADR-025-workspace-server-mcp-para-os-tres-agentes.md): Workspace Server via MCP para os três agentes e separação explícita dos planos.
 - [ADR-005](../adr/ADR-005-registro-multiprovedor-e-broker-local.md): registry multiprovedor (parte do broker substituída pelo ADR-016).
 - [ADR-006](../adr/ADR-006-qwen-como-unico-executor.md): agente cliente como único executor (vale para o Model Plane; ver ADR-022).
 - [ADR-007](../adr/ADR-007-streaming-dividido-por-provedor.md): streaming por tipo de provedor (substituído pelo ADR-017).

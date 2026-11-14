@@ -7,7 +7,9 @@ import type {
   PermissionMode,
 } from '../core/agent-provider.js'
 import { minimalEnv } from '../core/process.js'
+import { AgentStartError } from '../core/process-session.js'
 import { parseVersion, runInspectionCommand } from '../core/versions.js'
+import { AGY_REMOTE_AGENT, agyRemoteStatus } from './agy-remote-setup.js'
 import { AgySession } from './agy-session.js'
 
 export const AGY_EFFORTS = ['low', 'medium', 'high'] as const
@@ -31,6 +33,8 @@ export interface AgyProviderConfig {
 
 export function buildAgyArgs(options: AgentSessionOptions, conversationId?: string): string[] {
   const args = ['--input-format', 'stream-json', '--output-format', 'stream-json']
+  // Workspace remoto: agente sem ferramentas embutidas da máquina A, só o MCP do Azigate.
+  if (options.workspace.kind === 'remote') args.push('--agent', AGY_REMOTE_AGENT)
   if (conversationId !== undefined) {
     if (!SAFE_NATIVE_ID.test(conversationId)) throw new Error('Identificador de conversa inválido')
     args.push('--conversation', conversationId)
@@ -46,7 +50,8 @@ export class AgyAgentProvider implements AgentProvider {
   readonly id = 'agy' as const
   readonly adapterVersion = '1'
   readonly protocolVersion = 'agy-stream-json-v1'
-  readonly supportsRemoteWorkspace = false
+  readonly supportsRemoteWorkspace = true
+  readonly remoteApprovals = 'gateway' as const
   readonly efforts = AGY_EFFORTS
 
   constructor(private readonly config: AgyProviderConfig) {}
@@ -92,12 +97,26 @@ export class AgyAgentProvider implements AgentProvider {
     context: AgentSessionContext,
     conversationId?: string,
   ): Promise<AgentRuntimeSession> {
-    if (options.workspace.kind !== 'local') throw new Error('O AGY não suporta workspace remoto nesta versão')
+    const source = this.config.env ?? process.env
+    const workspace = options.workspace
+    let cwd: string
+    let env: NodeJS.ProcessEnv
+    if (workspace.kind === 'local') {
+      cwd = workspace.root
+      env = minimalEnv(source)
+    } else {
+      if (!agyRemoteStatus(source.HOME ?? '').ready) {
+        throw new AgentStartError('AGY sem preparação para workspace remoto: rode npm run agy:remote -- install')
+      }
+      // A ponte MCP registrada no AGY herda o ambiente e descobre a sessão por esta variável.
+      cwd = options.sessionDir
+      env = minimalEnv(source, [], { ...workspace.mcp.env })
+    }
     return AgySession.start(context, {
       command: this.config.binary,
       args: buildAgyArgs(options, conversationId),
-      cwd: options.workspace.root,
-      env: minimalEnv(this.config.env ?? process.env),
+      cwd,
+      env,
       ...(conversationId ? { expectedConversationId: conversationId } : {}),
       ...(options.model ? { model: options.model } : {}),
       initTimeoutMs: this.config.initTimeoutMs ?? 30_000,

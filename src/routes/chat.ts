@@ -20,7 +20,8 @@ import type { DeepSeekClient } from '../upstream/client.js'
 import { forwardBufferedResponse, forwardStreamingResponse } from '../upstream/response.js'
 
 const LOGGABLE_DEEPSEEK_EFFORTS = new Set(['none', 'low', 'medium', 'high', 'xhigh', 'max'])
-const ANTHROPIC_DEFAULT_MAX_TOKENS = 8192
+// O thinking adaptativo consome max_tokens; com streaming o limite alto não causa timeout.
+const ANTHROPIC_DEFAULT_MAX_TOKENS = 64_000
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -145,7 +146,7 @@ export function registerChatRoute(
           const anthropicBody = translateOpenAiToAnthropic(chatBody, {
             model: selection.model,
             defaultMaxTokens: ANTHROPIC_DEFAULT_MAX_TOKENS,
-            ...(effort === undefined ? {} : { effort }),
+            ...(effort === undefined || effort === 'none' ? {} : { effort }),
             forcedToolChoice: isClaudeCliModel(selection.model) && claudeAcceptsForcedToolChoice(selection.model),
           })
           const exchange = await anthropicClient.request({

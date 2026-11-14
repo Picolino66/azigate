@@ -1,5 +1,5 @@
 import { execFile, spawn } from 'node:child_process'
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { chmodSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -11,9 +11,9 @@ import { isId, newId } from '../src/agents/core/ids.js'
 import { JsonRpcClosedError, JsonRpcConnection, JsonRpcRemoteError, JsonRpcTimeoutError } from '../src/agents/core/json-rpc.js'
 import { LineSplitter, parseJsonLine } from '../src/agents/core/ndjson.js'
 import { ManagedProcess, minimalEnv } from '../src/agents/core/process.js'
-import { WORKER_METHODS } from '../src/worker-protocol/protocol.js'
-import { verifyWorkerToken } from '../src/worker-protocol/security.js'
-import { WorkerHandler } from '../src/worker/handler.js'
+import { WORKER_METHODS } from '../src/workspace/protocol/protocol.js'
+import { verifyWorkerToken } from '../src/workspace/security/token.js'
+import { WorkerHandler } from '../src/workspace/server/handler.js'
 import { tempDir } from './helpers/agents.js'
 
 const run = promisify(execFile)
@@ -160,7 +160,7 @@ describe('utilitários do núcleo', () => {
   it('lança a ponte MCP pelo fonte TypeScript quando não há build ao lado', () => {
     const launch = defaultMcpBridgeLaunch()
     expect(launch.command).toBe(process.execPath)
-    expect(launch.args).toEqual(['--import', 'tsx', source('mcp-bridge/main.ts')])
+    expect(launch.args).toEqual(['--import', import.meta.resolve('tsx'), source('agentd/mcp-bridge/main.ts')])
   })
 
   it('despacha todos os métodos do worker', async () => {
@@ -213,39 +213,104 @@ describe('entrypoints de CLI (subprocesso)', () => {
     expect((result as { stderr: string }).stderr).toContain('--token-file')
   }, 30_000)
 
-  it('azigate-mcp-bridge fala MCP por stdio e encaminha ao socket do agentd', async () => {
+  it('azigate-mcp-bridge repassa MCP de forma transparente ao relay, autenticando pelo arquivo de sessão', async () => {
     const directory = tempDir('azb-')
-    mkdirSync(directory, { recursive: true })
     const socketPath = join(directory, 's.sock')
-    const received: unknown[] = []
+    const received: Record<string, unknown>[] = []
     const server = createServer((socket) => {
       socket.on('data', (chunk: Buffer) => {
         for (const line of chunk.toString('utf8').split('\n').filter(Boolean)) {
-          const message = JSON.parse(line) as { id: number }
+          const message = JSON.parse(line) as Record<string, unknown>
           received.push(message)
-          socket.write(`${JSON.stringify({ id: message.id, ok: true, result: { content: 'remoto', truncated: false } })}\n`)
+          if (typeof message.id === 'number') socket.write(`${JSON.stringify({ jsonrpc: '2.0', id: message.id, result: { eco: message.method } })}\n`)
         }
       })
     })
     await new Promise<void>((resolve) => server.listen(socketPath, resolve))
-    const bridge = spawn(tsx, [source('mcp-bridge/main.ts')], {
-      env: { PATH: process.env.PATH ?? '', AZIGATE_MCP_SOCKET: socketPath, AZIGATE_MCP_TOKEN: 'token-da-sessao' },
+    const sessionFile = join(directory, 'mcp-session.json')
+    writeFileSync(sessionFile, JSON.stringify({ socket: socketPath, token: 'token-da-sessao' }), { mode: 0o600 })
+    const bridge = spawn(tsx, [source('agentd/mcp-bridge/main.ts')], {
+      env: { PATH: process.env.PATH ?? '', AZIGATE_MCP_SESSION: sessionFile },
     })
     const output: string[] = []
     bridge.stdout.on('data', (chunk: Buffer) => output.push(...chunk.toString('utf8').split('\n').filter(Boolean)))
     bridge.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18' } })}\n`)
     bridge.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'read_file', arguments: { path: 'a' } } })}\n`)
     while (output.length < 2) await new Promise((resolve) => setTimeout(resolve, 20))
-    const responses = output.map((line) => JSON.parse(line) as { id: number; result: Record<string, unknown> })
-    expect(responses.find((response) => response.id === 1)?.result).toMatchObject({ serverInfo: { name: 'azigate-workspace' } })
-    expect(responses.find((response) => response.id === 2)?.result).toEqual({ content: [{ type: 'text', text: 'remoto' }], isError: false })
-    expect(received).toEqual([{ id: 1, token: 'token-da-sessao', tool: 'read_file', arguments: { path: 'a' } }])
+    expect(output.map((line) => JSON.parse(line) as unknown)).toEqual([
+      { jsonrpc: '2.0', id: 1, result: { eco: 'initialize' } },
+      { jsonrpc: '2.0', id: 2, result: { eco: 'tools/call' } },
+    ])
+    expect(received[0]).toEqual({ type: 'hello', token: 'token-da-sessao' })
+    expect(received[2]).toEqual({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'read_file', arguments: { path: 'a' } } })
     const exited = new Promise((resolve) => bridge.once('exit', resolve))
     bridge.stdin.end()
     expect(await exited).toBe(0)
     server.close()
 
-    const misconfigured = await run(tsx, [source('mcp-bridge/main.ts')], { env: { PATH: process.env.PATH ?? '' } }).catch((error: unknown) => error as { code: number })
-    expect(misconfigured).toMatchObject({ code: 2 })
+    const open = join(directory, 'aberto.json')
+    writeFileSync(open, JSON.stringify({ socket: socketPath, token: 'x' }), { mode: 0o644 })
+    chmodSync(open, 0o644)
+    const insecure = await run(tsx, [source('agentd/mcp-bridge/main.ts')], { env: { PATH: process.env.PATH ?? '', AZIGATE_MCP_SESSION: open } }).catch(
+      (error: unknown) => error as { code: number; stderr: string },
+    )
+    expect(insecure).toMatchObject({ code: 2 })
+  }, 30_000)
+
+  it('azigate-workspace --mcp-stdio serve o workspace a um cliente MCP local, sem gateway', async () => {
+    const root = tempDir('azw-')
+    writeFileSync(join(root, 'local.txt'), 'conteúdo local de B')
+    const configFile = join(tempDir(), 'workspace.json')
+    writeFileSync(configFile, JSON.stringify({ workspaces: { projeto: { path: root } } }))
+    const server = spawn(tsx, [source('workspace/server/main.ts'), '--config', configFile, '--mcp-stdio', '--workspace', 'projeto'], {
+      env: { PATH: process.env.PATH ?? '' },
+    })
+    const output: string[] = []
+    server.stdout.on('data', (chunk: Buffer) => output.push(...chunk.toString('utf8').split('\n').filter(Boolean)))
+    server.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18' } })}\n`)
+    server.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'read_file', arguments: { path: 'local.txt' } } })}\n`)
+    server.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'read_file', arguments: { path: '../fora' } } })}\n`)
+    while (output.length < 3) await new Promise((resolve) => setTimeout(resolve, 20))
+    const replies = output.map((line) => JSON.parse(line) as { id: number; result: Record<string, unknown> })
+    expect(replies.find((reply) => reply.id === 2)?.result).toEqual({ content: [{ type: 'text', text: 'conteúdo local de B' }], isError: false })
+    expect(replies.find((reply) => reply.id === 3)?.result).toMatchObject({ isError: true, content: [{ text: expect.stringContaining('path_outside_workspace') as unknown }] })
+    const exited = new Promise((resolve) => server.once('exit', resolve))
+    server.stdin.end()
+    expect(await exited).toBe(0)
+  }, 30_000)
+
+  it('azigate-workspace --mcp-stdio responde o que já recebeu mesmo com o stdin fechado logo em seguida', async () => {
+    const root = tempDir('azw-')
+    writeFileSync(join(root, 'local.txt'), 'conteúdo local de B')
+    const configFile = join(tempDir(), 'workspace.json')
+    writeFileSync(configFile, JSON.stringify({ workspaces: { projeto: { path: root } } }))
+    const server = spawn(tsx, [source('workspace/server/main.ts'), '--config', configFile, '--mcp-stdio', '--workspace', 'projeto'], {
+      env: { PATH: process.env.PATH ?? '' },
+    })
+    let output = ''
+    server.stdout.on('data', (chunk: Buffer) => (output += chunk.toString('utf8')))
+    const exited = new Promise((resolve) => server.once('exit', resolve))
+    server.stdin.end(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'read_file', arguments: { path: 'local.txt' } } })}\n`)
+    expect(await exited).toBe(0)
+    expect(JSON.parse(output.trim())).toMatchObject({ id: 1, result: { content: [{ text: 'conteúdo local de B' }] } })
+  }, 30_000)
+
+  it('azigate-mcp-bridge sem sessão do Azigate expõe zero ferramentas (uso fora do Azigate)', async () => {
+    const bridge = spawn(tsx, [source('agentd/mcp-bridge/main.ts')], { env: { PATH: process.env.PATH ?? '' } })
+    const output: string[] = []
+    bridge.stdout.on('data', (chunk: Buffer) => output.push(...chunk.toString('utf8').split('\n').filter(Boolean)))
+    for (const [id, method] of [[1, 'server/discover'], [2, 'initialize'], [3, 'tools/list'], [4, 'tools/call']] as const) {
+      bridge.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params: {} })}\n`)
+    }
+    bridge.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' })}\n`)
+    while (output.length < 4) await new Promise((resolve) => setTimeout(resolve, 20))
+    const replies = output.map((line) => JSON.parse(line) as { id: number; result?: Record<string, unknown>; error?: unknown })
+    expect(replies.find((reply) => reply.id === 1)?.result).toEqual({})
+    expect(replies.find((reply) => reply.id === 2)?.result).toMatchObject({ serverInfo: { name: 'azigate-workspace' } })
+    expect(replies.find((reply) => reply.id === 3)?.result).toEqual({ tools: [] })
+    expect(replies.find((reply) => reply.id === 4)?.error).toMatchObject({ code: -32601 })
+    const exited = new Promise((resolve) => bridge.once('exit', resolve))
+    bridge.stdin.end()
+    expect(await exited).toBe(0)
   }, 30_000)
 })

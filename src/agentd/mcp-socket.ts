@@ -1,12 +1,7 @@
 import { chmodSync, lstatSync, mkdirSync, unlinkSync } from 'node:fs'
-import { createServer, type Server, type Socket } from 'node:net'
+import { createServer, type Server } from 'node:net'
 import { dirname } from 'node:path'
-import { isRecord } from '../agents/core/agent-event.js'
-import { LineSplitter, parseJsonLine } from '../agents/core/ndjson.js'
-import type { RemoteToolGateway } from '../agent-control/remote-tools.js'
-import { WorkerRpcError } from '../worker-protocol/protocol.js'
-
-const MAX_LINE_BYTES = 8 * 1024 * 1024
+import type { WorkspaceRelay } from '../agent-control/workspace-relay.js'
 
 function removeStaleSocket(path: string): void {
   try {
@@ -17,42 +12,14 @@ function removeStaleSocket(path: string): void {
   }
 }
 
-function handleConnection(socket: Socket, gateway: RemoteToolGateway): void {
-  const reply = (payload: unknown): void => {
-    if (!socket.destroyed) socket.write(`${JSON.stringify(payload)}\n`)
-  }
-  const splitter = new LineSplitter(
-    MAX_LINE_BYTES,
-    (line) => {
-      const message = parseJsonLine(line)
-      if (!isRecord(message) || (typeof message.id !== 'number' && typeof message.id !== 'string')) {
-        socket.destroy()
-        return
-      }
-      const id = message.id
-      gateway
-        .call(message.token, message.tool, message.arguments)
-        .then((result) => reply({ id, ok: true, result }))
-        .catch((error: unknown) => {
-          const code = error instanceof WorkerRpcError ? error.code : 'io_error'
-          const text = error instanceof WorkerRpcError ? error.message : 'Falha ao executar a ferramenta remota'
-          reply({ id, ok: false, error: { code, message: text } })
-        })
-    },
-    () => socket.destroy(),
-  )
-  socket.on('data', (chunk: Buffer) => splitter.push(chunk))
-  socket.on('error', () => undefined)
-}
-
 /**
- * Socket Unix privado (0600) entre o `azigate-mcp-bridge` e o agentd (ADR-023). Cada linha
- * é uma chamada de ferramenta autenticada pelo token de capacidade da sessão.
+ * Socket Unix privado (0600) entre a ponte MCP dos agentes e o relay do agentd (ADR-025).
+ * Cada conexão começa com `{"type":"hello","token":"…"}` e depois carrega JSON-RPC MCP.
  */
-export async function startMcpSocketServer(path: string, gateway: RemoteToolGateway): Promise<Server> {
+export async function startMcpSocketServer(path: string, relay: WorkspaceRelay): Promise<Server> {
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
   removeStaleSocket(path)
-  const server = createServer((socket) => handleConnection(socket, gateway))
+  const server = createServer((socket) => relay.attach(socket))
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject)
     // O bind do socket Unix acontece dentro de listen(); a umask evita a janela com 0755.

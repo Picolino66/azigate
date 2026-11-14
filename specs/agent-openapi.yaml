@@ -242,7 +242,7 @@ components:
         workspace: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$' }
         worker: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$' }
         model: { type: string, pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$' }
-        effort: { enum: [low, medium, high, xhigh, max] }
+        effort: { enum: [none, low, medium, high, xhigh, max] }
         permissionMode: { enum: [review, acceptEdits, plan] }
     TurnSummary:
       type: object

@@ -1,6 +1,6 @@
 # ADR-023 — Worker remoto, isolamento de workspace e ferramentas via MCP
 
-- Status: aceito
+- Status: aceito; decisões 4, 6 e 7 substituídas pelo [ADR-025](./ADR-025-workspace-server-mcp-para-os-tres-agentes.md)
 - Fase: F2 (evolução arquitetural, ciclo `native-agent-plane`)
 - Data: 25/09/2026
 - Relaciona-se com: ADR-022, ADR-024
@@ -93,5 +93,13 @@ Restrições observadas nas CLIs instaladas:
 ## Consequências
 
 - Nova fronteira de confiança agentd ↔ worker e agentd ↔ bridge no threat model.
-- Protocolo em [`specs/worker-protocol.md`](../specs/worker-protocol.md).
-- Documentação operacional em [`docs/modules/agents/worker.md`](../docs/modules/agents/worker.md).
+- Protocolo em [`specs/workspace-protocol.md`](../specs/workspace-protocol.md).
+- Documentação operacional em [`docs/modules/workspace/server.md`](../docs/modules/workspace/server.md) (antes `docs/modules/agents/worker.md`, substituído pelo módulo `workspace` no ADR-025).
+
+## Adendo (25/09/2026)
+
+O adiamento de Codex e AGY remotos (decisão 7) e o desenho da ponte MCP (decisão 6) foram
+substituídos pelo [ADR-025](./ADR-025-workspace-server-mcp-para-os-tres-agentes.md): os três
+agentes operam o workspace da máquina B pelo Workspace Server via MCP. O restante deste ADR
+(identidade, token, jail, Git endurecido e execução por argv) continua valendo.
+

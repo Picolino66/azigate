@@ -1,45 +1,42 @@
 {
   "orchestration_id": "c16a8ea6-06e8-4ec2-bb2c-7ac4cd272dc5",
   "created_at": "2026-07-14T13:35:00Z",
-  "updated_at": "2026-09-25T16:30:00-03:00",
-  "mode": "feature-evolution",
+  "updated_at": "2026-11-13T22:10:00-03:00",
+  "mode": "architecture-review+feature-evolution",
   "current_phase": "F6",
-  "snapshot_version": "O5",
+  "snapshot_version": "O6-parcial",
   "last_stable_snapshot": "O5",
   "evolution_cycle": {
-    "name": "native-agent-plane",
-    "spec": "v2.md (fornecido pelo operador, fora do versionamento)",
-    "status": "F2-F5-concluidas-F6-parcial-check-verde-341-testes-cobertura-89-81-89-93-deploy-e-validacao-real-pendentes",
+    "name": "native-agent-plane-workspace",
+    "spec": "correção de arquitetura fornecida pelo operador em 25/09/2026 (Claude, Codex e AGY na máquina A operando o workspace da máquina B)",
+    "status": "F2-F5-concluidas-F6-check-verde-362-testes-cobertura-88.76-80.69-89.37-92.38-validacao-real-agy-e-claude-ok-codex-bloqueado-por-credencial-local",
     "reassessed_phases": [
       "F2",
       "F3",
-      "F4",
       "F5",
       "F6"
     ],
-    "plan": "tasks/native-agent-plane-plan.md",
-    "v2_phases": {
-      "fase-0-arquitetura": "concluida-ADR-022-ADR-023-ADR-024",
-      "fase-1-agent-core": "concluida-src-agents-core-src-agent-control-src-agentd",
-      "fase-2-agy": "concluida-stream-json-verificado-na-cli-1.2.10-e-1.2.11-step_update-inferido",
-      "fase-3-claude": "concluida-stream-json-e-controle-verificados-na-cli-2.1.280-handshake-real-local-e-remoto-ok",
-      "fase-4-codex": "concluida-app-server-v2-schema-gerado-pela-cli-0.144.6",
-      "fase-5-worker": "concluida-azigate-worker-ws-de-saida-token-hmac-jail",
-      "fase-6-claude-remote-workspace": "concluida-mcp-bridge-socket-unix-0600-token-por-sessao",
-      "fase-7-agy-remote-workspace": "adiada-sem-mcp-por-sessao-nem-aprovacao-headless-ADR-023",
-      "fase-8-codex-exec-server": "adiada-registro-remoto-experimental-e-acoplado-a-identidade-openai-ADR-023"
+    "plan": "tasks/native-agent-plane-plan.md (NA-15..NA-19; NA-14 parcialmente resolvida)",
+    "principle": "Model Plane permite que agentes locais usem modelos remotos. Native Agent Plane permite que agentes remotos completos usem ambientes de execução locais.",
+    "decisions": {
+      "workspace_server": "azigate-workspace (alias azigate-worker/start:worker): servidor MCP genérico na máquina B, conexão de saída por WebSocket com canais MCP multiplexados; não chama LLM",
+      "relay": "WorkspaceRelay no agentd: token por sessão via hello, plan e aprovações de Codex/AGY aplicados antes de repassar",
+      "bridge": "azigate-mcp-bridge lê AZIGATE_MCP_SESSION (mcp-session.json 0600); sem sessão expõe zero ferramentas",
+      "claude": "--tools Task,TodoWrite,WebFetch,WebSearch, --strict-mcp-config, --mcp-config por sessão, approvals nativas can_use_tool",
+      "codex": "MCP via -c mcp_servers.azigate_workspace; shell/unified_exec/browser/computer_use desligados; read-only; pedidos nativos negados; exec-server não usado",
+      "agy": "MCP global + agente azigate-workspace com excludeDefaultComponents e 16 regras de permissão; AGY_REMOTE_AUTO_SETUP",
+      "client": "azigate-agent chat <claude|codex|agy> <workspace>",
+      "boundary": "ESLint no-restricted-imports entre planos; Model Plane não movido para src/model-plane",
+      "client_package": "azigate-client: Workspace Server + azigate-agent em arquivo único (esbuild, ws embutido), npm install -g na máquina B; client:setup gera ~/.config/azigate (ADR-025, adendo de 29/09/2026)"
     },
     "evidence": {
-      "cli_versions_probed_without_quota": {
-        "codex": "0.144.6",
-        "claude": "2.1.280",
-        "agy": [
-          "1.2.10",
-          "1.2.11"
-        ]
+      "compat_suite": "test/workspace-compat.test.ts: 16 passos idênticos para claude, codex e agy com Workspace Server em outro processo e fixture existente só em B; modo plan",
+      "real_validation": {
+        "agy_1.2.11": "ok: leu fixture de B, criou arquivo em B após aprovação, git status, segundo turno lembrou o código",
+        "claude_2.1.280_sonnet": "ok: mesmas verificações, aprovação nativa can_use_tool",
+        "codex_0.144.6": "bloqueado: sessão inicia e MCP azigate_workspace fica ready, mas turnos falham com 401 da credencial local (codex exec direto falha igual) e o model gpt-6-sol do config.toml do operador não é suportado"
       },
-      "agy_autoupdate": "1.2.10->1.2.11 durante o ciclo; detectado como nao certificado e recertificado por sondagem",
-      "real_turns_executed": 0
+      "client_package": "workspace-compat.test.ts roda os 16 passos com o pacote empacotado, configurado pelo bloco do client:setup executado no bash e iniciado sem flags; client-setup.test.ts cobre argumentos, permissões e ordem de configuração"
     }
   },
   "product": {
@@ -103,7 +100,7 @@
       "aliases Codex dependem do login existente e de modelos internos fixados por allowlist",
       "Claude é opt-in e usa somente modelos fixados pelo catálogo e pela allowlist",
       "aliases CLI aceitam reasoning_effort ou reasoning.effort; o campo plano tem precedência",
-      "Codex aceita low, medium, high, xhigh ou max, usa medium por padrão e reduz max para xhigh",
+      "Codex usa medium por padrão e valida none, low, medium, high, xhigh e max conforme a matriz do modelo",
       "Claude aceita low, medium, high, xhigh ou max e aplica a matriz/default do modelo",
       "sem repositório/home completo no servidor ou sandbox",
       "Claude exige .claude.json privado; o original fica read-only no serviço e somente uma cópia efêmera entra na sandbox",
@@ -244,7 +241,11 @@
       "ADR-021",
       "ADR-022",
       "ADR-023",
-      "ADR-024"
+      "ADR-024",
+      "ADR-025",
+      "ADR-026",
+      "ADR-027",
+      "ADR-028"
     ]
   },
   "contracts": {
@@ -260,7 +261,7 @@
       "version": "agent/v1",
       "spec": "specs/agent-api.md",
       "openapi": "specs/agent-openapi.yaml",
-      "worker_protocol": "specs/worker-protocol.md (v1)"
+      "worker_protocol": "specs/workspace-protocol.md (v1)"
     }
   },
   "engineering": {
@@ -340,7 +341,7 @@
       "openapi": "specs/openapi.yaml",
       "agent_api": "specs/agent-api.md",
       "agent_openapi": "specs/agent-openapi.yaml",
-      "worker_protocol": "specs/worker-protocol.md"
+      "worker_protocol": "specs/workspace-protocol.md"
     },
     "tasks_workflow": {
       "plan": "tasks/implementation-plan.md",
@@ -447,14 +448,40 @@
       "F6-native-agent-plane-docker-build-e-compose-config",
       "F6-native-agent-plane-nginx-t-em-container",
       "F6-native-agent-plane-systemd-analyze-verify",
-      "F6-native-agent-plane-smoke-real-sem-cota-health-3-providers-handshake-claude-local-e-remoto"
+      "F6-native-agent-plane-smoke-real-sem-cota-health-3-providers-handshake-claude-local-e-remoto",
+      "F6-native-agent-plane-workspace-npm-run-check-lint-typecheck-362-testes-build",
+      "F6-native-agent-plane-workspace-test-coverage-88.76-80.69-89.37-92.38",
+      "F6-native-agent-plane-workspace-suite-comum-16-passos-3-providers",
+      "F6-native-agent-plane-workspace-links-internos-86-arquivos",
+      "F6-native-agent-plane-workspace-docker-compose-config",
+      "F6-native-agent-plane-workspace-validacao-real-agy-1.2.11",
+      "F6-native-agent-plane-workspace-validacao-real-claude-2.1.280",
+      "F6-native-agent-plane-workspace-docker-build",
+      "F6-client-package-npm-run-check-27-arquivos-380-testes",
+      "F6-client-package-test-coverage-88.94-80.97-89.49-92.51",
+      "F6-client-package-suite-comum-com-pacote-empacotado",
+      "F6-client-package-docker-build",
+      "F6-client-package-links-internos",
+      "F5-claude-catalogo-espelha-seletor-opus-5-removido-testes-regressao",
+      "F5-claude-max-tokens-default-64000-teste-regressao",
+      "F5-vscode-extension-lint-typecheck",
+      "F6-vscode-extension-16-testes-incluindo-ponta-a-ponta-com-agentd-e-workspace-server",
+      "F6-vscode-extension-cobertura-controller-97.4-linhas-conexao-100-webview-100",
+      "F6-vscode-extension-vsix-instalado-em-vscode-1.142-isolado",
+      "F6-vscode-extension-smoke-bundle-cjs-activate-deactivate",
+      "F6-check-verde-405-testes-cobertura-92.93-81.34-89.94-89.26",
+      "F6-vscode-extension-links-internos"
     ],
     "gates_failed": [
       "F5-claude-opus-4.7-estrutura-19-de-20",
       "F5-claude-sonnet-4.6-estrutura-18-de-20",
       "F5-claude-haiku-4.5-estrutura-19-de-20-categoria-11-de-20",
       "F7-oauth-refresh-diagnostico-audit-fast-uri-high-preexistente",
-      "F6-native-agent-plane-audit-high-preexistente-fast-uri-undici-fastify-identico-ao-HEAD-sem-contribuicao-das-dependencias-novas"
+      "F6-native-agent-plane-audit-high-preexistente-fast-uri-undici-fastify-identico-ao-HEAD-sem-contribuicao-das-dependencias-novas",
+      "F6-native-agent-plane-workspace-validacao-real-codex-0.144.6-credencial-local-401",
+      "F6-native-agent-plane-workspace-npm-audit-omit-dev-high-preexistente-undici-fast-uri-fastify",
+      "F6-client-package-npm-audit-omit-dev-high-preexistente-undici-fast-uri-fastify",
+      "F6-vscode-extension-npm-audit-omit-dev-high-preexistente-undici-fast-uri-fastify-sem-contribuicao-da-devdependency-nova"
     ],
     "gates_pending": [
       "F5-claude-gate-real-opus-5.5-opus-5-fable-5.1-pendente",
@@ -462,7 +489,9 @@
       "F8-validar-risco-deteccao-cliente-nao-oficial-anthropic-sem-cloaking",
       "F6-native-agent-plane-test-agents-real-com-turnos-reais-(consome-cota-do-operador)",
       "F6-native-agent-plane-deploy-agentd-no-host-e-nginx",
-      "F6-native-agent-plane-worker-real-em-maquina-B"
+      "F6-native-agent-plane-worker-real-em-maquina-B",
+      "F5-claude-gate-real-fable-5.1-e-opus-5.5-com-max-tokens-64000",
+      "F6-vscode-extension-uso-real-na-maquina-B-com-agentd-real"
     ],
     "test_results": {
       "files": 16,
@@ -486,6 +515,16 @@
         "note": "entrypoints de CLI excluidos e cobertos por smoke em subprocesso"
       },
       "security_report": "threat model e inventario atualizados; endurecimentos com regressao: O_NONBLOCK contra FIFO, .git imutavel pelo agente, conexao de worker encerrada na expiracao do token, retencao limitada de sessoes historicas"
+    },
+    "native_agent_plane_workspace": {
+      "test_results": "26 arquivos, 362 testes verdes",
+      "coverage_report": {
+        "statements": 88.76,
+        "branches": 80.69,
+        "functions": 89.37,
+        "lines": 92.38
+      },
+      "security_report": "threat model e inventário atualizados: relay, arquivo de sessão da ponte, ponte sem ferramentas fora de sessão, canais MCP limitados, isolamento remoto dos três agentes, configuração global do AGY"
     }
   },
   "operations": {
@@ -580,6 +619,14 @@
         "cause": "refresh token Claude provavelmente expirado/revogado/rotacionado (arquivo inalterado desde 25/08/2026); o gateway descartava status/código OAuth, mantinha o cache após a falha (novo login exigia restart) e perdia o refresh token rotacionado se a gravação falhasse",
         "evidence": "oauthRefreshStatus/oauthRefreshError sanitizados por allowlist no log; cache descartado na falha; token em memória antes da gravação; resposta pública inalterada; 230 testes verdes",
         "record": "docs/operations/incidents/2026-09-23-oauth-refresh-claude-sem-diagnostico.md"
+      },
+      {
+        "id": "INC-2026-09-25-TESTES-ALTERARAM-CONFIG-REAL-DO-AGY",
+        "severity": "P3",
+        "status": "resolvido",
+        "cause": "a preparação automática do AGY rodou em testes com o binário e o HOME reais e escreveu em ~/.gemini",
+        "recovery": "regras acrescentadas removidas, mcp_config.json restaurado do backup, diretório de agentes removido",
+        "prevention": "test/setup-home.ts dá HOME temporário a todo teste; suíte comum usa AGY falso; integração usa AGY_REMOTE_AUTO_SETUP=false; timestamps da configuração real conferidos após a suíte"
       }
     ],
     "agent_plane": {
@@ -822,6 +869,22 @@
         "mode": "complementar",
         "phase": "F5-F6",
         "timestamp": "2026-09-25T16:30:00-03:00"
+      },
+      {
+        "skill_name": "nenhuma",
+        "source": "-",
+        "reason": "ciclo native-agent-plane-workspace coordenado pela autonomous-software-orchestrator sem ativação de skill externa",
+        "mode": "-",
+        "phase": "F2-F6",
+        "timestamp": "2026-09-25T20:30:00-03:00"
+      },
+      {
+        "skill_name": "claude-api",
+        "source": "skill embutida do Claude Code",
+        "reason": "validar catálogo, thinking adaptativo, effort, tool_choice forçado e max_tokens do adaptador claude-cli-* contra a referência atual da Messages API",
+        "mode": "complementar",
+        "phase": "F5",
+        "timestamp": "2026-11-13T22:10:00-03:00"
       }
     ]
   },
@@ -855,6 +918,115 @@
         "adr": "ADR-018",
         "date": "2026-07-27"
       }
+    },
+    {
+      "name": "native-agent-plane",
+      "spec": "v2.md (fornecido pelo operador, fora do versionamento)",
+      "status": "F2-F5-concluidas-F6-parcial-check-verde-341-testes-cobertura-89-81-89-93-deploy-e-validacao-real-pendentes",
+      "reassessed_phases": [
+        "F2",
+        "F3",
+        "F4",
+        "F5",
+        "F6"
+      ],
+      "plan": "tasks/native-agent-plane-plan.md",
+      "v2_phases": {
+        "fase-0-arquitetura": "concluida-ADR-022-ADR-023-ADR-024",
+        "fase-1-agent-core": "concluida-src-agents-core-src-agent-control-src-agentd",
+        "fase-2-agy": "concluida-stream-json-verificado-na-cli-1.2.10-e-1.2.11-step_update-inferido",
+        "fase-3-claude": "concluida-stream-json-e-controle-verificados-na-cli-2.1.280-handshake-real-local-e-remoto-ok",
+        "fase-4-codex": "concluida-app-server-v2-schema-gerado-pela-cli-0.144.6",
+        "fase-5-worker": "concluida-azigate-worker-ws-de-saida-token-hmac-jail",
+        "fase-6-claude-remote-workspace": "concluida-mcp-bridge-socket-unix-0600-token-por-sessao",
+        "fase-7-agy-remote-workspace": "adiada-sem-mcp-por-sessao-nem-aprovacao-headless-ADR-023",
+        "fase-8-codex-exec-server": "adiada-registro-remoto-experimental-e-acoplado-a-identidade-openai-ADR-023"
+      },
+      "evidence": {
+        "cli_versions_probed_without_quota": {
+          "codex": "0.144.6",
+          "claude": "2.1.280",
+          "agy": [
+            "1.2.10",
+            "1.2.11"
+          ]
+        },
+        "agy_autoupdate": "1.2.10->1.2.11 durante o ciclo; detectado como nao certificado e recertificado por sondagem",
+        "real_turns_executed": 0
+      }
     }
-  ]
+  ],
+  "evolution_codex_models_2026_11_13": {
+    "mode": "feature-evolution",
+    "requirement": "Adicionar modelos e matriz de efforts Codex fornecidos pelo operador",
+    "decision": "ADR-026",
+    "external_skills": [
+      "ai-docs-self-healing"
+    ],
+    "validation": "npm run check aprovado: lint, typecheck, 386 testes e build; sem validação real da disponibilidade dos modelos",
+    "last_stable_snapshot": "O5"
+  },
+  "evolution_claude_catalog_and_vscode_2026_11_13": {
+    "mode": "feature-evolution",
+    "requirements": [
+      "Catálogo claude-cli-* igual ao seletor da assinatura: Opus 5.5, Fable 5.1, Sonnet 5 e Haiku 4.5",
+      "Corrigir max_tokens padrão do adaptador Anthropic (8192 cortava respostas com thinking em efforts altos)",
+      "Extensão VS Code para a máquina B usar o Native Agent Plane"
+    ],
+    "decisions": [
+      "ADR-027",
+      "ADR-028"
+    ],
+    "traceability": {
+      "ADR-027": {
+        "code": [
+          "src/cli-catalog.ts",
+          "src/routes/chat.ts",
+          "src/observability/log-colors.ts"
+        ],
+        "tests": [
+          "test/providers.test.ts",
+          "test/cli-gateway.integration.test.ts",
+          "test/reasoning-effort.test.ts"
+        ],
+        "docs": [
+          "docs/modules/providers/claude-cli.md",
+          "docs/modules/translation/openai-to-anthropic.md",
+          "specs/gateway-api.md",
+          "docs/operations/openai-compatible-agents.md",
+          "docs/operations/qwen-code.md",
+          "README.md",
+          ".env.example",
+          "settings-qwen.json"
+        ]
+      },
+      "ADR-028": {
+        "code": [
+          "src/vscode-extension/",
+          "tools/vscode-package.ts",
+          "tools/build-vscode.ts",
+          "src/agent-client/settings.ts"
+        ],
+        "tests": [
+          "test/vscode-extension.test.ts"
+        ],
+        "docs": [
+          "docs/modules/vscode-extension/",
+          "docs/security/threat-model.md",
+          "docs/architecture.md",
+          "docs/operations/agent-plane.md",
+          "README.md"
+        ]
+      }
+    },
+    "contract_changes": "nenhuma na Agent API; Model Plane: alias claude-cli-opus-5 passa a 400 invalid_model",
+    "dependencies": "@types/vscode 1.100.0 (devDependency fixada, sem transitivas)",
+    "known_limitations": [
+      "exemplo.json (ignorado pelo git) ainda cita claude-cli-opus-5",
+      "retomada de sessão (--resume) não implementada na extensão",
+      "blocos de thinking não são reenviados à Anthropic entre turnos (limitação do formato OpenAI)"
+    ],
+    "validation": "npm run check verde (405 testes); cobertura 92.93/81.34/89.94/89.26; vsix instalado em VS Code 1.142 isolado; audit high preexistente",
+    "last_stable_snapshot": "O5"
+  }
 }

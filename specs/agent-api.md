@@ -4,7 +4,7 @@ Contrato do serviço de agentes nativos definido pelo
 [ADR-022](../adr/ADR-022-agent-plane-nativo.md). Este contrato **não é
 OpenAI-compatible** e não substitui o [contrato do Model Plane](./gateway-api.md).
 OpenAPI: [agent-openapi.yaml](./agent-openapi.yaml). Protocolo do worker:
-[worker-protocol.md](./worker-protocol.md).
+[workspace-protocol.md](./workspace-protocol.md).
 
 ## Rotas
 
@@ -47,11 +47,17 @@ aprovações, sem revelar a existência do recurso.
 
 ## Providers
 
-| `provider` | Sinônimo aceito | Interface nativa | Sessão nativa | Worker remoto |
+| `provider` | Sinônimo aceito | Interface nativa | Sessão nativa | Workspace remoto (máquina B) |
 |---|---|---|---|---|
-| `codex` | `codex-agent` | `codex app-server` (JSON-RPC stdio) | `threadId` | não (ADR-023) |
-| `claude` | `claude-agent` | `claude -p` `stream-json` + controle | `session_id` | sim, via MCP |
-| `agy` | `agy-agent` | `agy` `stream-json` | `conversation_id` | não (ADR-023) |
+| `codex` | `codex-agent` | `codex app-server` (JSON-RPC stdio) | `threadId` | sim, MCP via `-c mcp_servers.*` |
+| `claude` | `claude-agent` | `claude -p` `stream-json` + controle | `session_id` | sim, MCP via `--mcp-config` |
+| `agy` | `agy-agent` | `agy` `stream-json` | `conversation_id` | sim, MCP global + agente `azigate-workspace` |
+
+Com `worker`, o runtime do agente fica na máquina A e o projeto na máquina B, alcançado pelo
+Workspace Server via MCP ([ADR-025](../adr/ADR-025-workspace-server-mcp-para-os-tres-agentes.md)).
+As ferramentas embutidas que acessariam a máquina A ficam desligadas e o cwd do agente é um
+diretório vazio e privado da sessão. Sem `worker`, o workspace é local da máquina A
+(`AGENT_WORKSPACES_FILE`).
 
 Os aliases `codex-cli-*`/`claude-cli-*` pertencem ao Model Plane (model adapters) e não
 são aceitos aqui.
@@ -69,7 +75,7 @@ são aceitos aqui.
     "available": true,
     "adapterVersion": "1",
     "protocol": "codex-app-server-v2",
-    "remoteWorkspace": false
+    "remoteWorkspace": true
   }
 }
 ```
@@ -88,9 +94,9 @@ Corpo (campos desconhecidos são recusados):
 |---|---|---|
 | `provider` | string | obrigatório; tabela acima |
 | `workspace` | string | obrigatório; `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$` |
-| `worker` | string | opcional; mesmo formato; ausente = workspace local do host A |
+| `worker` | string | opcional; mesmo formato; Workspace Server que expõe o workspace (máquina B); ausente = workspace local do host A |
 | `model` | string | opcional; `^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$`; ausente = padrão da CLI |
-| `effort` | string | opcional; Codex `low`,`medium`,`high`,`xhigh`; Claude `low`,`medium`,`high`,`xhigh`,`max`; AGY `low`,`medium`,`high` |
+| `effort` | string | opcional; Codex `none`,`low`,`medium`,`high`,`xhigh`,`max` (compatibilidade por modelo validada pela CLI); Claude `low`,`medium`,`high`,`xhigh`,`max`; AGY `low`,`medium`,`high` |
 | `permissionMode` | string | opcional; `review` (padrão), `acceptEdits`, `plan` |
 
 Resposta `201`:
@@ -192,7 +198,7 @@ Tipos universais:
 | `turn.started` | — |
 | `message.delta` | `text` |
 | `reasoning.delta` | `text` |
-| `tool.started` | `tool`, `toolCallId` |
+| `tool.started` | `tool`, `toolCallId`, `summary` (caminho, argv ou consulta, quando houver). Ferramentas remotas: `mcp__azigate_workspace__<ferramenta>` nos três providers |
 | `tool.completed` | `tool`, `toolCallId`, `status` (`completed`, `failed`, `declined`) |
 | `approval.required` | `approvalId`, `tool`, `summary` |
 | `approval.resolved` | `approvalId`, `tool`, `decision` (`allow`, `deny`), `reason` (`client`, `timeout`, `session_closed`, `cancelled`) |
@@ -244,8 +250,20 @@ Mapeamento nativo:
 | Codex | `execCommandApproval`, `applyPatchApproval` (legados) | `approved` | `denied` |
 | AGY | não existe canal headless | — | a CLI nega o que exigiria revisão |
 
-Outras requisições do app-server do Codex (`item/tool/requestUserInput`,
-`mcpServer/elicitation/request`, `item/tool/call`, `account/chatgptAuthTokens/refresh`,
+Ferramentas do workspace remoto (MCP):
+
+| Provider | Onde a aprovação acontece | Somente leitura | Escrita/execução |
+|---|---|---|---|
+| Claude | nativa (`can_use_tool`) | liberadas por `--allowedTools` | pedem aprovação do Azigate |
+| Codex | relay do agentd (`default_tools_approval_mode="approve"` na CLI) | repassadas | aprovação do Azigate (`acceptEdits` libera escrita de arquivo) |
+| AGY | relay do agentd (regras `mcp(azigate_workspace/…)` na CLI) | repassadas | aprovação do Azigate (`acceptEdits` libera escrita de arquivo) |
+
+Em qualquer provider, o modo `plan` recusa escrita e execução no relay, antes de chegar à
+máquina B. Numa sessão Codex remota, pedidos de comando/arquivo **nativos** (que rodariam na
+máquina A) são sempre negados; elicitação de servidor MCP (`mcpServer/elicitation/request`) vira
+aprovação do Azigate (modo URL é recusado).
+
+Outras requisições do app-server do Codex (`item/tool/requestUserInput`, `item/tool/call`, `account/chatgptAuthTokens/refresh`,
 `attestation/generate`) recebem erro JSON-RPC `-32601`.
 
 ## Modos de permissão
@@ -255,6 +273,10 @@ Outras requisições do app-server do Codex (`item/tool/requestUserInput`,
 | `review` | `approvalPolicy: untrusted`, `sandbox: workspace-write` | `--permission-mode manual` + aprovação do Azigate | modo padrão (`request-review`) |
 | `acceptEdits` | `approvalPolicy: on-request`, `sandbox: workspace-write` | `--permission-mode acceptEdits` | `--mode accept-edits` |
 | `plan` | `approvalPolicy: untrusted`, `sandbox: read-only` | `--permission-mode plan` | `--mode plan` |
+
+Em workspace remoto: Codex usa `sandbox: read-only` e `approvalPolicy: untrusted` sobre um cwd
+vazio (o projeto só existe via MCP); Claude e AGY mantêm o modo da tabela; a regra de `plan` é
+reaplicada pelo relay.
 
 ## Endpoint nativo
 

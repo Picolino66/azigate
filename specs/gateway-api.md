@@ -15,6 +15,11 @@ Qualquer outro caminho recebe `404`. Nenhum parâmetro público representa URL, 
 
 | `model` | Provider | Comportamento |
 |---|---|---|
+| `codex-cli-6-astra` | Codex (Responses API) | `gpt-6-astra` |
+| `codex-cli-6.1-sol` | Codex (Responses API) | `gpt-6.1-sol` |
+| `codex-cli-6.1-terra` | Codex (Responses API) | `gpt-6.1-terra` |
+| `codex-cli-6-sol` | Codex (Responses API) | `gpt-6-sol` |
+| `codex-cli-6-luna` | Codex (Responses API) | `gpt-6-luna` |
 | `codex-cli-sol` | Codex (Responses API) | `gpt-5.6-sol` |
 | `codex-cli-terra` | Codex (Responses API) | `gpt-5.6-terra` |
 | `codex-cli-luna` | Codex (Responses API) | `gpt-5.6-luna` |
@@ -22,14 +27,13 @@ Qualquer outro caminho recebe `404`. Nenhum parâmetro público representa URL, 
 | `codex-cli-5.4` | Codex (Responses API) | `gpt-5.4` |
 | `codex-cli` | Codex (Responses API) | sinônimo legado de `gpt-5.4` |
 | `claude-cli-opus-5.5` | Claude (Messages API) | `claude-opus-5-5` |
-| `claude-cli-opus-5` | Claude (Messages API) | `claude-opus-5` |
 | `claude-cli-fable-5.1` | Claude (Messages API) | `claude-fable-5-1` |
 | `claude-cli-sonnet-5` | Claude (Messages API) | `claude-sonnet-5` |
 | `claude-cli-haiku-4.5` | Claude (Messages API) | `claude-haiku-4-5` |
 | `claude-cli` | Claude (Messages API) | sinônimo de `claude-opus-5-5` |
 | qualquer outro ID permitido | upstream (DeepSeek por padrão) | passthrough atual |
 
-Alias desabilitado ou sem token OAuth salvo retorna `503 cli_unavailable`; nunca há fallback automático. Os prefixos `codex-cli` e `claude-cli` são reservados: um ID com esses prefixos fora da tabela (por exemplo, um alias removido como `claude-cli-opus-4.8`) recebe `400 invalid_model` e nunca segue para o upstream ([ADR-021](../adr/ADR-021-catalogo-claude-geracao-5.md)). `ALLOWED_MODELS`, quando preenchida, também precisa incluir os aliases desejados.
+Alias desabilitado ou sem token OAuth salvo retorna `503 cli_unavailable`; nunca há fallback automático. Os prefixos `codex-cli` e `claude-cli` são reservados: um ID com esses prefixos fora da tabela (por exemplo, um alias removido como `claude-cli-opus-4.8` ou `claude-cli-opus-5`) recebe `400 invalid_model` e nunca segue para o upstream ([ADR-021](../adr/ADR-021-catalogo-claude-geracao-5.md), [ADR-027](../adr/ADR-027-catalogo-claude-espelha-seletor.md)). `ALLOWED_MODELS`, quando preenchida, também precisa incluir os aliases desejados.
 
 ## Catálogo
 
@@ -56,8 +60,8 @@ Alias desabilitado ou sem token OAuth salvo retorna `503 cli_unavailable`; nunca
   somente novas tool calls produzidas pelo modelo ficam restritas às tools atuais.
 - `tool_choice` aceita `auto`, `none`, `required` ou uma função oferecida. Em `claude-cli-opus-5.5`, `claude-cli` e `claude-cli-fable-5.1`, cuja API recusa escolha forçada, `required` e função nomeada são enviados como `auto`: o modelo pode responder sem chamar ferramenta.
 - `parallel_tool_calls` deve ser boolean.
-- Para aliases Codex e Claude, o effort pode vir como `reasoning_effort` ou `reasoning.effort`; o campo plano tem precedência. A enum pública é `low`, `medium`, `high`, `xhigh` ou `max`. Estrutura ou valor desconhecido recebe `400 invalid_reasoning_effort`.
-- Ausência, `reasoning: false` ou objeto `reasoning` sem `effort` aplica o default do modelo. Codex usa `medium`; `max` vira `xhigh`. A matriz Claude permanece por modelo: default `medium` no Opus 5.5, `high` no Opus 5, Fable 5.1 e Sonnet 5; Haiku 4.5 nunca recebe effort.
+- Para aliases Codex e Claude, o effort pode vir como `reasoning_effort` ou `reasoning.effort`; o campo plano tem precedência. A enum pública inclui `low`, `medium`, `high`, `xhigh` e `max`; Codex também aceita `none` conforme o modelo. Estrutura ou valor desconhecido recebe `400 invalid_reasoning_effort`.
+- Ausência, `reasoning: false` ou objeto `reasoning` sem `effort` aplica o default do modelo. Codex usa `medium`; Astra e 6.1 Sol aceitam `low` a `max`, 6.1 Terra, 6 Sol, 6 Luna e 5.6 aceitam `none` a `max`, e 5.5 e 5.4 aceitam `none` a `xhigh`. Valores fora da matriz Codex recebem `400 invalid_reasoning_effort`. A matriz Claude permanece por modelo: default `medium` no Opus 5.5, `high` no Fable 5.1 e no Sonnet 5; Haiku 4.5 nunca recebe effort.
 - O gateway ignora parâmetros de sampling não aplicáveis ao provedor (ex.: `temperature`/`top_p` quando `thinking` está ativo no Claude; nenhum parâmetro de sampling é enviado ao Codex).
 - Cada alias Codex é traduzido pelo gateway para um único modelo interno permitido, enviado como `model` no corpo da Responses API. O cliente não escolhe esse valor.
 - Cada alias Claude seleciona um único modelo completo enviado como `model` no corpo da Messages API.

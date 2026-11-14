@@ -1,4 +1,5 @@
 import { readFileSync, statSync, writeFileSync } from 'node:fs'
+import { connect, type Socket } from 'node:net'
 import { join } from 'node:path'
 import type { FastifyInstance } from 'fastify'
 import pino from 'pino'
@@ -8,10 +9,9 @@ import { createAgentdApp, type AgentdRuntime } from '../src/agentd/app.js'
 import { loadAgentdConfig, type AgentdConfig } from '../src/agentd/config.js'
 import type { AgentProvider, AgentProviderId } from '../src/agents/core/agent-provider.js'
 import { MemorySessionStore } from '../src/agent-control/session-store.js'
-import { AgentdSocketClient } from '../src/mcp-bridge/socket-client.js'
-import { signWorkerToken } from '../src/worker-protocol/security.js'
-import { WorkerClient } from '../src/worker/client.js'
-import { WorkerHandler } from '../src/worker/handler.js'
+import { signWorkerToken } from '../src/workspace/security/token.js'
+import { WorkspaceConnection } from '../src/workspace/server/connection.js'
+import { WorkerHandler } from '../src/workspace/server/handler.js'
 import { tempDir } from './helpers/agents.js'
 import { ScriptedProvider, flush } from './helpers/scripted-provider.js'
 
@@ -45,6 +45,7 @@ async function harness(env: NodeJS.ProcessEnv = {}): Promise<Harness> {
     WORKER_TOKEN_SECRET: SECRET,
     WORKER_HEARTBEAT_INTERVAL: '1s',
     AGENT_MAX_REQUEST_BODY_BYTES: '2048',
+    AGY_REMOTE_AUTO_SETUP: 'false',
     ...env,
   })
   const claude = new ScriptedProvider('claude', true)
@@ -76,6 +77,43 @@ async function waitFor(condition: () => boolean, timeoutMs = 3000): Promise<void
   while (!condition()) {
     if (Date.now() - started > timeoutMs) throw new Error('condição não satisfeita a tempo')
     await new Promise((resolve) => setTimeout(resolve, 10))
+  }
+}
+
+/** Conversa MCP pelo socket do relay, como a ponte faz: `hello` com o token e JSON-RPC. */
+function mcpSession(path: string, token: string): {
+  socket: Socket
+  lines: Record<string, unknown>[]
+  closed: Promise<void>
+  request(method: string, params?: unknown): Promise<Record<string, unknown>>
+} {
+  const socket = connect(path)
+  const lines: Record<string, unknown>[] = []
+  const waiters = new Map<number, (message: Record<string, unknown>) => void>()
+  let buffer = ''
+  let nextId = 1
+  socket.on('data', (chunk: Buffer) => {
+    buffer += chunk.toString('utf8')
+    let index = buffer.indexOf('\n')
+    while (index !== -1) {
+      const message = JSON.parse(buffer.slice(0, index)) as Record<string, unknown>
+      buffer = buffer.slice(index + 1)
+      lines.push(message)
+      if (typeof message.id === 'number') waiters.get(message.id)?.(message)
+      index = buffer.indexOf('\n')
+    }
+  })
+  socket.write(`${JSON.stringify({ type: 'hello', token })}\n`)
+  return {
+    socket,
+    lines,
+    closed: new Promise((resolve) => socket.on('close', () => resolve())),
+    request: (method, params) =>
+      new Promise((resolve) => {
+        const id = nextId++
+        waiters.set(id, resolve)
+        socket.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, ...(params === undefined ? {} : { params }) })}\n`)
+      }),
   }
 }
 
@@ -252,20 +290,20 @@ describe('agentd — tempo real, worker remoto e ponte MCP', () => {
 
     const token = signWorkerToken(SECRET, { workerId: 'devbox', workspaces: ['backend'], ttlSeconds: 60 })
     const logs: string[] = []
-    const client = new WorkerClient({
+    const client = new WorkspaceConnection({
       url: new URL(`ws://${host}/worker/v1/connect`),
       workerId: 'devbox',
       token: () => token,
       handler: new WorkerHandler(new Map([['backend', workspaceRoot], ['privado', tempDir()]]), { enabled: false }),
       version: 'teste',
-      log: (event) => logs.push(event),
+      log: (event: string) => logs.push(event),
     })
     client.start()
     cleanups.push(() => client.stop())
     await waitFor(() => logs.includes('worker_registered'))
 
     const workers = (await app.inject({ method: 'GET', url: '/agent/v1/workers', headers: auth })).json<{ data: unknown[] }>()
-    expect(workers.data).toEqual([expect.objectContaining({ id: 'devbox', workspaces: ['backend'], capabilities: ['filesystem', 'git'] })])
+    expect(workers.data).toEqual([expect.objectContaining({ id: 'devbox', workspaces: ['backend'], capabilities: ['filesystem', 'git', 'mcp'] })])
     await expect(runtime.workers?.call('devbox', 'backend', 'read_file', { path: '../fora' }, 2000)).rejects.toMatchObject({
       code: 'path_outside_workspace',
     })
@@ -280,30 +318,38 @@ describe('agentd — tempo real, worker remoto e ponte MCP', () => {
     expect(created.json()).toMatchObject({ worker: 'devbox', workspace: 'backend' })
     const options = claude.last.options
     if (options.workspace.kind !== 'remote') throw new Error('esperava workspace remoto')
-    expect(options.workspace.allowedTools).toContain('mcp__azigate_workspace__read_file')
-    expect(statSync(options.workspace.mcpConfigPath).mode & 0o777).toBe(0o600)
+    expect(options.workspace.readOnlyTools).toContain('mcp__azigate_workspace__read_file')
+    expect(options.workspace.instructions).toContain('backend')
+    expect(options.workspace.mcp).toMatchObject({ name: 'azigate_workspace', args: ['/opt/azigate/dist/mcp-bridge/main.js'] })
     expect(statSync(options.sessionDir).mode & 0o777).toBe(0o700)
-    const mcpConfig = JSON.parse(readFileSync(options.workspace.mcpConfigPath, 'utf8')) as {
-      mcpServers: { azigate_workspace: { command: string; args: string[]; env: Record<string, string> } }
-    }
-    const server = mcpConfig.mcpServers.azigate_workspace
-    expect(server.args).toEqual(['/opt/azigate/dist/mcp-bridge/main.js'])
-    expect(server.env.AZIGATE_MCP_SOCKET).toBe(config.mcpSocketPath)
+    const sessionFile = options.workspace.mcp.env.AZIGATE_MCP_SESSION ?? ''
+    expect(statSync(sessionFile).mode & 0o777).toBe(0o600)
+    const session = JSON.parse(readFileSync(sessionFile, 'utf8')) as { socket: string; token: string }
+    expect(session.socket).toBe(config.mcpSocketPath)
+    // O token só existe no arquivo 0600: nunca no lançamento que o agente recebe.
+    expect(JSON.stringify(options.workspace.mcp)).not.toContain(session.token)
     expect(statSync(config.mcpSocketPath).mode & 0o777).toBe(0o600)
 
-    const bridge = new AgentdSocketClient(config.mcpSocketPath, server.env.AZIGATE_MCP_TOKEN ?? '')
-    cleanups.push(() => bridge.close())
-    expect(await bridge.call('read_file', { path: 'README.md' })).toEqual({
-      ok: true,
-      result: { content: 'projeto remoto\n', totalBytes: 15, truncated: false },
+    const mcp = mcpSession(config.mcpSocketPath, session.token)
+    cleanups.push(() => {
+      mcp.socket.destroy()
     })
-    expect(await bridge.call('write_file', { path: 'x', content: 'y' })).toMatchObject({ ok: false, code: 'permission_denied' })
-    const forged = new AgentdSocketClient(config.mcpSocketPath, 'token-falso')
-    cleanups.push(() => forged.close())
-    expect(await forged.call('read_file', { path: 'README.md' })).toMatchObject({ ok: false, code: 'permission_denied' })
+    const listed = await mcp.request('tools/list')
+    expect((listed.result as { tools: { name: string }[] }).tools.map((tool) => tool.name)).toContain('read_file')
+    const read = await mcp.request('tools/call', { name: 'read_file', arguments: { path: 'README.md' } })
+    expect(read.result).toEqual({ content: [{ type: 'text', text: 'projeto remoto\n' }], isError: false })
+    const write = await mcp.request('tools/call', { name: 'write_file', arguments: { path: 'x', content: 'y' } })
+    expect(write.result).toMatchObject({ isError: true })
+
+    const forged = mcpSession(config.mcpSocketPath, 'token-falso')
+    await forged.closed
+    expect(forged.lines[0]).toMatchObject({ type: 'error', code: 'permission_denied' })
 
     await app.inject({ method: 'DELETE', url: `/agent/v1/sessions/${created.json<{ id: string }>().id}`, headers: auth })
-    expect(await bridge.call('read_file', { path: 'README.md' })).toMatchObject({ ok: false, code: 'permission_denied' })
+    await mcp.closed
+    const reused = mcpSession(config.mcpSocketPath, session.token)
+    await reused.closed
+    expect(reused.lines[0]).toMatchObject({ type: 'error', code: 'permission_denied' })
 
     const impostorToken = signWorkerToken(SECRET, { workerId: 'impostor', workspaces: ['backend'], ttlSeconds: 60 })
     const impostor = new WebSocket(`ws://${host}/worker/v1/connect`, { headers: { authorization: `Bearer ${impostorToken}` } })

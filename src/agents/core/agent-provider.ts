@@ -6,10 +6,35 @@ export type AgentProviderId = (typeof AGENT_PROVIDER_IDS)[number]
 export const PERMISSION_MODES = ['review', 'acceptEdits', 'plan'] as const
 export type PermissionMode = (typeof PERMISSION_MODES)[number]
 
-/** Workspace já resolvido pelo agentd. O cliente só informa o identificador. */
+/** Como o agente inicia o servidor MCP do workspace remoto (a ponte stdio do Azigate). */
+export interface McpServerLaunch {
+  name: string
+  command: string
+  args: readonly string[]
+  /** Somente o caminho do arquivo de sessão (0600); o token nunca vai para argv ou env. */
+  env: Readonly<Record<string, string>>
+}
+
+/**
+ * Workspace já resolvido pelo agentd. O cliente só informa o identificador. `remote` é o
+ * projeto na máquina B, alcançado pelo agente da máquina A via MCP (ADR-025).
+ */
 export type WorkspaceTarget =
   | { kind: 'local'; id: string; root: string }
-  | { kind: 'remote'; id: string; workerId: string; mcpConfigPath: string; allowedTools: readonly string[] }
+  | {
+      kind: 'remote'
+      id: string
+      workerId: string
+      mcp: McpServerLaunch
+      readOnlyTools: readonly string[]
+      instructions: string
+    }
+
+/**
+ * Onde a permissão das ferramentas remotas é pedida: `native` quando a própria CLI pergunta
+ * (Claude `can_use_tool`); `gateway` quando o agentd pergunta antes de repassar (Codex, AGY).
+ */
+export type RemoteApprovalMode = 'native' | 'gateway'
 
 export interface AgentSessionOptions {
   sessionId: string
@@ -77,6 +102,7 @@ export interface AgentProvider {
   readonly adapterVersion: string
   readonly protocolVersion: string
   readonly supportsRemoteWorkspace: boolean
+  readonly remoteApprovals: RemoteApprovalMode
   readonly efforts: readonly string[]
   createSession(options: AgentSessionOptions, context: AgentSessionContext): Promise<AgentRuntimeSession>
   resumeSession(

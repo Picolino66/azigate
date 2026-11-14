@@ -36,8 +36,11 @@ eventos `approval.required`/`approval.resolved`.
   para o dono, nunca em log.
 - Mapeamento nativo em [agent-api.md](../../../specs/agent-api.md#aprovações). O AGY
   headless não tem canal: ações que exigiriam revisão são negadas pela própria CLI.
-- Em sessões Claude com worker, as ferramentas somente leitura já vêm liberadas por
-  `--allowedTools`; escrita e execução passam por aqui.
+- Workspace remoto: no Claude, leituras já vêm liberadas por `--allowedTools` e escrita/execução
+  chegam por `can_use_tool`; no Codex e no AGY, o **relay do agentd** cria a aprovação antes de
+  repassar a chamada ao Workspace Server (`acceptEdits` libera só escrita de arquivo). `plan`
+  recusa escrita e execução no relay, sem aprovação. Ações nativas do Codex numa sessão remota
+  são negadas sem perguntar.
 
 ## Fluxo resumido
 

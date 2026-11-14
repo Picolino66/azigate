@@ -45,7 +45,7 @@ Nenhuma (função pura).
 Regras adicionais:
 
 - `max_tokens` é obrigatório; usa `body.max_tokens` quando válido, senão
-  `defaultMaxTokens`.
+  `defaultMaxTokens` (64000, definido em `src/routes/chat.ts`).
 - `tool_calls[].function.arguments` (string JSON) é convertido para objeto; se o
   parse falhar ou não for objeto, usa `{}`.
 - IDs de tool call são sanitizados para o formato `toolu_`+hex; se ausentes ou

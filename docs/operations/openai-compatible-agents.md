@@ -74,6 +74,11 @@ funciona em **qualquer** cliente OpenAI-compatible, com ou sem suporte a tools.
 
 | `model` | Modelo interno |
 |---|---|
+| `codex-cli-6-astra` | GPT-6 Astra |
+| `codex-cli-6.1-sol` | GPT-6.1 Sol |
+| `codex-cli-6.1-terra` | GPT-6.1 Terra |
+| `codex-cli-6-sol` | GPT-6 Sol |
+| `codex-cli-6-luna` | GPT-6 Luna |
 | `codex-cli-sol` | GPT-5.6 Sol |
 | `codex-cli-terra` | GPT-5.6 Terra |
 | `codex-cli-luna` | GPT-5.6 Luna |
@@ -81,18 +86,17 @@ funciona em **qualquer** cliente OpenAI-compatible, com ou sem suporte a tools.
 | `codex-cli-5.4` | GPT-5.4 |
 | `codex-cli` | sinônimo legado de GPT-5.4 |
 
-Os aliases Codex aceitam `reasoning_effort` ou `reasoning.effort` com `low`, `medium`, `high`, `xhigh` ou `max`. O default é `medium`; `max` é reduzido para `xhigh` antes de chegar ao CLI.
+Os aliases Codex aceitam `reasoning_effort` ou `reasoning.effort`; o default é `medium` e os valores permitidos dependem do modelo. Consulte a [matriz Codex](../modules/providers/codex-cli.md).
 
 ### Aliases Claude e effort
 
 Para os aliases Claude, `reasoning_effort` ou `reasoning.effort` aceita `low`, `medium`, `high`, `xhigh` ou `max`. Um valor omitido ou incompatível é substituído pelo **default do modelo**. Haiku 4.5 nunca recebe effort.
 
-Em ambos os providers CLI, o campo plano tem precedência sobre o aninhado. `reasoning: false`, ausência ou objeto sem `effort` usa o default. Valor desconhecido ou estrutura malformada recebe `400 invalid_cli_request`; o passthrough do upstream não passa por essa normalização.
+Em ambos os providers CLI, o campo plano tem precedência sobre o aninhado. `reasoning: false`, ausência ou objeto sem `effort` usa o default. Valor desconhecido ou estrutura malformada recebe `400 invalid_reasoning_effort`; o passthrough do upstream não passa por essa normalização.
 
 | `model` | Modelo | Efforts | Default |
 |---|---|---|---|
 | `claude-cli-opus-5.5` / `claude-cli` | Opus 5.5 | low, medium, high, xhigh, max | medium |
-| `claude-cli-opus-5` | Opus 5 | low, medium, high, xhigh, max | high |
 | `claude-cli-fable-5.1` | Fable 5.1 | low, medium, high, xhigh, max | high |
 | `claude-cli-sonnet-5` | Sonnet 5 | low, medium, high, xhigh, max | high |
 | `claude-cli-haiku-4.5` | Haiku 4.5 | nenhum | omitir |

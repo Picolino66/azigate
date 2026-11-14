@@ -45,9 +45,12 @@ Binário `claude` (`CLAUDE_BINARY`) autenticado pelo login oficial (assinatura P
   `updatedInput`. `control_cancel_request` cancela a aprovação.
 - `Task`/`Agent` geram `subagent.*`; mensagens com `parent_tool_use_id` (dentro do
   subagente) seguem como `provider.event`.
-- Workspace remoto: cwd é o diretório privado da sessão e o argv ganha `--tools ""`,
-  `--strict-mcp-config`, `--mcp-config <arquivo 0600>` e `--allowedTools` com as
-  ferramentas somente leitura ([detalhes](./remote-workspace-mcp.md)).
+- Workspace remoto (projeto na máquina B): cwd é o diretório privado e vazio da sessão e o
+  argv ganha `--tools "Task,TodoWrite,WebFetch,WebSearch"` (subagentes preservados; nada lê ou
+  executa na máquina A), `--strict-mcp-config`, `--mcp-config <sessão>/claude-mcp-config.json`
+  (sem segredo), `--allowedTools` com as ferramentas somente leitura e `--append-system-prompt`
+  dizendo onde o projeto está ([detalhes](./remote-workspace.md)). Escritas e execução passam
+  por `can_use_tool` → aprovação do Azigate.
 - Saúde: `claude --version` e `claude auth status --json` (`loggedIn`).
 
 ## Fluxo resumido

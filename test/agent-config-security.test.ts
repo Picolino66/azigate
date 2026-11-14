@@ -5,9 +5,9 @@ import { loadAgentdConfig, parseDuration } from '../src/agentd/config.js'
 import { loadWorkspacesFile, parseWorkspaces } from '../src/agent-control/workspaces.js'
 import { minimalEnv } from '../src/agents/core/process.js'
 import { isCertified, parseVersion } from '../src/agents/core/versions.js'
-import { parseGatewayMessage, parseWorkerMessage } from '../src/worker-protocol/protocol.js'
-import { bearerToken, signWorkerToken, verifyWorkerToken } from '../src/worker-protocol/security.js'
-import { loadWorkerConfig, parseWorkerArgs, readTokenFile, workerConnectUrl } from '../src/worker/config.js'
+import { parseGatewayMessage, parseWorkerMessage } from '../src/workspace/protocol/protocol.js'
+import { bearerToken, signWorkerToken, verifyWorkerToken } from '../src/workspace/security/token.js'
+import { loadWorkerConfig, parseWorkerArgs, readTokenFile, workerConnectUrl } from '../src/workspace/server/config.js'
 import { tempDir } from './helpers/agents.js'
 
 const SECRET = 'segredo-de-worker-com-mais-de-32-caracteres'
@@ -77,6 +77,10 @@ describe('configuração do agentd', () => {
     expect(() => loadAgentdConfig(agentEnv({ WORKER_ENABLED: 'true', WORKER_TOKEN_SECRET: `${AGENT_KEY}${AGENT_KEY}`, AGENT_API_KEYS: `${AGENT_KEY}${AGENT_KEY}` }))).toThrow(/não pode repetir/u)
     expect(() => loadAgentdConfig(agentEnv({ CLAUDE_BINARY: 'bin/claude' }))).toThrow(/caminho absoluto/u)
     expect(() => loadAgentdConfig(agentEnv({ CLAUDE_BINARY: '--help' }))).toThrow()
+    expect(() => loadAgentdConfig(agentEnv({ CLAUDE_BINARY: 'claude; rm -rf /' }))).toThrow()
+    expect(loadAgentdConfig(agentEnv({ CLAUDE_BINARY: '/home/op/Área de trabalho/bin/claude' })).providers.claude.binary).toBe(
+      '/home/op/Área de trabalho/bin/claude',
+    )
     expect(() => loadAgentdConfig(agentEnv({ AGENT_ALLOWED_IPS: 'x' }))).toThrow(/IP inválido/u)
     expect(() => loadAgentdConfig(agentEnv({ AGENT_VERSION_POLICY: 'nunca' }))).toThrow()
     expect(() => loadAgentdConfig(agentEnv({ NODE_ENV: 'staging' }))).toThrow()
@@ -176,8 +180,26 @@ describe('configuração do worker', () => {
     writeFileSync(configFile, JSON.stringify({ gateway: 'https://x', workerId: 'w', tokenFile: '/t', exec: { allowedCommands: [1] }, workspaces: {} }))
     expect(() => loadWorkerConfig(['--config', configFile])).toThrow()
     expect(() => loadWorkerConfig([])).toThrow(/--config/u)
-    writeFileSync(configFile, JSON.stringify({ workerId: 'w' }))
+    writeFileSync(configFile, JSON.stringify({ workerId: 'w', workspaces: {} }))
     expect(() => loadWorkerConfig(['--config', configFile])).toThrow(/gateway/u)
+  })
+
+  it('aceita o modo MCP por stdio sem gateway nem token, preso a um workspace da configuração', () => {
+    const directory = tempDir()
+    mkdirSync(join(directory, 'backend'))
+    const configFile = join(directory, 'workspace.json')
+    writeFileSync(configFile, JSON.stringify({ workspaces: { backend: { path: join(directory, 'backend') } } }))
+    expect(loadWorkerConfig(['--config', configFile, '--mcp-stdio', '--workspace', 'backend'])).toMatchObject({
+      mode: 'mcp-stdio',
+      workspace: 'backend',
+      exec: { enabled: false },
+    })
+    expect(() => loadWorkerConfig(['--config', configFile, '--mcp-stdio'])).toThrow(/--workspace/u)
+    expect(() => loadWorkerConfig(['--config', configFile, '--mcp-stdio', '--workspace', 'outro'])).toThrow(/--workspace/u)
+    expect(loadWorkerConfig(['--config', configFile, '--gateway', 'https://a.example', '--worker', 'b', '--token-file', '/t'])).toMatchObject({
+      mode: 'connect',
+      workerId: 'b',
+    })
   })
 })
 

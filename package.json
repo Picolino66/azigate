@@ -12,7 +12,9 @@
     "dev:agentd": "tsx watch --env-file=.env src/agentd/server.ts",
     "start": "node dist/server.js",
     "start:agentd": "node dist/agentd/server.js",
-    "start:worker": "node dist/worker/main.js",
+    "start:workspace": "node dist/workspace/server/main.js",
+    "start:worker": "node dist/workspace/server/main.js",
+    "agent": "node dist/agent-client/main.js",
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
@@ -23,7 +25,12 @@
     "login:claude": "tsx src/providers/oauth/login-claude.ts",
     "experiment:previous-response": "tsx test/manual/previous-response-id-scenarios.ts",
     "worker:token": "tsx src/agentd/worker-token.ts",
-    "test:agents:real": "tsx test/manual/agents-real.ts"
+    "client:setup": "tsx src/agentd/client-setup-cli.ts",
+    "pack:client": "tsx tools/build-client.ts",
+    "pack:vscode": "tsx tools/build-vscode.ts",
+    "test:agents:real": "tsx test/manual/agents-real.ts",
+    "agy:remote": "tsx src/agentd/agy-remote.ts",
+    "test:agents:remote-real": "tsx test/manual/agents-remote-real.ts"
   },
   "dependencies": {
     "@fastify/websocket": "11.3.1",
@@ -36,12 +43,19 @@
   "devDependencies": {
     "@eslint/js": "10.0.1",
     "@types/node": "22.20.4",
+    "@types/vscode": "1.100.0",
     "@types/ws": "8.18.1",
     "@vitest/coverage-v8": "4.1.10",
+    "esbuild": "0.28.1",
     "eslint": "10.7.0",
     "tsx": "4.23.1",
     "typescript": "6.0.3",
     "typescript-eslint": "8.64.0",
     "vitest": "4.1.10"
+  },
+  "bin": {
+    "azigate-agent": "dist/agent-client/main.js",
+    "azigate-workspace": "dist/workspace/server/main.js",
+    "azigate-agentd": "dist/agentd/server.js"
   }
 }

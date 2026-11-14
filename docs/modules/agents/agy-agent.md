@@ -14,7 +14,8 @@ credenciais do login interativo feito pelo operador.
 
 ## Entrada
 
-`model`, `effort` (`low`, `medium`, `high`), `permissionMode`, workspace local.
+`model`, `effort` (`low`, `medium`, `high`), `permissionMode`, workspace local ou remoto
+(máquina B).
 
 ## Saída
 
@@ -39,12 +40,23 @@ Binário `agy` (`AGY_BINARY`) autenticado; nenhuma variável extra.
   `--conversation` não existe. O adaptador compara o `conversation_id` do `init` com o
   pedido e falha a retomada (`AgentResumeError`) em vez de perder o contexto.
 - `step_update` é mapeado de forma tolerante (`tool_info` → `tool.*`, `subagent_info` →
-  `subagent.*`, deltas de texto). O formato interno não foi capturado em uma execução
-  real; tudo que não for reconhecido segue como `provider.event`.
+  `subagent.*`, deltas de texto); o formato das etapas de ferramenta foi confirmado em turnos
+  reais em 25/09/2026. Tudo que não for reconhecido segue como `provider.event`.
 - Cancelamento: `SIGINT` no grupo de processos (não há controle pela entrada); sem saída
   no prazo, `SIGTERM`/`SIGKILL`. A sessão fica `suspended` e retoma no próximo turno.
 - Sem canal de aprovação headless: ações que exigiriam revisão são negadas pela CLI.
-- Workspace remoto não é suportado (ADR-023).
+- Workspace remoto (ADR-025): o AGY 1.2.x não aceita MCP por sessão, então o agentd prepara
+  uma vez (`installAgyRemote`, idempotente): servidor global `azigate_workspace`
+  (`agy mcp add`), agente de usuário `~/.gemini/config/agents/azigate-workspace.md` com
+  `excludeDefaultComponents: true` (sem arquivos, terminal e navegador da máquina A; mantém
+  `call_mcp_tool`) e as regras `mcp(azigate_workspace/<ferramenta>)` em
+  `~/.gemini/antigravity-cli/settings.json` (sem elas o headless nega MCP). A sessão roda com
+  `--agent azigate-workspace`, cwd vazio e `AZIGATE_MCP_SESSION` no ambiente, que a ponte
+  herda. Fora do Azigate a ponte não expõe ferramentas. Aprovações das ferramentas remotas são
+  feitas pelo agentd. Subagentes embutidos do AGY não ficam disponíveis nesse modo.
+- Chamadas `call_mcp_tool` (`tool_info.parameters.{ServerName,ToolName,Arguments}`) viram
+  `mcp__<servidor>__<ferramenta>` com `summary`; `state` `ACTIVE|DONE|ERROR` é o formato
+  observado na CLI 1.2.11.
 - Saúde: `agy --version` e `agy -p=/model --output-format json` (comando respondido pela
   própria CLI, sem consumir cota).
 

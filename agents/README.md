@@ -11,7 +11,7 @@ Trabalhos especialistas recebem o `OrchestratorContext` atualizado e retornam ev
 ## Ciclo `native-agent-plane` (25/09/2026)
 
 - Orquestrador principal: ADR-022 a ADR-024, contratos do Agent Plane, implementação, gates e contexto canônico.
-- Auditor defensivo: fronteiras novas (agentd, worker, ponte MCP), jail de workspace, Git endurecido, credenciais disjuntas e revisão final.
+- Auditor defensivo: fronteiras novas (agentd, Workspace Server, ponte MCP e relay), jail de workspace, Git endurecido, credenciais disjuntas, isolamento remoto dos três agentes e revisão final.
 - Especialista docs-first: `docs/modules/agents/`, runbook, arquitetura, threat model, inventário e índices.
 
-No Agent Plane o executor de ferramentas é o **agente nativo** (Codex, Claude Code ou AGY) confinado ao workspace escolhido por ID; no Model Plane continua sendo o agente cliente. Não confundir nenhum dos dois com os agentes usados no desenvolvimento do gateway.
+No Agent Plane o executor de ferramentas é o **agente nativo** (Codex, Claude Code ou AGY) confinado ao workspace escolhido por ID — local ou na máquina do projeto via Workspace Server (MCP); no Model Plane continua sendo o agente cliente. Não confundir nenhum dos dois com os agentes usados no desenvolvimento do gateway.

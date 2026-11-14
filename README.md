@@ -22,11 +22,15 @@ O serviço **não é um proxy aberto**. A superfície HTTP é fechada e permanec
 limitada a quatro rotas: `GET /health`, `GET /ready`, `GET /v1/models` e
 `POST /v1/chat/completions`.
 
-Opcionalmente, um segundo serviço — o **Agent Plane** (`azigate-agentd`) — opera Codex,
-Claude Code e Google Antigravity (AGY) como **agentes completos**, pelo protocolo nativo
-de cada CLI, com sessões, eventos, aprovações e execução remota em outra máquina via
-`azigate-worker`. Ele roda em processo, porta e credenciais separados e não altera o
-gateway de modelos. Veja [Agent Plane](#agent-plane-azigate-agentd).
+Opcionalmente, um segundo serviço — o **Native Agent Plane** (`azigate-agentd`) — opera
+Codex, Claude Code e Google Antigravity (AGY) como **agentes completos**, pelo protocolo
+nativo de cada CLI, com sessões, eventos e aprovações. Os três podem trabalhar num projeto que
+continua em outra máquina, servido pelo **Workspace Server** (`azigate-workspace`) via MCP.
+Ele roda em processo, porta e credenciais separados e não altera o gateway de modelos. Veja
+[Agent Plane](#agent-plane-azigate-agentd).
+
+> **Model Plane permite que agentes locais usem modelos remotos. Native Agent Plane permite
+> que agentes remotos completos usem ambientes de execução locais.**
 
 ## Como funciona
 
@@ -85,7 +89,7 @@ sequenceDiagram
   `usage`, campos futuros e o `[DONE]`. Funciona com qualquer provedor
   OpenAI-compatible (DeepSeek, OpenAI, OpenRouter, Ollama, etc.).
 - **Aliases Codex** (`codex-cli-*`): selecionam modelos GPT fixos via Responses
-  API, com effort normalizado (`max` vira `xhigh`), streaming incremental real e
+  API, com effort validado por modelo, streaming incremental real e
   suporte nativo a multimodal/structured outputs. São *fail-closed* e nunca caem
   automaticamente no upstream.
 - **Aliases Claude** (`claude-cli-*`): selecionam modelos Claude fixos via
@@ -189,10 +193,11 @@ e defaults no [guia de agentes](docs/operations/openai-compatible-agents.md)):
 | `model` | Provedor | Observação |
 |---|---|---|
 | qualquer ID permitido do upstream | upstream (DeepSeek por padrão) | passthrough |
+| `codex-cli-6-astra` / `-6.1-sol` / `-6.1-terra` / `-6-sol` / `-6-luna` | Codex (Responses API) | GPT-6 Astra / 6.1 Sol / 6.1 Terra / 6 Sol / 6 Luna |
 | `codex-cli-sol` / `-terra` / `-luna` | Codex (Responses API) | GPT-5.6 Sol / Terra / Luna |
 | `codex-cli-5.5` / `codex-cli-5.4` | Codex (Responses API) | GPT-5.5 / GPT-5.4 |
 | `codex-cli` | Codex (Responses API) | sinônimo legado de GPT-5.4 |
-| `claude-cli-opus-5.5` / `-opus-5` / `-fable-5.1` / `-sonnet-5` | Claude (Messages API) | efforts low..max |
+| `claude-cli-opus-5.5` / `-fable-5.1` / `-sonnet-5` | Claude (Messages API) | efforts low..max |
 | `claude-cli-haiku-4.5` | Claude (Messages API) | sem effort |
 | `claude-cli` | Claude (Messages API) | sinônimo de Opus 5.5 |
 
@@ -222,20 +227,51 @@ subagentes e permissões deles — sem convertê-los para Chat Completions
 | Estado | stateless | metadados de sessão em SQLite; eventos só em memória |
 | Onde roda | container | host (usa o login das CLIs do operador) |
 
-```bash
-# host A, com as CLIs logadas pelo mesmo usuário
-AGENT_GATEWAY_ENABLED=true AGENT_API_KEYS=... CLAUDE_AGENT_ENABLED=true \
-AGENT_WORKSPACES_FILE=/opt/azigate/agent-workspaces.json npm run start:agentd
+```text
+Model Plane:  Qwen/Cline (B) ──/v1──► Azigate (A) ──► modelos
+Agent Plane:  Claude Code (A) ─┐
+              Codex (A) ───────┼──MCP──► Workspace Server (B) ──► projeto em B
+              AGY (A) ─────────┘
 ```
 
-Para trabalhar num projeto que está em **outra máquina**, rode o `azigate-worker` nela:
-ele conecta de saída (sem porta aberta), expõe só os workspaces declarados, protege
-`.git`, mantém a execução de programas desligada por padrão e é usado pelo Claude via MCP
-([ADR-023](adr/ADR-023-worker-remoto-e-isolamento-de-workspace.md)).
+Na máquina A, com as CLIs logadas pelo mesmo usuário, suba o `azigate-agentd`
+(`npm run start:agentd`) e gere o pacote e a configuração da máquina B:
 
-Contrato em [specs/agent-api.md](specs/agent-api.md), operação passo a passo em
+```bash
+npm run pack:client     # dist-client/azigate-client-<versão>.tgz, sem dependências
+npm run -s client:setup -- --worker maquina-b --workspace meu-projeto=/caminho/na/b --exec npm,git --with-agent-key
+```
+
+A máquina B, onde está o projeto, **não precisa do repositório do Azigate**: instale o pacote
+(`npm install -g ./azigate-client-*.tgz`), cole o bloco impresso pelo `client:setup`, suba o
+Workspace Server com `azigate-workspace` e converse com o agente escolhido:
+
+```bash
+azigate-agent chat claude meu-projeto
+azigate-agent chat codex  meu-projeto --effort medium
+azigate-agent chat agy    meu-projeto
+```
+
+O agente roda inteiro em A (sessão, subagentes, permissões) e usa apenas as ferramentas MCP do
+Workspace Server — leitura, busca, escrita, Git e execução por argv — sobre o projeto em B, sem
+cópia do repositório. O Workspace Server conecta de saída (sem porta aberta), expõe só os
+workspaces declarados, protege `.git`, mantém a execução de programas desligada por padrão e
+não chama LLM. Escritas e comandos pedem aprovação (`y/N` no terminal)
+([ADR-023](adr/ADR-023-worker-remoto-e-isolamento-de-workspace.md),
+[ADR-025](adr/ADR-025-workspace-server-mcp-para-os-tres-agentes.md)).
+
+Quem prefere o editor pode usar a **extensão VS Code** em vez do terminal: gere o pacote em A
+com `npm run pack:vscode` e instale `dist-vscode/azigate-vscode-<versão>.vsix` na B
+(**Install from VSIX…**). O painel **Azigate** inicia o Workspace Server, conversa com Claude,
+Codex ou AGY e mostra as aprovações com botões **Permitir**/**Negar**
+([ADR-028](adr/ADR-028-extensao-vscode-maquina-b.md),
+[documentação](docs/modules/vscode-extension/index.md)).
+
+Contrato em [specs/agent-api.md](specs/agent-api.md) e
+[specs/workspace-protocol.md](specs/workspace-protocol.md), tutorial A/B passo a passo em
 [docs/operations/agent-plane.md](docs/operations/agent-plane.md) e módulos em
-[docs/modules/agents/](docs/modules/agents/index.md).
+[docs/modules/agents/](docs/modules/agents/index.md) e
+[docs/modules/workspace/](docs/modules/workspace/index.md).
 
 ## Desenvolvimento e gates automatizados
 
@@ -267,6 +303,8 @@ YOLO/auto-approval).
 - [Arquitetura](docs/architecture.md)
 - [Providers do Model Plane](docs/modules/providers/index.md)
 - [Agent Plane](docs/modules/agents/index.md)
+- [Workspace Server](docs/modules/workspace/index.md)
+- [Tutorial A/B do Agent Plane](docs/operations/agent-plane.md)
 - [Camada de tradução](docs/modules/translation/index.md)
 - [Contrato público](specs/gateway-api.md)
 - [Contrato do Agent Plane](specs/agent-api.md)
@@ -278,6 +316,6 @@ Desabilite os dois aliases (`ENABLE_CODEX_CLI=false`, `ENABLE_CLAUDE_CLI=false`)
 recrie o container. O upstream continua funcionando independentemente dos aliases
 Codex/Claude.
 
-Para o Agent Plane, pare o `azigate-agentd` (ou `AGENT_GATEWAY_ENABLED=false`) e remova
-os blocos `/agent/v1/`, `/native/` e `/worker/` do Nginx; o gateway de modelos não
+Para o Agent Plane, pare o `azigate-agentd` (ou `AGENT_GATEWAY_ENABLED=false`) e o
+`azigate-workspace`, rode `npm run agy:remote -- uninstall` e remova os blocos `/agent/v1/`, `/native/` e `/worker/` do Nginx; o gateway de modelos não
 depende dele.

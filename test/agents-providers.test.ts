@@ -1,14 +1,37 @@
-import { existsSync } from 'node:fs'
+import { existsSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { AgyAgentProvider, buildAgyArgs } from '../src/agents/agy/agy-provider.js'
+import { installAgyRemote } from '../src/agents/agy/agy-remote-setup.js'
 import { ClaudeAgentProvider, buildClaudeArgs } from '../src/agents/claude/claude-provider.js'
 import { CodexAgentProvider, codexThreadSettings } from '../src/agents/codex/codex-provider.js'
-import type { AgentRuntimeSession } from '../src/agents/core/agent-provider.js'
+import type { AgentRuntimeSession, AgentSessionOptions } from '../src/agents/core/agent-provider.js'
 import { AgentResumeError, AgentStartError } from '../src/agents/core/process-session.js'
 import { collect, fakeBinary, localOptions, readJson, tempDir, testContext, types } from './helpers/agents.js'
 
 const sessions: AgentRuntimeSession[] = []
+
+/** Workspace remoto de teste: a "ponte" é um processo inerte, o foco aqui é o argv/config. */
+function remoteOptions(sessionDir: string, permissionMode: 'review' | 'plan' = 'review'): AgentSessionOptions {
+  return {
+    sessionId: 'agt_000000000000000000000001',
+    workspace: {
+      kind: 'remote',
+      id: 'backend',
+      workerId: 'devbox',
+      mcp: {
+        name: 'azigate_workspace',
+        command: process.execPath,
+        args: ['-e', 'process.stdin.resume()'],
+        env: { AZIGATE_MCP_SESSION: join(sessionDir, 'mcp-session.json') },
+      },
+      readOnlyTools: ['mcp__azigate_workspace__read_file', 'mcp__azigate_workspace__git_status'],
+      instructions: 'O projeto está na máquina devbox.',
+    },
+    sessionDir,
+    permissionMode,
+  }
+}
 afterEach(async () => {
   await Promise.all(sessions.splice(0).map((session) => session.close()))
 })
@@ -106,32 +129,30 @@ describe('Claude Code (stream-json)', () => {
     expect(session.nativeSessionId).toBe('3b6a1f5e-6c1d-4a8b-9e0f-2d7c4b1a9e33')
   })
 
-  it('desliga ferramentas locais e usa somente MCP em workspace remoto', async () => {
+  it('desliga ferramentas locais de A e usa somente o MCP do workspace remoto', async () => {
     const sessionDir = tempDir()
-    const session = track(
-      await provider.createSession(
-        {
-          sessionId: 'agt_000000000000000000000001',
-          workspace: {
-            kind: 'remote',
-            id: 'backend',
-            workerId: 'devbox',
-            mcpConfigPath: join(sessionDir, 'mcp-config.json'),
-            allowedTools: ['mcp__azigate_workspace__read_file', 'mcp__azigate_workspace__git_status'],
-          },
-          sessionDir,
-          permissionMode: 'plan',
-        },
-        testContext(),
-      ),
-    )
+    const session = track(await provider.createSession(remoteOptions(sessionDir, 'plan'), testContext()))
     expect(session.nativeSessionId).toBeDefined()
     const argv = readJson<string[]>(join(sessionDir, '.fake-argv.json'))
-    expect(argv[argv.indexOf('--tools') + 1]).toBe('')
+    expect(argv[argv.indexOf('--tools') + 1]).toBe('Task,TodoWrite,WebFetch,WebSearch')
     expect(argv).toContain('--strict-mcp-config')
-    expect(argv[argv.indexOf('--mcp-config') + 1]).toBe(join(sessionDir, 'mcp-config.json'))
+    const configPath = argv[argv.indexOf('--mcp-config') + 1] ?? ''
+    expect(configPath).toBe(join(sessionDir, 'claude-mcp-config.json'))
+    expect(statSync(configPath).mode & 0o777).toBe(0o600)
+    expect(readJson(configPath)).toEqual({
+      mcpServers: {
+        azigate_workspace: {
+          type: 'stdio',
+          command: process.execPath,
+          args: ['-e', 'process.stdin.resume()'],
+          env: { AZIGATE_MCP_SESSION: join(sessionDir, 'mcp-session.json') },
+        },
+      },
+    })
     expect(argv[argv.indexOf('--allowedTools') + 1]).toBe('mcp__azigate_workspace__read_file,mcp__azigate_workspace__git_status')
+    expect(argv[argv.indexOf('--append-system-prompt') + 1]).toBe('O projeto está na máquina devbox.')
     expect(argv[argv.indexOf('--permission-mode') + 1]).toBe('plan')
+    expect(provider.remoteApprovals).toBe('native')
   })
 
   it('verifica instalação, login e versão sem abrir sessão', async () => {
@@ -201,11 +222,26 @@ describe('AGY (stream-json headless)', () => {
     expect(resumed.nativeSessionId).toBe('conv-existente')
   })
 
-  it('recusa workspace remoto e informa saúde', async () => {
-    const remote = localOptions(tempDir())
-    remote.workspace = { kind: 'remote', id: 'b', workerId: 'w', mcpConfigPath: '/tmp/x', allowedTools: [] }
-    await expect(provider.createSession(remote, testContext())).rejects.toThrow()
+  it('exige a preparação remota e então usa o agente azigate-workspace com a ponte herdando o ambiente', async () => {
     await expect(provider.health()).resolves.toEqual({ installed: true, authenticated: true, version: '1.2.10' })
+    const home = tempDir('azg-home-')
+    const remoteProvider = new AgyAgentProvider({ binary: fakeBinary('fake-agy'), inspectionCwd: tempDir(), env: { ...process.env, HOME: home } })
+    await expect(remoteProvider.createSession(remoteOptions(tempDir()), testContext())).rejects.toThrow(/agy:remote/u)
+
+    const status = await installAgyRemote({ binary: fakeBinary('fake-agy'), home, bridge: { command: process.execPath, args: ['-e', 'process.stdin.resume()'] }, env: process.env })
+    expect(status.ready).toBe(true)
+    const sessionDir = tempDir()
+    const session = track(await remoteProvider.createSession(remoteOptions(sessionDir), testContext()))
+    expect(session.nativeSessionId).toBe('conv-nova-0001')
+    expect(readJson<string[]>(join(sessionDir, '.fake-argv.json'))).toEqual([
+      '--input-format',
+      'stream-json',
+      '--output-format',
+      'stream-json',
+      '--agent',
+      'azigate-workspace',
+    ])
+    expect(remoteProvider.remoteApprovals).toBe('gateway')
   })
 })
 
@@ -272,11 +308,35 @@ describe('Codex app-server (JSON-RPC)', () => {
     await expect(provider.resumeSession('inexistente', localOptions(tempDir()), testContext())).rejects.toBeInstanceOf(AgentResumeError)
   })
 
-  it('informa saúde com login ausente e recusa workspace remoto', async () => {
+  it('informa saúde com login ausente', async () => {
     await expect(provider.health()).resolves.toEqual({ installed: true, authenticated: false, version: '0.144.6' })
-    const remote = localOptions(tempDir())
-    remote.workspace = { kind: 'remote', id: 'b', workerId: 'w', mcpConfigPath: '/tmp/x', allowedTools: [] }
-    await expect(provider.createSession(remote, testContext())).rejects.toThrow()
-    expect(existsSync(join(remote.sessionDir, '.fake-argv.json'))).toBe(false)
+  })
+
+  it('em workspace remoto injeta só o MCP do Azigate, desliga ferramentas locais e usa sandbox read-only', async () => {
+    const sessionDir = tempDir()
+    const session = track(await provider.createSession(remoteOptions(sessionDir), testContext()))
+    expect(session.nativeSessionId).toBe('thread-0001')
+    const argv = readJson<string[]>(join(sessionDir, '.fake-argv.json'))
+    expect(argv[0]).toBe('app-server')
+    for (const feature of ['shell_tool', 'unified_exec', 'browser_use', 'browser_use_external', 'computer_use', 'in_app_browser']) {
+      expect(argv[argv.indexOf(feature) - 1]).toBe('--disable')
+    }
+    expect(argv).toContain(`mcp_servers.azigate_workspace.command=${JSON.stringify(process.execPath)}`)
+    expect(argv).toContain('mcp_servers.azigate_workspace.args=["-e", "process.stdin.resume()"]')
+    expect(argv).toContain(`mcp_servers.azigate_workspace.env={ AZIGATE_MCP_SESSION = ${JSON.stringify(join(sessionDir, 'mcp-session.json'))} }`)
+    expect(argv).toContain('mcp_servers.azigate_workspace.default_tools_approval_mode="approve"')
+    // Servidores MCP do usuário ficam desligados; nomes que não cabem numa chave TOML simples são ignorados.
+    expect(argv).toContain('mcp_servers.github.url="https://api.githubcopilot.com/mcp/"')
+    expect(argv).toContain('mcp_servers.github.enabled=false')
+    expect(argv).toContain('mcp_servers.meu-fs.command="npx"')
+    expect(argv).toContain('mcp_servers.meu-fs.enabled=false')
+    expect(argv.some((arg) => arg.includes('nome com espaço'))).toBe(false)
+    expect(readJson<{ params: Record<string, unknown> }>(join(sessionDir, '.fake-thread-params.json')).params).toEqual({
+      cwd: sessionDir,
+      approvalPolicy: 'untrusted',
+      sandbox: 'read-only',
+      developerInstructions: 'O projeto está na máquina devbox.',
+    })
+    expect(existsSync(join(sessionDir, 'mcp-session.json'))).toBe(false)
   })
 })

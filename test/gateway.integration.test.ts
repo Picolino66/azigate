@@ -6,6 +6,7 @@ import pino from 'pino'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createApp } from '../src/app.js'
 import { createTestConfig, type AppConfig } from '../src/config.js'
+import { CLI_ALIAS_CATALOG } from '../src/cli-catalog.js'
 import { colorizeModelLogLine, MODEL_LOG_COLORS } from '../src/observability/log-colors.js'
 import { GatewayMetrics } from '../src/observability/metrics.js'
 import { MockUpstream, jsonResponse } from './mock-upstream.js'
@@ -418,8 +419,8 @@ describe('gateway DeepSeek', () => {
   })
 
   it('atribui uma cor distinta a cada alias conhecido nos logs de terminal', () => {
-    expect(colorizeModelLogLine('{"model":"deepseek-v4-flash"}\n')).toBe(
-      '{"model":"\x1b[32mdeepseek-v4-flash\x1b[0m"}\n',
+    expect(colorizeModelLogLine('{"model":"deepseek-flash"}\n')).toBe(
+      '{"model":"\x1b[32mdeepseek-flash\x1b[0m"}\n',
     )
     expect(colorizeModelLogLine('{"model":"deepseek-v4-pro"}\n')).toBe(
       '{"model":"\x1b[34mdeepseek-v4-pro\x1b[0m"}\n',
@@ -430,6 +431,10 @@ describe('gateway DeepSeek', () => {
     expect(new Set(colors).size).toBe(colors.length)
     for (const model of Object.keys(MODEL_LOG_COLORS)) {
       expect(colorizeModelLogLine(`{"model":"${model}"}\n`)).toContain(`\x1b[`)
+    }
+    // Regressão: todo alias do catálogo CLI e os modelos DeepSeek publicados precisam de cor própria.
+    for (const model of [...Object.keys(CLI_ALIAS_CATALOG), 'deepseek-flash', 'deepseek-v4-pro']) {
+      expect(MODEL_LOG_COLORS, model).toHaveProperty([model])
     }
   })
 

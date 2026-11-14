@@ -36,7 +36,9 @@ Valide links internos da documentação alterada.
 Este é o `azigate`, com dois planos em processos separados ([ADR-022](adr/ADR-022-agent-plane-nativo.md)):
 
 - **Model Plane** (`azigate`): gateway stateless em Node.js/TypeScript com Fastify e Undici. O agente cliente OpenAI-compatible (por exemplo Qwen Code, GitHub Copilot, Cline ou Continue) escolhe um provedor pelo `model`, mas continua sendo o único processo autorizado a executar ferramentas e alterar os repositórios do computador onde ele roda.
-- **Agent Plane** (`azigate-agentd`): serviço stateful que opera Codex, Claude Code e Google Antigravity (AGY) como agentes completos, pelo protocolo nativo de cada CLI, com sessões, eventos, aprovações e execução remota via `azigate-worker`.
+- **Native Agent Plane** (`azigate-agentd`): serviço stateful que opera Codex, Claude Code e Google Antigravity (AGY) como agentes completos, pelo protocolo nativo de cada CLI, com sessões, eventos e aprovações. Os três podem operar um projeto em outra máquina pelo **Workspace Server** (`azigate-workspace`, antigo `azigate-worker`) via MCP ([ADR-025](adr/ADR-025-workspace-server-mcp-para-os-tres-agentes.md)).
+
+Princípio: o Model Plane permite que agentes locais usem modelos remotos; o Native Agent Plane permite que agentes remotos completos usem ambientes de execução locais.
 
 ```text
 Agente cliente -> HTTPS/Nginx -> azigate (Fastify)
@@ -46,7 +48,8 @@ Agente cliente -> HTTPS/Nginx -> azigate (Fastify)
 
 Cliente de agentes -> HTTPS/Nginx -> azigate-agentd (host A)
                                       ├── stdio -> codex app-server | claude -p | agy
-                                      └── WebSocket de saída <- azigate-worker (máquina do projeto)
+                                      │            └── MCP -> azigate-mcp-bridge -> relay (socket Unix)
+                                      └── WebSocket de saída <- azigate-workspace (máquina do projeto)
 ```
 
 O Model Plane é um monólito modular sem banco, fila ou frontend. O Agent Plane guarda somente metadados de sessão em SQLite. Rate limit, caches, eventos e aprovações são locais a cada processo.
@@ -63,12 +66,15 @@ Mapa principal:
 - `src/http/`: erros HTTP e cancelamento do cliente;
 - `src/observability/`: métricas e sanitização;
 - `src/agents/`: núcleo do Agent Plane e adaptadores nativos Codex, Claude Code e AGY;
-- `src/agent-control/`: sessões, aprovações, eventos, `SessionStore`, workers e ferramentas remotas;
-- `src/agentd/`: serviço `azigate-agentd`;
-- `src/worker/`, `src/worker-protocol/`, `src/mcp-bridge/`: worker remoto, protocolo e ponte MCP;
+- `src/agent-control/`: sessões, aprovações, eventos, `SessionStore`, `WorkerHub` e `WorkspaceRelay`;
+- `src/agentd/`: serviço `azigate-agentd` e a ponte `azigate-mcp-bridge` (`src/agentd/mcp-bridge/`);
+- `src/workspace/`: Workspace Server da máquina do projeto (`protocol`, `mcp`, `filesystem`, `process`, `git`, `security`, `server`); `src/worker/main.ts` é só o alias do nome antigo;
+- `src/agent-client/`: cliente de terminal `azigate-agent`;
+- `src/vscode-extension/`: extensão VS Code da máquina B (painel de agentes e controle do Workspace Server; só `extension.ts` importa `vscode`; `npm run pack:vscode`, [ADR-028](adr/ADR-028-extensao-vscode-maquina-b.md));
+- `tools/`: empacotamento do `azigate-client` (Workspace Server + `azigate-agent` em arquivo único para a máquina B; `npm run pack:client`);
 - `test/`: testes unitários/integração, upstream HTTP local simulado e CLIs de agente falsas (`test/fixtures/agents/`);
 - `config/nginx/` e `config/systemd/`: proxy TLS/streaming/WebSocket e unidade do agentd;
-- `dist/` e `coverage/`: artefatos gerados; não editar manualmente.
+- `dist/`, `dist-client/`, `dist-vscode/` e `coverage/`: artefatos gerados; não editar manualmente.
 
 ## Invariantes obrigatórias
 
@@ -78,7 +84,7 @@ Mapa principal:
 - Não leia, imprima, versione ou inclua `.env` e arquivos de `secrets/` em saídas. Use `.env.example` para entender a configuração e valores fictícios nos testes.
 - Altere limites de body, timeouts e comportamento de proxy de forma coerente entre aplicação, Compose, Nginx, systemd e documentação.
 - Não transforme cache, rate limit, eventos ou aprovações locais em garantia distribuída sem novo backend e decisão arquitetural explícita.
-- Model Plane e Agent Plane não importam rotas, credenciais nem estado um do outro. `GATEWAY_API_KEYS`, `AGENT_API_KEYS` e `WORKER_TOKEN_SECRET` são sempre disjuntos.
+- Model Plane e Agent Plane não importam rotas, credenciais nem estado um do outro (regras `no-restricted-imports` do `eslint.config.js`; só `config`, `security` e `observability` são comuns). `GATEWAY_API_KEYS`, `AGENT_API_KEYS` e `WORKER_TOKEN_SECRET` são sempre disjuntos.
 
 ### Model Plane (`azigate`)
 
@@ -91,19 +97,21 @@ Mapa principal:
 - O agente cliente é o único executor: nenhum subprocesso, ferramenta ou filesystem do servidor entra no caminho de `/v1` ([ADR-006](adr/ADR-006-qwen-como-unico-executor.md)).
 - Preserve status e respostas seguras do upstream. Retentativas só podem ocorrer antes do início da resposta e devem continuar limitadas aos status configurados.
 
-### Agent Plane (`azigate-agentd`, worker e ponte MCP)
+### Agent Plane (`azigate-agentd`, Workspace Server e ponte MCP)
 
-- A superfície do agentd é `GET /health`, `GET /ready`, `/agent/v1/*`, `WS /native/:provider/:sessionId` (somente saída) e `WS /worker/v1/connect`. Contrato em `specs/agent-api.md` e `specs/worker-protocol.md`.
+- A superfície do agentd é `GET /health`, `GET /ready`, `/agent/v1/*`, `WS /native/:provider/:sessionId` (somente saída) e `WS /worker/v1/connect`. Contrato em `specs/agent-api.md` e `specs/workspace-protocol.md`.
 - Use o protocolo nativo de cada CLI (`codex app-server`, `claude -p` em `stream-json`, `agy` em `stream-json`). Nunca converta eventos de agente para Chat Completions; sempre anexe a mensagem original em `native` e transforme o que não tiver mapeamento em `provider.event`.
 - Nunca leia, copie, renove ou armazene credenciais das CLIs; a autenticação é da CLI oficial.
-- O cliente escolhe workspace e worker apenas por ID. Nunca aceite `cwd`, path, comando, argv, ambiente ou URL vindos do cliente; paths vêm de `AGENT_WORKSPACES_FILE` ou da configuração do worker.
+- O cliente escolhe workspace e worker apenas por ID. Nunca aceite `cwd`, path, comando, argv, ambiente ou URL vindos do cliente; paths vêm de `AGENT_WORKSPACES_FILE` ou da configuração do Workspace Server.
 - Subprocessos usam `spawn` sem shell, argv montado em código com valores validados (nada começando com `-`), ambiente mínimo por allowlist, grupo de processos, término escalonado e limites de linha, tempo e sessões.
 - Nunca use `--dangerously-skip-permissions`, `bypassPermissions`, `danger-full-access` ou `approvalPolicy: never`. Aprovação só vale com `allow` explícito do dono; qualquer outro desfecho nega.
 - `WS /native` nunca repassa mensagens do cliente à CLI. Recursos pertencem à credencial que os criou; outra credencial recebe `404`.
 - O banco guarda somente metadados; eventos e aprovações ficam só em memória ([ADR-024](adr/ADR-024-persistencia-de-sessoes-e-dependencias-do-agent-plane.md)).
-- O worker conecta de saída (`wss://` fora de loopback), lê o token só de arquivo `0600`, aplica jail por `realpath`, protege `.git`, usa Git endurecido e mantém execução desligada por padrão (argv sem shell e allowlist quando ligada) ([ADR-023](adr/ADR-023-worker-remoto-e-isolamento-de-workspace.md)).
-- Sessões Claude com worker rodam com `--tools ""`, `--strict-mcp-config` e MCP via socket Unix `0600` com token de capacidade por sessão; o modo `plan` só permite métodos somente leitura.
-- Nova versão de CLI só entra em `CERTIFIED_VERSIONS` com fixture de contrato capturada da própria versão e contract tests verdes. Antes de usar em produção, rode a suíte manual `npm run test:agents:real` e registre a evidência no contexto canônico.
+- O Workspace Server conecta de saída (`wss://` fora de loopback), lê o token só de arquivo `0600`, aplica jail por `realpath`, protege `.git`, usa Git endurecido, mantém execução desligada por padrão (argv sem shell e allowlist quando ligada), nunca chama LLM e expõe o workspace como servidor MCP genérico ([ADR-023](adr/ADR-023-worker-remoto-e-isolamento-de-workspace.md), [ADR-025](adr/ADR-025-workspace-server-mcp-para-os-tres-agentes.md)).
+- Claude, Codex e AGY operam a máquina do projeto somente pelas ferramentas MCP `azigate_workspace`, com cwd vazio da sessão e os recursos locais de A desligados (Claude: `--tools "Task,TodoWrite,WebFetch,WebSearch"` e `--strict-mcp-config`; Codex: shell, unified exec, navegador e computer use desligados, `sandbox: read-only`, pedidos nativos negados; AGY: agente `azigate-workspace` com `excludeDefaultComponents: true`). Nunca copie o projeto para A (clone, rsync, scp, sshfs).
+- A máquina B recebe só o pacote `azigate-client` (nada do Model Plane nem do agentd) e a configuração do `client:setup` em `~/.config/azigate` (`0700`, arquivos `0600`). Segredos locais (token, `agent.key`) só são lidos de arquivos `0600`.
+- A ponte MCP lê socket e token de `mcp-session.json` `0600` (`AZIGATE_MCP_SESSION`), nunca de argv; sem sessão, expõe zero ferramentas. O relay do agentd aplica o modo `plan` e cria as aprovações de Codex e AGY; o Claude usa `can_use_tool`.
+- Nova versão de CLI só entra em `CERTIFIED_VERSIONS` com fixture de contrato capturada da própria versão e contract tests verdes. Antes de usar em produção, rode as suítes manuais `npm run test:agents:real` e `npm run test:agents:remote-real` e registre a evidência no contexto canônico.
 
 ## Convenções de implementação
 
@@ -136,7 +144,7 @@ npm run test:coverage
 npm audit --omit=dev --audit-level=high
 ```
 
-A cobertura mínima é 80% para linhas, funções e statements, e 70% para branches. Testes automatizados não devem chamar o upstream, Codex, Claude ou AGY reais: use `createTestConfig`, `test/mock-upstream.ts`, as CLIs falsas de `test/fixtures/agents/` e os providers roteirizados de `test/helpers/`. Os scripts `test:agents:real` e `experiment:previous-response` são validações manuais explícitas e nunca pertencem à suíte comum. Toda correção de bug ou mudança observável deve incluir teste de regressão, especialmente para autenticação, sanitização, allowlists, roteamento, protocolo interno, protocolos nativos das CLIs, jail de workspace, aprovações, streaming e cancelamento.
+A cobertura mínima é 80% para linhas, funções e statements, e 70% para branches. Testes automatizados não devem chamar o upstream, Codex, Claude ou AGY reais: use `createTestConfig`, `test/mock-upstream.ts`, as CLIs falsas de `test/fixtures/agents/` e os providers roteirizados de `test/helpers/`. Os scripts `test:agents:real`, `test:agents:remote-real` e `experiment:previous-response` são validações manuais explícitas e nunca pertencem à suíte comum. Toda correção de bug ou mudança observável deve incluir teste de regressão, especialmente para autenticação, sanitização, allowlists, roteamento, protocolo interno, protocolos nativos das CLIs, jail de workspace, aprovações, streaming e cancelamento.
 
 Quando houver mudança de infraestrutura, valide adicionalmente o artefato afetado, por exemplo `docker compose config`, `docker build` ou `nginx -t` em ambiente apropriado.
 

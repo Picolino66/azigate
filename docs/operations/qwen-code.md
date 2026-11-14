@@ -42,8 +42,8 @@ Em `~/.qwen/settings.json`, mescle sem remover outras configurações:
           }
         },
         {
-          "id": "deepseek-v4-flash",
-          "name": "DeepSeek V4 Flash via azigate",
+          "id": "deepseek-flash",
+          "name": "DeepSeek V4.1 Flash via azigate",
           "description": "Passthrough para o upstream (DeepSeek por padrão)",
           "envKey": "AZIGATE_API_KEY",
           "baseUrl": "https://ia.meudominio.com/v1",
@@ -124,7 +124,7 @@ Em `~/.qwen/settings.json`, mescle sem remover outras configurações:
 }
 ```
 
-Os IDs `deepseek-v4-pro`/`deepseek-v4-flash` acima são apenas exemplos de modelos do
+Os IDs `deepseek-v4-pro`/`deepseek-flash` acima são apenas exemplos de modelos do
 upstream padrão (DeepSeek). Se o operador configurou outro upstream (OpenAI,
 OpenRouter, etc.), use os IDs desse provedor — consulte `GET /v1/models` para ver o
 que está publicado. Os aliases `codex-cli-*`/`claude-cli-*` independem do upstream.
@@ -134,7 +134,6 @@ Repita a entrada Claude trocando `id` e nome conforme a tabela. Inclua somente m
 | ID Qwen | Modelo | Efforts expostos | Default | Gate |
 |---|---|---|---|---|
 | `claude-cli-opus-5.5` / `claude-cli` | Opus 5.5 | low, medium, high, xhigh, max | medium | pendente |
-| `claude-cli-opus-5` | Opus 5 | low, medium, high, xhigh, max | high | pendente |
 | `claude-cli-fable-5.1` | Fable 5.1 | low, medium, high, xhigh, max | high | pendente |
 | `claude-cli-sonnet-5` | Sonnet 5 | low, medium, high, xhigh, max | high | aprovado em 18/07/2026 |
 | `claude-cli-haiku-4.5` | Haiku 4.5 | nenhum | omitir | reprovado em 18/07/2026; não configurar |
@@ -171,7 +170,7 @@ Mantenha `skipStartupContext: false`: o Qwen precisa conhecer o computador onde
 executa. Use `/clear` entre tarefas sem relação para manter o contexto enviado
 sob controle.
 
-Nos aliases Codex, `low`, `medium`, `high` e `xhigh` chegam ao CLI sem mudança, o default é `medium` e `max` aparece no log como `xhigh`. Nos aliases Claude, continuam valendo os defaults e limites da tabela; `reasoning: false` também usa o default do modelo.
+Nos aliases Codex, o effort permitido chega ao fornecedor sem mudança; o default é `medium` e a [matriz depende do modelo](../modules/providers/codex-cli.md). Nos aliases Claude, continuam valendo os defaults e limites da tabela; `reasoning: false` também usa o default do modelo.
 
 Não grave o valor da chave no JSON:
 

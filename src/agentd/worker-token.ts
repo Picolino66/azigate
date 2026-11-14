@@ -1,6 +1,6 @@
 import 'dotenv/config'
 import { readValue } from '../config.js'
-import { signWorkerToken } from '../worker-protocol/security.js'
+import { signWorkerToken } from '../workspace/security/token.js'
 
 // npm run worker:token -- --worker devbox --workspace backend [--workspace frontend] [--days 90]
 function parse(argv: readonly string[]): { workerId: string; workspaces: string[]; days: number } {

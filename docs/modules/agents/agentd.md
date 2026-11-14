@@ -36,6 +36,7 @@ Variáveis de ambiente (ver [.env.example](../../../.env.example)):
 | `AGENT_EVENT_BUFFER`, `AGENT_EVENT_BUFFER_BYTES`, `AGENT_MAX_INPUT_CHARS` | `2000`, `16 MiB`, `100000` | |
 | `WORKER_ENABLED`, `WORKER_TOKEN_SECRET` / `_FILE`, `WORKER_HEARTBEAT_INTERVAL` | `false`, —, `15s` | segredo ≥ 32 caracteres, distinto das chaves |
 | `AGENT_MCP_SOCKET` | `<AGENT_DATA_DIR>/mcp.sock` | socket Unix `0600` da ponte MCP |
+| `AGY_REMOTE_AUTO_SETUP` | `true` | com `WORKER_ENABLED` e o AGY ligado, prepara o AGY para workspace remoto no startup ([agy-agent.md](agy-agent.md)) |
 
 ## Saída
 
@@ -54,7 +55,7 @@ Fastify, `@fastify/websocket`/`ws`, `node:sqlite`, pino; as CLIs instaladas no h
 - Nenhuma rota do Model Plane existe aqui, e nenhuma rota do Agent Plane existe no
   `azigate`.
 - Três credenciais disjuntas: `GATEWAY_API_KEYS` (Model Plane), `AGENT_API_KEYS`
-  (Agent Plane) e tokens de worker (assinados por `WORKER_TOKEN_SECRET`).
+  (Agent Plane) e tokens do Workspace Server (assinados por `WORKER_TOKEN_SECRET`).
 - Recursos pertencem à chave que os criou; outra chave recebe `404`.
 - `/health` e `/ready` são públicos; `/ready` exige banco acessível e ao menos um
   provider disponível.
@@ -64,9 +65,10 @@ Fastify, `@fastify/websocket`/`ws`, `node:sqlite`, pino; as CLIs instaladas no h
 ## Fluxo resumido
 
 `loadAgentdConfig` → abre SQLite → monta registry com os providers habilitados → cria
-`WorkerHub` e socket MCP se `WORKER_ENABLED` → recupera sessões → registra rotas →
-`listen`. No `SIGTERM`, encerra processos das CLIs (sessões ficam `suspended`), workers,
-socket e banco.
+`WorkerHub`, `WorkspaceRelay` e socket MCP se `WORKER_ENABLED` → prepara o AGY para
+workspace remoto (se ligado; falha só gera o aviso `agy_remote_setup_failed`) → recupera
+sessões → registra rotas → `listen`. No `SIGTERM`, encerra processos das CLIs (sessões ficam
+`suspended`), conexões dos Workspace Servers, socket e banco.
 
 ## Possíveis erros
 

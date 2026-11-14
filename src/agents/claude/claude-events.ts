@@ -109,7 +109,8 @@ export class ClaudeEventMapper {
         const name = stringField(block, 'name')
         if (!id || !name) continue
         this.toolNames.set(id, name)
-        events.push({ event: 'tool.started', tool: name, toolCallId: id, native: message })
+        const summary = summarizeToolInput(name, block.input)
+        events.push({ event: 'tool.started', tool: name, toolCallId: id, ...(summary ? { summary } : {}), native: message })
         if (SUBAGENT_TOOLS.has(name)) {
           this.subagentCalls.add(id)
           events.push({ event: 'subagent.started', toolCallId: id, native: message })
@@ -186,6 +187,7 @@ const SUMMARY_LIMIT = 500
 /** Resumo legível para o aprovador, a partir do input da ferramenta. Truncado. */
 export function summarizeToolInput(tool: string, input: unknown): string {
   let summary: string
+  if (isRecord(input) && Object.keys(input).length === 0) return ''
   if (isRecord(input)) {
     const argv = Array.isArray(input.argv) ? input.argv.filter((item): item is string => typeof item === 'string') : undefined
     summary =

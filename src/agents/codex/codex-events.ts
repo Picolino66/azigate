@@ -32,6 +32,18 @@ function toolName(item: Record<string, unknown>): string {
   return type
 }
 
+function toolSummary(item: Record<string, unknown>): string | undefined {
+  const command = stringField(item, 'command')
+  if (command) return command.length > 300 ? `${command.slice(0, 299)}…` : command
+  if (isRecord(item.arguments)) {
+    const args = item.arguments
+    const argv = Array.isArray(args.argv) ? args.argv.filter((part): part is string => typeof part === 'string') : undefined
+    const text = (argv && argv.length > 0 ? argv.join(' ') : undefined) ?? stringField(args, 'path') ?? stringField(args, 'query') ?? stringField(args, 'pattern')
+    if (text) return text.length > 300 ? `${text.slice(0, 299)}…` : text
+  }
+  return undefined
+}
+
 function toolStatus(item: Record<string, unknown>): 'completed' | 'failed' | 'declined' {
   const status = stringField(item, 'status')
   if (status === 'failed') return 'failed'
@@ -101,8 +113,11 @@ export class CodexEventMapper {
     }
     if (type && TOOL_ITEM_TYPES.has(type)) {
       const tool = toolName(item)
+      const summary = toolSummary(item)
+      const started: AgentEventDraft = { event: 'tool.started', tool, toolCallId: id, native: raw }
+      if (summary) started.summary = summary
       return phase === 'started'
-        ? [{ event: 'tool.started', tool, toolCallId: id, native: raw }]
+        ? [started]
         : [{ event: 'tool.completed', tool, toolCallId: id, status: toolStatus(item), native: raw }]
     }
     return [nativeEvent(raw)]

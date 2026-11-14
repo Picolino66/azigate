@@ -20,11 +20,11 @@ fixo.
 ## Entrada
 
 Mensagens textuais ou multimodais (imagem, arquivo, áudio), function tools,
-`tool_choice` e `parallel_tool_calls`. Os modelos públicos são `codex-cli-sol`,
+`tool_choice` e `parallel_tool_calls`. Os novos aliases `codex-cli-6-astra`, `codex-cli-6.1-sol`, `codex-cli-6.1-terra`, `codex-cli-6-sol` e `codex-cli-6-luna` selecionam, respectivamente, `gpt-6-astra`, `gpt-6.1-sol`, `gpt-6.1-terra`, `gpt-6-sol` e `gpt-6-luna`. Os aliases anteriores são `codex-cli-sol`,
 `codex-cli-terra`, `codex-cli-luna`, `codex-cli-5.5` e `codex-cli-5.4`, mapeados
 para `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-5.5` e `gpt-5.4`.
 `codex-cli` continua como sinônimo de `gpt-5.4`. Effort aceita `reasoning_effort`
-ou `reasoning.effort` com `low`, `medium`, `high`, `xhigh` ou `max`.
+ou `reasoning.effort` com `none`, `low`, `medium`, `high`, `xhigh` ou `max`, conforme a matriz do modelo.
 
 ## Saída
 
@@ -46,8 +46,7 @@ Token OAuth da assinatura salvo em `CODEX_TOKEN_FILE` (obtido uma vez com
   via Codex rejeita esses campos.
 - O modelo chega somente pela allowlist interna (`src/cli-catalog.ts`); o cliente
   nunca escolhe o valor enviado em `model`.
-- O default de todos os modelos é `medium`; `max` é reduzido para `xhigh` antes de
-  chegar à API (`src/providers/reasoning-effort.ts`).
+- O default é `medium`. Astra e 6.1 Sol aceitam `low` a `max`; 6.1 Terra, 6 Sol, 6 Luna e 5.6 aceitam `none` a `max`; 5.5 e 5.4 aceitam `none` a `xhigh`. Valor fora da matriz recebe `400 invalid_reasoning_effort`. A disponibilidade real depende da conta e do fornecedor.
 - `reasoning_effort` plano tem precedência sobre `reasoning.effort`; `reasoning: false`, ausência ou objeto sem `effort` usa o default.
 - Mensagem de assistant que contém somente `tool_calls` não vira um item
   `message`: os `function_call` são emitidos diretamente no `input[]`, preservando

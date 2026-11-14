@@ -16,7 +16,8 @@ import { AgyAgentProvider } from '../agents/agy/agy-provider.js'
 import { ClaudeAgentProvider } from '../agents/claude/claude-provider.js'
 import { CodexAgentProvider } from '../agents/codex/codex-provider.js'
 import { AgentPlaneError, agentErrorBody } from '../agent-control/errors.js'
-import { RemoteToolGateway } from '../agent-control/remote-tools.js'
+import { WorkspaceRelay } from '../agent-control/workspace-relay.js'
+import { installAgyRemote } from '../agents/agy/agy-remote-setup.js'
 import { SessionService, type McpBridgeLaunch } from '../agent-control/sessions.js'
 import { SqliteSessionStore, type SessionStore } from '../agent-control/session-store.js'
 import { WorkerHub } from '../agent-control/workers.js'
@@ -24,8 +25,8 @@ import { loadWorkspacesFile } from '../agent-control/workspaces.js'
 import { safeError } from '../observability/sanitize.js'
 import { GatewayAuthenticator } from '../security/auth.js'
 import { FixedWindowRateLimiter } from '../security/rate-limiter.js'
-import { WORKER_MAX_PAYLOAD_BYTES } from '../worker-protocol/protocol.js'
-import { bearerToken, verifyWorkerToken, type WorkerIdentity } from '../worker-protocol/security.js'
+import { WORKER_MAX_PAYLOAD_BYTES } from '../workspace/protocol/protocol.js'
+import { bearerToken, verifyWorkerToken, type WorkerIdentity } from '../workspace/security/token.js'
 import type { AgentdConfig } from './config.js'
 import { defaultMcpBridgeLaunch } from './mcp-bridge-launch.js'
 import { startMcpSocketServer } from './mcp-socket.js'
@@ -49,6 +50,8 @@ export interface AgentdDependencies {
   localWorkspaces?: ReadonlyMap<string, string>
   mcpBridge?: Omit<McpBridgeLaunch, 'socketPath'>
   startMcpSocket?: boolean
+  /** HOME usado para preparar o AGY (testes usam um diretório temporário). */
+  home?: string
   now?: () => Date
 }
 
@@ -103,18 +106,24 @@ export async function createAgentdApp(config: AgentdConfig, deps: AgentdDependen
   const workers = config.worker.enabled
     ? new WorkerHub({ heartbeatIntervalMs: config.worker.heartbeatIntervalMs, registrationTimeoutMs: 10_000, diagnostic })
     : undefined
-  const remoteTools = workers ? new RemoteToolGateway(workers) : undefined
+  const relay = workers ? new WorkspaceRelay(workers, diagnostic) : undefined
   let mcpServer: Server | undefined
-  if (remoteTools && deps.startMcpSocket !== false) {
-    mcpServer = await startMcpSocketServer(config.mcpSocketPath, remoteTools)
+  if (relay && deps.startMcpSocket !== false) {
+    mcpServer = await startMcpSocketServer(config.mcpSocketPath, relay)
   }
   const bridge = deps.mcpBridge ?? defaultMcpBridgeLaunch()
+  if (relay && config.providers.agy.enabled && config.agyRemoteAutoSetup) {
+    // Prepara o AGY para workspace remoto (servidor MCP, agente e regras), de forma idempotente.
+    await installAgyRemote({ binary: config.providers.agy.binary, home: deps.home ?? process.env.HOME ?? '', bridge })
+      .then((status) => diagnostic('agy_remote_setup', { ready: status.ready }))
+      .catch(() => logger.warn({ event: 'agy_remote_setup_failed' }))
+  }
   const sessions = new SessionService({
     store,
     registry,
     localWorkspaces: deps.localWorkspaces ?? loadWorkspacesFile(config.workspacesFile),
     ...(workers ? { workers } : {}),
-    ...(remoteTools ? { remoteTools, mcpBridge: { ...bridge, socketPath: config.mcpSocketPath } } : {}),
+    ...(relay ? { relay, mcpBridge: { ...bridge, socketPath: config.mcpSocketPath } } : {}),
     dataDir: config.dataDir,
     limits: config.limits,
     diagnostic,

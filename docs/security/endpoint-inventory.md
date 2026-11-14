@@ -47,7 +47,7 @@ porta própria (`127.0.0.1:3100`), credenciais próprias.
 | GET | `/health` | não | liveness | nome/status estáticos | integração agentd | OK |
 | GET | `/ready` | não | prontidão | banco e ao menos um provider disponível | integração agentd | OK |
 | GET | `/agent/v1/providers` | `AGENT_API_KEYS` | status das CLIs | sem path, conta ou token | integração agentd | OK |
-| GET | `/agent/v1/workers` | `AGENT_API_KEYS` | workers conectados | só IDs, versões, capacidades e workspaces | integração agentd | OK |
+| GET | `/agent/v1/workers` | `AGENT_API_KEYS` | Workspace Servers conectados | só IDs, versões, capacidades e workspaces | integração agentd | OK |
 | POST | `/agent/v1/sessions` | `AGENT_API_KEYS` | sessão | corpo estrito, workspace por ID, limites | sessões e integração | OK |
 | GET | `/agent/v1/sessions/:id` | `AGENT_API_KEYS` + dono | sessão | `404` para outra credencial | sessões e integração | OK |
 | POST | `/agent/v1/sessions/:id/turns` | `AGENT_API_KEYS` + dono | turno | `input` limitado; um turno por vez | sessões e integração | OK |
@@ -56,16 +56,17 @@ porta própria (`127.0.0.1:3100`), credenciais próprias.
 | DELETE | `/agent/v1/sessions/:id` | `AGENT_API_KEYS` + dono | sessão | idempotente; nega aprovações pendentes | sessões e integração | OK |
 | POST | `/agent/v1/approvals/:id` | `AGENT_API_KEYS` + dono | aprovação | `allow`/`deny`; `409` se já resolvida | sessões e integração | OK |
 | WS | `/native/:provider/:sessionId` | `AGENT_API_KEYS` + dono | eventos nativos | somente saída; `401` antes do upgrade | integração agentd | OK |
-| WS | `/worker/v1/connect` | token de worker | canal RPC | token HMAC antes do upgrade; registro validado; `maxPayload` 8 MiB | hub e integração | OK |
+| WS | `/worker/v1/connect` | token do Workspace Server | canal RPC + canais MCP | token HMAC antes do upgrade; registro validado; capacidade `mcp`; ≤ 32 canais; `maxPayload` 8 MiB | hub, relay e integração | OK |
 
 Superfície privada nova:
 
 | Canal | Controle |
 |---|---|
-| socket Unix `AGENT_MCP_SOCKET` | `0600`, token de capacidade por sessão, modo `plan` reaplicado |
+| socket Unix `AGENT_MCP_SOCKET` | `0600`; `hello` com token de capacidade por sessão (lido pela ponte de `mcp-session.json` `0600`); relay reaplica `plan` e cria aprovações de Codex/AGY |
+| `azigate-workspace --mcp-stdio` (máquina B) | stdio de um cliente MCP local; mesma jail, sem rede |
 | stdin/stdout das CLIs | processo filho sem shell, ambiente mínimo, grupo de processos |
 
 Operações críticas: executar ferramenta do agente (aprovação + modo), executar programa
-no worker (desligado por padrão, allowlist, aprovação), alterar arquivo remoto (jail,
+no Workspace Server (desligado por padrão, allowlist, aprovação), alterar arquivo remoto (jail,
 `.git` protegido).
 

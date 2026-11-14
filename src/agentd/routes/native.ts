@@ -2,7 +2,7 @@ import type { FastifyInstance, onRequestHookHandler } from 'fastify'
 import { normalizeProviderId } from '../../agents/core/agent-provider.js'
 import type { AgentEvent } from '../../agents/core/agent-event.js'
 import type { SessionService } from '../../agent-control/sessions.js'
-import { CLOSE_CODES, sendJson } from '../../worker-protocol/transport.js'
+import { CLOSE_CODES, sendJson } from '../../workspace/protocol/transport.js'
 
 interface NativeRouteDeps {
   agentAuth: onRequestHookHandler

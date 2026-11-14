@@ -193,7 +193,7 @@ describe('gateway multiprovedor CLI (adaptadores HTTP nativos)', () => {
     expect(sent).toMatchObject({ model: 'claude-opus-5-5', output_config: { effort: 'max' } })
   })
 
-  it('completude Codex não-streaming: traduz requisição, chama a Responses API e normaliza max para xhigh', async () => {
+  it('completude Codex não-streaming: traduz requisição e preserva max na Responses API', async () => {
     codex.setHandler((_request, response) => sseResponse(response, 200, sse(responsesTextEvents('pronto'))))
     const response = await appFor().inject({
       method: 'POST',
@@ -207,7 +207,33 @@ describe('gateway multiprovedor CLI (adaptadores HTTP nativos)', () => {
     expect(codex.requests[0]?.headers.authorization).toBe('Bearer codex-access-token')
     expect(codex.requests[0]?.headers['chatgpt-account-id']).toBe('acct_codex')
     const [sent] = requestBodies(codex)
-    expect(sent).toMatchObject({ model: 'gpt-5.6-sol', reasoning: { effort: 'xhigh', summary: 'auto' } })
+    expect(sent).toMatchObject({ model: 'gpt-5.6-sol', reasoning: { effort: 'max', summary: 'auto' } })
+  })
+
+  it.each([
+    ['codex-cli-6-astra', 'gpt-6-astra', 'max'],
+    ['codex-cli-6.1-sol', 'gpt-6.1-sol', 'max'],
+    ['codex-cli-6.1-terra', 'gpt-6.1-terra', 'none'],
+    ['codex-cli-6-sol', 'gpt-6-sol', 'max'],
+    ['codex-cli-6-luna', 'gpt-6-luna', 'none'],
+  ])('encaminha %s para %s com effort %s', async (alias, model, effort) => {
+    codex.setHandler((_request, response) => sseResponse(response, 200, sse(responsesTextEvents('pronto'))))
+    const response = await appFor().inject({
+      method: 'POST', url: '/v1/chat/completions', headers: CHAT_HEADERS,
+      payload: { model: alias, messages: [{ role: 'user', content: 'oi' }], reasoning_effort: effort },
+    })
+    expect(response.statusCode).toBe(200)
+    expect(requestBodies(codex)[0]).toMatchObject({ model, reasoning: { effort } })
+  })
+
+  it('rejeita effort incompatível antes de chamar o Codex', async () => {
+    const response = await appFor().inject({
+      method: 'POST', url: '/v1/chat/completions', headers: CHAT_HEADERS,
+      payload: { model: 'codex-cli-6-astra', messages: [], reasoning_effort: 'none' },
+    })
+    expect(response.statusCode).toBe(400)
+    expect(response.json()).toMatchObject({ error: { code: 'invalid_reasoning_effort' } })
+    expect(codex.requests).toHaveLength(0)
   })
 
   it('completude em streaming devolve chunks incrementais e termina com [DONE]', async () => {
@@ -386,7 +412,7 @@ describe('gateway multiprovedor CLI (adaptadores HTTP nativos)', () => {
     })
     expect(response.statusCode).toBe(200)
     expect(logs).toContain('"model":"codex-cli-sol"')
-    expect(logs).toContain('"effort":"xhigh"')
+    expect(logs).toContain('"effort":"max"')
     expect(logs).not.toContain('PROMPT_ULTRASSECRETO')
   })
 
@@ -723,6 +749,11 @@ describe('gateway multiprovedor CLI (adaptadores HTTP nativos)', () => {
     expect(response.statusCode).toBe(200)
     expect(response.json<{ data: { id: string }[] }>().data.map((model) => model.id)).toEqual([
       'deepseek-chat',
+      'codex-cli-6-astra',
+      'codex-cli-6.1-sol',
+      'codex-cli-6.1-terra',
+      'codex-cli-6-sol',
+      'codex-cli-6-luna',
       'codex-cli-sol',
       'codex-cli-terra',
       'codex-cli-luna',
@@ -835,7 +866,7 @@ describe('gateway multiprovedor CLI (adaptadores HTTP nativos)', () => {
   it.each([
     { model: 'claude-cli', sentModel: 'claude-opus-5-5', expected: { type: 'auto' } },
     { model: 'claude-cli-fable-5.1', sentModel: 'claude-fable-5-1', expected: { type: 'auto' } },
-    { model: 'claude-cli-opus-5', sentModel: 'claude-opus-5', expected: { type: 'any' } },
+    { model: 'claude-cli-sonnet-5', sentModel: 'claude-sonnet-5', expected: { type: 'any' } },
   ])('envia tool_choice aceito por $sentModel quando o cliente pede required', async ({ model, sentModel, expected }) => {
     claude.setHandler((_request, response) => sseResponse(response, 200, sse(anthropicTextEvents('ok'))))
     const response = await appFor({ enableClaudeCli: true }).inject({
@@ -854,12 +885,28 @@ describe('gateway multiprovedor CLI (adaptadores HTTP nativos)', () => {
     expect(sent).toMatchObject({ model: sentModel, tool_choice: expected })
   })
 
-  it('recusa alias Claude removido do catálogo sem encaminhar à DeepSeek', async () => {
+  it.each([
+    { payload: {}, expected: 64_000 },
+    { payload: { max_tokens: 1234 }, expected: 1234 },
+  ])('envia max_tokens $expected à Messages API', async ({ payload, expected }) => {
+    claude.setHandler((_request, response) => sseResponse(response, 200, sse(anthropicTextEvents('ok'))))
     const response = await appFor({ enableClaudeCli: true }).inject({
       method: 'POST',
       url: '/v1/chat/completions',
       headers: CHAT_HEADERS,
-      payload: { model: 'claude-cli-opus-4.8', messages: [{ role: 'user', content: 'oi' }] },
+      payload: { model: 'claude-cli', messages: [{ role: 'user', content: 'oi' }], ...payload },
+    })
+    expect(response.statusCode).toBe(200)
+    const [sent] = requestBodies(claude)
+    expect(sent).toMatchObject({ max_tokens: expected })
+  })
+
+  it.each(['claude-cli-opus-4.8', 'claude-cli-opus-5'])('recusa alias Claude removido %s sem encaminhar à DeepSeek', async (model) => {
+    const response = await appFor({ enableClaudeCli: true }).inject({
+      method: 'POST',
+      url: '/v1/chat/completions',
+      headers: CHAT_HEADERS,
+      payload: { model, messages: [{ role: 'user', content: 'oi' }] },
     })
     expect(response.statusCode).toBe(400)
     expect(response.json()).toMatchObject({ error: { code: 'invalid_model' } })

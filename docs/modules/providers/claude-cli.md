@@ -8,9 +8,10 @@
 
 Aliases Claude que falam diretamente com a **Messages API** da Anthropic
 (`https://api.anthropic.com/v1/messages`), autenticados pela assinatura do
-operador via OAuth — não por API key. Cinco modelos versionados (Opus 5.5, Opus 5,
-Fable 5.1, Sonnet 5 e Haiku 4.5) mais o sinônimo `claude-cli` (Opus 5.5), conforme o
-[ADR-021](../../../adr/ADR-021-catalogo-claude-geracao-5.md).
+operador via OAuth — não por API key. Quatro modelos versionados (Opus 5.5, Fable 5.1,
+Sonnet 5 e Haiku 4.5) mais o sinônimo `claude-cli` (Opus 5.5), espelhando o seletor da
+assinatura, conforme o [ADR-021](../../../adr/ADR-021-catalogo-claude-geracao-5.md) e o
+[ADR-027](../../../adr/ADR-027-catalogo-claude-espelha-seletor.md).
 
 ## Localização no código
 
@@ -38,13 +39,15 @@ Token OAuth da assinatura salvo em `CLAUDE_TOKEN_FILE` (obtido uma vez com
 
 ## Regras de negócio
 
-- `max_tokens` é obrigatório na Messages API; o gateway aplica um default fixo
-  quando o cliente não o envia.
+- `max_tokens` é obrigatório na Messages API; quando o cliente não o envia, o gateway
+  aplica o default fixo de 64000. O thinking adaptativo consome esse limite, e um valor
+  baixo cortaria a resposta (`finish_reason: length`) em efforts altos; como a negociação
+  é sempre SSE, o limite alto não causa timeout HTTP.
 - Cada alias mapeia para um único `model` completo enviado à API;
   `claude-cli` equivale a Opus 5.5. Alias `claude-cli-*` fora do catálogo recebe
   `400 invalid_model`, sem fallback para o upstream.
 - Omissão ou effort incompatível aplica o padrão do catálogo: `medium` no Opus 5.5
-  e `high` no Opus 5, Fable 5.1 e Sonnet 5. Haiku 4.5 nunca recebe `thinking`.
+  e `high` no Fable 5.1 e no Sonnet 5. Haiku 4.5 nunca recebe `thinking`.
 - Opus 5.5 e Fable 5.1 recusam `tool_choice` forçado: `required` e função nomeada
   são enviados como `{type:auto}`, e `auto`/`none` passam inalterados. Quando `thinking` está ativo, `temperature`
   e `top_p` são omitidos (a API rejeita a combinação em alguns modelos).

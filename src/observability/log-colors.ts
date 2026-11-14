@@ -2,8 +2,13 @@ import type { DestinationStream } from 'pino'
 
 const RESET = '\x1b[0m'
 export const MODEL_LOG_COLORS: Readonly<Record<string, string>> = {
-  'deepseek-v4-flash': '\x1b[32m',
+  'deepseek-flash': '\x1b[32m',
   'deepseek-v4-pro': '\x1b[34m',
+  'codex-cli-6-astra': '\x1b[38;5;201m',
+  'codex-cli-6.1-sol': '\x1b[38;5;160m',
+  'codex-cli-6.1-terra': '\x1b[94m',
+  'codex-cli-6-sol': '\x1b[38;5;220m',
+  'codex-cli-6-luna': '\x1b[38;5;45m',
   'codex-cli': '\x1b[31m',
   'codex-cli-sol': '\x1b[91m',
   'codex-cli-terra': '\x1b[35m',
@@ -12,7 +17,6 @@ export const MODEL_LOG_COLORS: Readonly<Record<string, string>> = {
   'codex-cli-5.4': '\x1b[95m',
   'claude-cli': '\x1b[38;5;214m',
   'claude-cli-opus-5.5': '\x1b[92m',
-  'claude-cli-opus-5': '\x1b[38;5;208m',
   'claude-cli-fable-5.1': '\x1b[96m',
   'claude-cli-sonnet-5': '\x1b[93m',
   'claude-cli-haiku-4.5': '\x1b[38;5;141m',

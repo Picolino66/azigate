@@ -9,6 +9,8 @@ import {
   type AgentRuntimeSession,
   type AgentSessionContext,
   type AgentSessionOptions,
+  type ApprovalDecision,
+  type ApprovalRequest,
   type PermissionMode,
   type WorkspaceTarget,
 } from '../agents/core/agent-provider.js'
@@ -18,7 +20,8 @@ import { AgentResumeError } from '../agents/core/process-session.js'
 import { ApprovalService, type ApprovalView } from './approvals.js'
 import { AgentPlaneError, notFound } from './errors.js'
 import { SessionEventLog } from './events.js'
-import { MCP_SERVER_NAME, READ_ONLY_MCP_TOOLS, type RemoteToolGateway } from './remote-tools.js'
+import { remoteWorkspaceInstructions } from '../agents/core/remote-workspace.js'
+import { MCP_SERVER_NAME, READ_ONLY_MCP_TOOLS, type WorkspaceRelay } from './workspace-relay.js'
 import type { SessionRecord, SessionStatus, SessionStore } from './session-store.js'
 import type { WorkerHub } from './workers.js'
 import { WORKSPACE_ID_PATTERN } from './workspaces.js'
@@ -46,6 +49,8 @@ export interface McpBridgeLaunch {
   socketPath: string
 }
 
+export const MCP_SESSION_FILE = 'mcp-session.json'
+
 export type Diagnostic = (event: string, fields?: Record<string, string | number | boolean>) => void
 
 export interface SessionServiceDeps {
@@ -53,7 +58,7 @@ export interface SessionServiceDeps {
   registry: AgentRegistry
   localWorkspaces: ReadonlyMap<string, string>
   workers?: WorkerHub
-  remoteTools?: RemoteToolGateway
+  relay?: WorkspaceRelay
   mcpBridge?: McpBridgeLaunch
   dataDir: string
   limits: SessionLimits
@@ -215,7 +220,7 @@ export class SessionService {
       await this.startRuntime(live, provider, 'new')
     } catch {
       this.patch(live, { status: 'failed' })
-      this.deps.remoteTools?.revokeSession(record.id)
+      this.deps.relay?.revokeSession(record.id)
       this.deps.diagnostic('agent_session_start_failed', { sessionId: record.id, provider: provider.id })
       throw new AgentPlaneError(502, 'agent_start_failed', 'Não foi possível iniciar o agente')
     } finally {
@@ -286,7 +291,7 @@ export class SessionService {
     if (live.record.status === 'closed') return this.view(live)
     this.patch(live, { status: 'closed', closedAt: this.timestamp() })
     this.approvals.cancelForSession(id, 'session_closed')
-    this.deps.remoteTools?.revokeSession(id)
+    this.deps.relay?.revokeSession(id)
     this.clearIdle(live)
     const runtime = live.runtime
     live.runtime = undefined
@@ -345,8 +350,11 @@ export class SessionService {
 
   private assertWorkerAvailable(workerId: string, workspace: string): void {
     const hub = this.deps.workers
-    if (!hub || !this.deps.remoteTools || !this.deps.mcpBridge || !hub.isConnected(workerId)) {
-      throw new AgentPlaneError(503, 'worker_unavailable', 'Worker indisponível')
+    if (!hub || !this.deps.relay || !this.deps.mcpBridge || !hub.isConnected(workerId)) {
+      throw new AgentPlaneError(503, 'worker_unavailable', 'Workspace server indisponível')
+    }
+    if (!hub.hasCapability(workerId, 'mcp')) {
+      throw new AgentPlaneError(503, 'worker_unavailable', 'Workspace server sem MCP: atualize o azigate-workspace')
     }
     if (!hub.hasWorkspace(workerId, workspace)) {
       throw new AgentPlaneError(404, 'workspace_not_found', 'Workspace não encontrado')
@@ -425,7 +433,7 @@ export class SessionService {
           ? await provider.createSession(options, context)
           : await provider.resumeSession(record.nativeSessionId, options, context)
     } catch (error) {
-      this.deps.remoteTools?.revokeSession(record.id)
+      this.deps.relay?.revokeSession(record.id)
       throw error
     }
     if (live.record.status === 'closed') {
@@ -448,64 +456,69 @@ export class SessionService {
       return { kind: 'local', id: record.workspaceId, root }
     }
     const bridge = this.deps.mcpBridge
-    const remoteTools = this.deps.remoteTools
-    if (!bridge || !remoteTools) throw new AgentPlaneError(503, 'worker_unavailable', 'Worker indisponível')
-    remoteTools.revokeSession(record.id)
-    const token = remoteTools.issue({
+    const relay = this.deps.relay
+    if (!bridge || !relay) throw new AgentPlaneError(503, 'worker_unavailable', 'Workspace server indisponível')
+    const provider = this.deps.registry.get(record.provider)
+    relay.revokeSession(record.id)
+    const live = this.sessions.get(record.id)
+    const token = relay.issue({
       sessionId: record.id,
       workerId: record.workerId,
       workspaceId: record.workspaceId,
       permissionMode: record.permissionMode,
+      approvals: provider?.remoteApprovals ?? 'gateway',
+      requestApproval: (tool, summary) =>
+        live ? this.createApproval(live, { tool, summary, native: { tool, source: 'azigate_workspace_relay' } }) : Promise.resolve('deny'),
     })
-    const mcpConfigPath = join(sessionDir, 'mcp-config.json')
-    const config = {
-      mcpServers: {
-        [MCP_SERVER_NAME]: {
-          type: 'stdio',
-          command: bridge.command,
-          args: [...bridge.args],
-          env: { AZIGATE_MCP_SOCKET: bridge.socketPath, AZIGATE_MCP_TOKEN: token },
-        },
-      },
-    }
-    writeFileSync(mcpConfigPath, JSON.stringify(config), { mode: 0o600 })
-    chmodSync(mcpConfigPath, 0o600)
+    // O token fica só neste arquivo 0600; a configuração MCP do agente recebe apenas o caminho.
+    const sessionFile = join(sessionDir, MCP_SESSION_FILE)
+    writeFileSync(sessionFile, JSON.stringify({ socket: bridge.socketPath, token }), { mode: 0o600 })
+    chmodSync(sessionFile, 0o600)
     return {
       kind: 'remote',
       id: record.workspaceId,
       workerId: record.workerId,
-      mcpConfigPath,
-      allowedTools: READ_ONLY_MCP_TOOLS,
+      mcp: {
+        name: MCP_SERVER_NAME,
+        command: bridge.command,
+        args: [...bridge.args],
+        env: { AZIGATE_MCP_SESSION: sessionFile },
+      },
+      readOnlyTools: READ_ONLY_MCP_TOOLS,
+      instructions: remoteWorkspaceInstructions(record.workspaceId, record.workerId),
     }
   }
 
   private contextFor(live: LiveSession): AgentSessionContext {
     const record = live.record
     return {
-      requestApproval: (request) => {
-        const { view, decision } = this.approvals.create({
-          sessionId: record.id,
-          turnId: live.turn?.id ?? null,
-          provider: record.provider,
-          tool: request.tool,
-          summary: request.summary,
-          owner: record.ownerCredentialId,
-          timeoutMs: this.deps.limits.approvalTimeoutMs,
-          ...(request.signal ? { signal: request.signal } : {}),
-        })
-        if (view.status === 'pending') {
-          this.append(
-            live,
-            { event: 'approval.required', approvalId: view.id, tool: view.tool, summary: view.summary, native: request.native },
-            view.turnId ?? undefined,
-          )
-        }
-        return decision
-      },
+      requestApproval: (request) => this.createApproval(live, request),
       emit: (event) => this.append(live, event, live.turn?.id),
       diagnostic: (event, fields) =>
         this.deps.diagnostic(event, { sessionId: record.id, provider: record.provider, ...fields }),
     }
+  }
+
+  private createApproval(live: LiveSession, request: ApprovalRequest): Promise<ApprovalDecision> {
+    const record = live.record
+    const { view, decision } = this.approvals.create({
+      sessionId: record.id,
+      turnId: live.turn?.id ?? null,
+      provider: record.provider,
+      tool: request.tool,
+      summary: request.summary,
+      owner: record.ownerCredentialId,
+      timeoutMs: this.deps.limits.approvalTimeoutMs,
+      ...(request.signal ? { signal: request.signal } : {}),
+    })
+    if (view.status === 'pending') {
+      this.append(
+        live,
+        { event: 'approval.required', approvalId: view.id, tool: view.tool, summary: view.summary, native: request.native },
+        view.turnId ?? undefined,
+      )
+    }
+    return decision
   }
 
   private async consumeTurn(live: LiveSession, runtime: AgentRuntimeSession, turnId: string, text: string): Promise<void> {
@@ -587,7 +600,7 @@ export class SessionService {
     if (live.runtime !== runtime) return
     live.runtime = undefined
     this.clearIdle(live)
-    this.deps.remoteTools?.revokeSession(live.record.id)
+    this.deps.relay?.revokeSession(live.record.id)
     this.approvals.cancelForSession(live.record.id, 'cancelled')
     if (live.record.status === 'closed' || live.record.status === 'failed') return
     this.patch(live, { status: live.record.nativeSessionId ? 'suspended' : 'failed' })

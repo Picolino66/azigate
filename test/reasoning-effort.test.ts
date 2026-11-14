@@ -8,14 +8,17 @@ function body(overrides: Partial<ChatBody> = {}): ChatBody {
 
 describe('resolveCliEffort', () => {
   it('normaliza effort Claude por modelo e aplica os defaults da tabela', () => {
-    expect(resolveCliEffort(body({ reasoning_effort: 'xhigh' }), 'claude', 'claude-opus-5')).toBe('xhigh')
+    expect(resolveCliEffort(body({ reasoning_effort: 'xhigh' }), 'claude', 'claude-sonnet-5')).toBe('xhigh')
     expect(resolveCliEffort(body(), 'claude', 'claude-opus-5-5')).toBe('medium')
     expect(resolveCliEffort(body(), 'claude', 'claude-fable-5-1')).toBe('high')
     expect(resolveCliEffort(body({ reasoning_effort: 'max' }), 'claude', 'claude-haiku-4-5')).toBeUndefined()
   })
 
-  it('normaliza effort Codex e reduz max para xhigh', () => {
-    expect(resolveCliEffort(body({ reasoning_effort: 'max' }), 'codex', 'gpt-5.4')).toBe('xhigh')
+  it('valida effort Codex pela matriz do modelo', () => {
+    expect(resolveCliEffort(body({ reasoning_effort: 'max' }), 'codex', 'gpt-6-sol')).toBe('max')
+    expect(resolveCliEffort(body({ reasoning_effort: 'none' }), 'codex', 'gpt-5.4')).toBe('none')
+    expect(() => resolveCliEffort(body({ reasoning_effort: 'max' }), 'codex', 'gpt-5.4')).toThrow(InvalidReasoningEffortError)
+    expect(() => resolveCliEffort(body({ reasoning_effort: 'none' }), 'codex', 'gpt-6-astra')).toThrow(InvalidReasoningEffortError)
     expect(resolveCliEffort(body(), 'codex', 'gpt-5.4')).toBe('medium')
   })
 

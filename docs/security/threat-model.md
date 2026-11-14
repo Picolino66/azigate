@@ -15,8 +15,9 @@ camada de tradução que manipula conteúdo do usuário em código do gateway.
 Revisão de 25/09/2026: acrescenta o **Agent Plane** (`azigate-agentd`, workers e ponte
 MCP) — ver [ADR-022](../../adr/ADR-022-agent-plane-nativo.md),
 [ADR-023](../../adr/ADR-023-worker-remoto-e-isolamento-de-workspace.md) e
-[ADR-024](../../adr/ADR-024-persistencia-de-sessoes-e-dependencias-do-agent-plane.md) e a
-seção [Agent Plane](#agent-plane) abaixo. As seções anteriores continuam válidas para o
+[ADR-024](../../adr/ADR-024-persistencia-de-sessoes-e-dependencias-do-agent-plane.md),
+[ADR-025](../../adr/ADR-025-workspace-server-mcp-para-os-tres-agentes.md) (Workspace Server via
+MCP para Claude, Codex e AGY) e a seção [Agent Plane](#agent-plane) abaixo. As seções anteriores continuam válidas para o
 Model Plane.
 
 ## Ativos
@@ -85,13 +86,16 @@ Model Plane.
 
 Diferença fundamental: no Model Plane nada é executado no servidor; no Agent Plane o
 agente nativo **executa ferramentas** — no host A (workspace local) ou na máquina B (via
-worker). O controle deixa de ser "ausência de execução" e passa a ser "execução
+Workspace Server `azigate-workspace`, pelo MCP). O controle deixa de ser "ausência de execução" e passa a ser "execução
 confinada, autorizada e aprovada".
 
 ### Ativos adicionais
 
-- chaves `AGENT_API_KEYS`, `WORKER_TOKEN_SECRET` e tokens de worker;
-- tokens de capacidade MCP por sessão;
+- chaves `AGENT_API_KEYS`, `WORKER_TOKEN_SECRET` e tokens do Workspace Server;
+- tokens de capacidade MCP por sessão (arquivo `mcp-session.json` `0600` no diretório da
+  sessão);
+- configuração global do AGY no HOME do agentd (servidor MCP, agente e regras acrescentados
+  pela preparação remota);
 - login das CLIs no HOME do usuário do agentd (gerido pelas CLIs, nunca lido pelo Azigate);
 - repositórios configurados como workspaces (host A e máquina B);
 - banco `agentd.db` (metadados) e eventos em memória (conteúdo).
@@ -100,9 +104,14 @@ confinada, autorizada e aprovada".
 
 1. Cliente de agentes → Nginx → agentd: TLS, Bearer do Agent Plane, allowlist, rate limit.
 2. agentd → CLIs (Codex, Claude, AGY): subprocessos no host A.
-3. azigate-worker (B) → agentd: WebSocket de saída autenticado por token HMAC.
-4. Claude → azigate-mcp-bridge → agentd: stdio e socket Unix privado.
-5. Worker → sistema de arquivos e processos da máquina B.
+3. azigate-workspace (B) → agentd: WebSocket de saída autenticado por token HMAC, com canais
+   MCP multiplexados (`mcp.open`/`mcp.message`/`mcp.close`).
+4. Claude, Codex ou AGY → azigate-mcp-bridge → relay do agentd: stdio e socket Unix privado;
+   o relay aplica modo e aprovações antes de repassar ao Workspace Server.
+5. Workspace Server → sistema de arquivos e processos da máquina B.
+6. Extensão VS Code na máquina B ([ADR-028](../../adr/ADR-028-extensao-vscode-maquina-b.md)):
+   webview do painel (não confiável) → host da extensão → agentd por HTTPS; o host também
+   inicia o `azigate-workspace` local.
 
 ### Ameaças e controles
 
@@ -112,17 +121,25 @@ confinada, autorizada e aprovada".
 | BOLA/IDOR em sessões e aprovações | ler eventos, aprovar ou cancelar sessão alheia | recursos pertencem à credencial criadora; outra recebe `404` | `agent-sessions.test.ts`, `agentd.integration.test.ts` |
 | Path traversal / workspace arbitrário | agente atuando em `/etc`, `~/.ssh` | cliente só informa ID; paths vêm do operador; worker faz `realpath` e checa prefixo; recusa absoluto, `~`, byte nulo e symlink para fora; `delete` não segue symlink | `worker-ops.test.ts` |
 | Injeção de flag/comando nas CLIs | desligar permissões, executar comando | argv montado em código; `model` e IDs nativos validados (não começam com `-`); `spawn` sem shell; nunca `--dangerously-skip-permissions`/`bypassPermissions`/`danger-full-access` | `agents-providers.test.ts` |
-| Ferramentas locais do host A em sessão remota | agente lendo/alterando a máquina errada | Claude com `--tools ""`, `--strict-mcp-config`, cwd vazio e privado | `agents-providers.test.ts` |
+| Ferramentas locais do host A em sessão remota | agente lendo/alterando a máquina errada | cwd vazio e privado nos três; Claude com `--tools "Task,TodoWrite,WebFetch,WebSearch"` e `--strict-mcp-config`; Codex com shell, unified exec, navegador e computer use desligados, `sandbox: read-only` e pedidos nativos de comando/arquivo sempre negados; AGY com o agente `azigate-workspace` (`excludeDefaultComponents: true`) | `agents-providers.test.ts`, `workspace-compat.test.ts` (fixture existe só em B) |
+| Escrita/execução remota sem aprovação | agente alterando B sem consentimento | Claude: `can_use_tool` nativo, leituras em `--allowedTools`; Codex e AGY: o relay cria a aprovação antes de repassar (`acceptEdits` libera só escrita de arquivo); `plan` recusa no relay; `default_tools_approval_mode` do Codex só dispensa a pergunta da própria CLI | `agent-workers-mcp.test.ts`, `workspace-compat.test.ts` |
+| Servidor MCP do AGY usado fora do Azigate | acesso ao workspace pela configuração global | a ponte sem `AZIGATE_MCP_SESSION` é um servidor MCP com zero ferramentas; o token só existe no arquivo da sessão e é revogado no fim | `agents-core.test.ts` |
+| Outros servidores MCP do usuário numa sessão remota do Codex | ferramentas locais de A por MCP | servidores listados em `codex mcp list` são reenviados com `enabled=false` | `agents-providers.test.ts` |
 | JSON-RPC arbitrário no Codex via endpoint nativo | `command/exec`, `fs/writeFile`, `account/logout` no host A | `WS /native` somente de saída; mensagens do cliente ignoradas | `agentd.integration.test.ts` |
 | Execução de código via configuração do Git | `git status` rodando fsmonitor/filtros escritos pelo agente | `.git` imutável pelo agente; fsmonitor, hooks, diff externo e textconv desligados; `GIT_CEILING_DIRECTORIES` | `worker-ops.test.ts` |
 | Execução remota abusiva | comando destrutivo na máquina B | execução desligada por padrão; allowlist de `argv[0]`; sem shell; aprovação no agente; timeout, limite de saída e de processos | `worker-ops.test.ts` |
 | Worker impostor ou fora de escopo | expor workspace não autorizado | token HMAC com `workerId`, escopos e expiração; registro com outro ID recusado; conexão encerrada na expiração | `agent-workers-mcp.test.ts`, `agentd.integration.test.ts` |
-| Uso da ponte MCP por outro processo | acesso ao worker sem sessão | socket `0600` (criado com `umask 0177`), token aleatório por sessão revogado no fim; `mcp-config.json` `0600` em diretório `0700`, nunca em argv | `agentd.integration.test.ts` |
+| Uso da ponte MCP por outro processo | acesso ao Workspace Server sem sessão | socket `0600` (criado com `umask 0177`); primeira mensagem `hello` com token aleatório por sessão, revogado no fim; token só em `mcp-session.json` `0600` em diretório `0700`, nunca em argv nem na configuração MCP; a ponte recusa arquivo com permissão mais aberta | `agentd.integration.test.ts`, `agent-workers-mcp.test.ts` |
+| Canais MCP abusivos no Workspace Server | memória/descritores em B | no máximo 32 canais por conexão, ID validado, canais fechados na desconexão; capacidade `mcp` obrigatória | `agent-workers-mcp.test.ts` |
 | Aprovação indevida | ação sem consentimento | qualquer desfecho que não seja `allow` explícito nega (expiração, cancelamento, reinício) | `agent-sessions.test.ts` |
 | Vazamento de conteúdo | prompts, código e dados da conta em disco/log | banco só com metadados; eventos só em memória e só para o dono; handshake do Claude (e-mail/organização) nunca vira evento; logs só com IDs e códigos; stderr das CLIs apenas contado | `agent-sessions.test.ts`, `agents-providers.test.ts` |
 | Segredos herdados pelas CLIs | CLI ou ferramenta lendo chaves do gateway | ambiente mínimo por allowlist, sem `*_API_KEYS`, `WORKER_TOKEN_SECRET` ou `DEEPSEEK_API_KEY` | `agent-config-security.test.ts` |
 | DoS por processo, saída ou evento | memória/CPU do host | limites global e por provider, timeout de turno e ociosidade, linha NDJSON ≤ 16 MiB, buffer de eventos por quantidade e bytes, `O_NONBLOCK` contra FIFO | testes de núcleo, sessões e worker |
 | Retomada que perde contexto | agente seguindo sem histórico em silêncio | AGY: `conversation_id` do `init` comparado ao pedido; Codex/Claude: erro de retomada vira sessão `failed` | `agents-providers.test.ts` |
+| Webview do painel injetando ações | sessão ou comando que o usuário não pediu | `parseInboundMessage` aceita só a lista fechada de mensagens, com workspace e aprovação por ID de padrão restrito; nada vira caminho, comando ou URL; CSP `default-src 'none'` com nonce; texto do agente só por `textContent` | `vscode-extension.test.ts` |
+| Repositório malicioso reconfigurando a extensão | trocar a URL do agentd ou o programa iniciado ao abrir a pasta | configurações `azigate.*` com escopo `machine` (ignoradas em `.vscode/settings.json`); `untrustedWorkspaces.supported: false`; comando do Workspace Server só como nome simples ou caminho absoluto, sem argumentos, sem shell e com ambiente mínimo | `vscode-extension.test.ts` |
+| Chave do agentd exposta pelo editor | uso da Agent API por terceiros | chave no SecretStorage do VS Code ou em `agent.key` `0600`, nunca nas configurações nem no log; `https://` obrigatório fora de loopback | `vscode-extension.test.ts` |
+| Aprovação acidental no editor | ação sem consentimento | só o botão **Permitir** envia `allow`; fechar a notificação não decide e o agentd nega ao expirar; cada aprovação é decidida uma vez | `vscode-extension.test.ts` |
 | Protocolo nativo mudar | eventos perdidos ou mal interpretados | matriz certificada com `fail-closed` em produção; contract tests por versão; `provider.event` preserva o desconhecido | `agents-contracts.test.ts` |
 
 ### Risco residual
@@ -130,14 +147,21 @@ confinada, autorizada e aprovada".
 - Workspaces locais dão ao agente os privilégios do usuário do agentd, limitados pelo
   sistema de permissões da própria CLI e pelas aprovações. Recomenda-se um usuário
   dedicado.
-- A jail do worker protege operações de arquivo, não o efeito de um programa permitido:
-  com `exec.enabled`, um comando aprovado roda com os privilégios do usuário do worker.
+- A jail do Workspace Server protege operações de arquivo, não o efeito de um programa
+  permitido: com `exec.enabled`, um comando aprovado roda com os privilégios do usuário dele.
+- Numa sessão remota, `WebFetch`/`WebSearch` do Claude e a busca web do Codex continuam
+  disponíveis e saem da máquina A.
+- A preparação remota do AGY altera a configuração global do AGY no HOME do agentd (reversível
+  com `npm run agy:remote -- uninstall`).
 - Condições de corrida (TOCTOU) entre a verificação de `realpath` e a operação são
   mitigadas por `O_NOFOLLOW` no último componente, não eliminadas.
-- O formato interno do `step_update` do AGY foi inferido do changelog oficial; a suíte
-  manual `test:agents:real` é o gate de validação.
+- O formato do `step_update` do AGY foi confirmado em turnos reais (CLI 1.2.11), mas não é
+  documentado oficialmente; as suítes manuais `test:agents:real` e
+  `test:agents:remote-real` são o gate de validação.
 - AGY headless não tem canal de aprovação: o modo `review` equivale a negar o que exigiria
   revisão.
 - `node:sqlite` é experimental no Node 22.
+- A extensão VS Code roda com os privilégios do usuário da máquina B, e o `.vsix` montado por
+  script próprio não passa pelas validações do `vsce`. A instalação é manual ("Install from VSIX…").
 - Rate limit, buffer de eventos e aprovações continuam locais a uma instância.
 

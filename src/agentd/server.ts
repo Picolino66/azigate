@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import 'dotenv/config'
 import { createAgentdApp } from './app.js'
 import { loadAgentdConfig } from './config.js'

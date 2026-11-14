@@ -68,9 +68,9 @@ paths:
                 tool_choice: {}
                 parallel_tool_calls: { type: boolean }
                 reasoning_effort:
-                  description: Para aliases Codex/Claude, formato plano legado com enum low, medium, high, xhigh ou max e precedência sobre reasoning.effort. Para o upstream, permanece opaco.
+                  description: Para aliases Codex/Claude, formato plano legado com low, medium, high, xhigh ou max; Codex também aceita none conforme o modelo e precedência sobre reasoning.effort. Para o upstream, permanece opaco.
                 reasoning:
-                  description: Para aliases Codex/Claude, false usa o default e reasoning.effort aceita low, medium, high, xhigh ou max. Para o upstream, permanece opaco.
+                  description: Para aliases Codex/Claude, false usa o default e reasoning.effort aceita low, medium, high, xhigh ou max; Codex também aceita none conforme o modelo. Para o upstream, permanece opaco.
                   example: { effort: medium }
               additionalProperties: true
       responses:

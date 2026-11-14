@@ -1,11 +1,20 @@
 import { EventEmitter } from 'node:events'
+import { connect, createServer, type Server, type Socket } from 'node:net'
+import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { RemoteToolGateway, mcpToolName, READ_ONLY_MCP_TOOLS } from '../src/agent-control/remote-tools.js'
+import {
+  READ_ONLY_MCP_TOOLS,
+  WorkspaceRelay,
+  mcpToolName,
+  summarizeWorkspaceCall,
+  toolCallPolicy,
+  type RelayBinding,
+} from '../src/agent-control/workspace-relay.js'
 import { WorkerHub } from '../src/agent-control/workers.js'
-import { WorkspaceMcpServer, formatToolResult } from '../src/mcp-bridge/mcp-server.js'
-import { WorkerRpcError } from '../src/worker-protocol/protocol.js'
-import type { WorkerIdentity } from '../src/worker-protocol/security.js'
-import type { WorkerSocket } from '../src/worker-protocol/transport.js'
+import { WorkspaceMcpServer, formatToolResult } from '../src/workspace/mcp/server.js'
+import type { WorkerIdentity } from '../src/workspace/security/token.js'
+import type { WorkerSocket } from '../src/workspace/protocol/transport.js'
+import { tempDir } from './helpers/agents.js'
 
 class FakeSocket extends EventEmitter implements WorkerSocket {
   readyState = 1
@@ -136,34 +145,142 @@ describe('WorkerHub', () => {
   })
 })
 
-describe('RemoteToolGateway', () => {
-  it('amarra o token à sessão, aplica o modo plan e revoga no fim', async () => {
-    const workers = hub()
-    const socket = new FakeSocket()
-    workers.attach(socket, identity)
-    socket.receive(register())
-    const gateway = new RemoteToolGateway(workers)
-    const token = gateway.issue({ sessionId: 'agt_1', workerId: 'devbox', workspaceId: 'backend', permissionMode: 'plan' })
-
-    await expect(gateway.call('errado', 'read_file', {})).rejects.toMatchObject({ code: 'permission_denied' })
-    await expect(gateway.call(token, 'rm_rf', {})).rejects.toMatchObject({ code: 'method_not_found' })
-    await expect(gateway.call(token, 'write_file', { path: 'a', content: 'b' })).rejects.toMatchObject({ code: 'permission_denied' })
-    await expect(gateway.call(token, 'shell_exec', { argv: ['ls'] })).rejects.toMatchObject({ code: 'permission_denied' })
-
-    const reading = gateway.call(token, 'read_file', { path: 'a' })
-    const request = socket.sent.at(-1) as { id: string; params: unknown }
-    expect(request.params).toEqual({ path: 'a' })
-    socket.receive({ type: 'rpc.response', id: request.id, ok: true, result: { content: 'ok' } })
-    await expect(reading).resolves.toEqual({ content: 'ok' })
-
-    gateway.revokeSession('agt_1')
-    await expect(gateway.call(token, 'read_file', {})).rejects.toBeInstanceOf(WorkerRpcError)
+describe('política de ferramentas remotas', () => {
+  it('libera leitura, recusa escrita em plan e escolhe onde pedir aprovação', () => {
+    const gateway = { permissionMode: 'review', approvals: 'gateway' } as const
+    expect(toolCallPolicy(gateway, 'read_file', {})).toEqual({ action: 'forward' })
+    expect(toolCallPolicy(gateway, 'desconhecida', {})).toEqual({ action: 'forward' })
+    expect(toolCallPolicy(gateway, 'shell_exec', { argv: ['npm', 'test'] })).toEqual({ action: 'approve', summary: 'npm test' })
+    expect(toolCallPolicy(gateway, 'write_file', { path: 'a.txt' })).toEqual({ action: 'approve', summary: 'write_file a.txt' })
+    expect(toolCallPolicy({ permissionMode: 'plan', approvals: 'native' }, 'delete', { path: 'a' })).toMatchObject({ action: 'deny', code: 'permission_denied' })
+    expect(toolCallPolicy({ permissionMode: 'review', approvals: 'native' }, 'write_file', {})).toEqual({ action: 'forward' })
+    expect(toolCallPolicy({ permissionMode: 'acceptEdits', approvals: 'gateway' }, 'edit_file', {})).toEqual({ action: 'forward' })
+    expect(toolCallPolicy({ permissionMode: 'acceptEdits', approvals: 'gateway' }, 'shell_exec', { argv: ['ls'] })).toMatchObject({ action: 'approve' })
+    expect(summarizeWorkspaceCall('search', { query: 'x'.repeat(600) })).toHaveLength(500)
   })
 
   it('publica nomes MCP somente leitura', () => {
     expect(mcpToolName('read_file')).toBe('mcp__azigate_workspace__read_file')
     expect(READ_ONLY_MCP_TOOLS).toContain('mcp__azigate_workspace__git_diff')
     expect(READ_ONLY_MCP_TOOLS).not.toContain('mcp__azigate_workspace__shell_exec')
+  })
+})
+
+describe('relay MCP do agentd', () => {
+  const servers: Server[] = []
+  afterEach(() => {
+    for (const server of servers.splice(0)) server.close()
+  })
+
+  async function setup(capabilities = ['filesystem', 'git', 'mcp']): Promise<{ relay: WorkspaceRelay; worker: FakeSocket; path: string }> {
+    const workers = hub()
+    const worker = new FakeSocket()
+    workers.attach(worker, identity)
+    worker.receive(register({ capabilities }))
+    const relay = new WorkspaceRelay(workers)
+    const path = join(tempDir('azr-'), 's.sock')
+    const server = createServer((socket) => relay.attach(socket))
+    servers.push(server)
+    await new Promise<void>((resolve) => server.listen(path, resolve))
+    return { relay, worker, path }
+  }
+
+  function client(path: string): { socket: Socket; lines: Record<string, unknown>[]; send(payload: unknown): void; closed: Promise<void> } {
+    const socket = connect(path)
+    const lines: Record<string, unknown>[] = []
+    let buffer = ''
+    socket.on('data', (chunk: Buffer) => {
+      buffer += chunk.toString('utf8')
+      let index = buffer.indexOf('\n')
+      while (index !== -1) {
+        lines.push(JSON.parse(buffer.slice(0, index)) as Record<string, unknown>)
+        buffer = buffer.slice(index + 1)
+        index = buffer.indexOf('\n')
+      }
+    })
+    const closed = new Promise<void>((resolve) => socket.on('close', () => resolve()))
+    return { socket, lines, send: (payload) => socket.write(`${JSON.stringify(payload)}\n`), closed }
+  }
+
+  const until = async (check: () => boolean): Promise<void> => {
+    for (let attempt = 0; attempt < 200 && !check(); attempt += 1) await new Promise((resolve) => setTimeout(resolve, 5))
+    expect(check()).toBe(true)
+  }
+
+  function binding(overrides: Partial<RelayBinding> = {}): RelayBinding {
+    return {
+      sessionId: 'agt_1',
+      workerId: 'devbox',
+      workspaceId: 'backend',
+      permissionMode: 'review',
+      approvals: 'gateway',
+      requestApproval: () => Promise.resolve('allow'),
+      ...overrides,
+    }
+  }
+
+  it('recusa token inválido antes de abrir canal', async () => {
+    const { path, worker } = await setup()
+    const bridge = client(path)
+    bridge.send({ type: 'hello', token: 'falso' })
+    await bridge.closed
+    expect(bridge.lines[0]).toMatchObject({ type: 'error', code: 'permission_denied' })
+    expect(worker.sent.some((frame) => frame.type === 'mcp.open')).toBe(false)
+  })
+
+  it('recusa workspace server sem MCP', async () => {
+    const { relay, path } = await setup(['filesystem', 'git'])
+    const bridge = client(path)
+    bridge.send({ type: 'hello', token: relay.issue(binding()) })
+    await bridge.closed
+    expect(bridge.lines[0]).toMatchObject({ type: 'error', code: 'worker_unavailable' })
+  })
+
+  it('abre canal, repassa JSON-RPC nos dois sentidos, aplica aprovação e revoga', async () => {
+    const decisions: string[] = []
+    const { relay, worker, path } = await setup()
+    let answer: 'allow' | 'deny' = 'allow'
+    const token = relay.issue(binding({ requestApproval: (tool, summary) => {
+      decisions.push(`${tool} ${summary}`)
+      return Promise.resolve(answer)
+    } }))
+    const bridge = client(path)
+    bridge.send({ type: 'hello', token })
+    await until(() => worker.sent.some((frame) => frame.type === 'mcp.open'))
+    const open = worker.sent.find((frame) => frame.type === 'mcp.open') as { channel: string; workspace: string }
+    expect(open.workspace).toBe('backend')
+
+    bridge.send({ jsonrpc: '2.0', id: 1, method: 'tools/list' })
+    await until(() => worker.sent.some((frame) => frame.type === 'mcp.message'))
+    worker.receive({ type: 'mcp.message', channel: open.channel, message: { jsonrpc: '2.0', id: 1, result: { tools: [] } } })
+    await until(() => bridge.lines.some((line) => line.id === 1))
+
+    bridge.send({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'shell_exec', arguments: { argv: ['npm', 'test'] } } })
+    await until(() => worker.sent.filter((frame) => frame.type === 'mcp.message').length === 2)
+    expect(decisions).toEqual(['mcp__azigate_workspace__shell_exec npm test'])
+
+    answer = 'deny'
+    bridge.send({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'delete', arguments: { path: 'x' } } })
+    await until(() => bridge.lines.some((line) => line.id === 3))
+    expect(bridge.lines.find((line) => line.id === 3)).toMatchObject({ result: { isError: true } })
+    expect(worker.sent.filter((frame) => frame.type === 'mcp.message')).toHaveLength(2)
+
+    relay.revokeSession('agt_1')
+    await bridge.closed
+    expect(worker.sent.some((frame) => frame.type === 'mcp.close')).toBe(true)
+  })
+
+  it('fecha a ponte quando o workspace server fecha o canal', async () => {
+    const { relay, worker, path } = await setup()
+    const bridge = client(path)
+    bridge.send({ type: 'hello', token: relay.issue(binding({ permissionMode: 'plan' })) })
+    await until(() => worker.sent.some((frame) => frame.type === 'mcp.open'))
+    bridge.send({ jsonrpc: '2.0', id: 9, method: 'tools/call', params: { name: 'write_file', arguments: { path: 'a' } } })
+    await until(() => bridge.lines.some((line) => line.id === 9))
+    expect(bridge.lines.find((line) => line.id === 9)).toMatchObject({ result: { isError: true, content: [{ text: 'permission_denied: O modo plan permite somente leitura' }] } })
+    const open = worker.sent.find((frame) => frame.type === 'mcp.open') as { channel: string }
+    worker.receive({ type: 'mcp.closed', channel: open.channel })
+    await bridge.closed
   })
 })
 
@@ -186,6 +303,10 @@ describe('servidor MCP do workspace', () => {
     const list = (await server.handle({ jsonrpc: '2.0', id: 3, method: 'tools/list' })) as { result: { tools: { name: string }[] } }
     expect(list.result.tools.map((tool) => tool.name)).toContain('shell_exec')
     expect(await server.handle({ jsonrpc: '2.0', id: 4, method: 'ping' })).toEqual({ jsonrpc: '2.0', id: 4, result: {} })
+    expect(await server.handle({ jsonrpc: '2.0', id: 41, method: 'server/discover' })).toEqual({ jsonrpc: '2.0', id: 41, result: {} })
+    const tools = (list.result.tools as unknown as { name: string; annotations: { readOnlyHint: boolean } }[])
+    expect(tools.find((tool) => tool.name === 'read_file')?.annotations.readOnlyHint).toBe(true)
+    expect(tools.find((tool) => tool.name === 'shell_exec')?.annotations.readOnlyHint).toBe(false)
     expect(await server.handle({ jsonrpc: '2.0', method: 'notifications/initialized' })).toBeUndefined()
     expect(await server.handle({ jsonrpc: '2.0', id: 5, method: 'resources/list' })).toMatchObject({ error: { code: -32601 } })
     expect(await server.handle({ id: null })).toMatchObject({ error: { code: -32600 } })

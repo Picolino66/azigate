@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { chmodSync, existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { WorkerRpcError } from '../src/worker-protocol/protocol.js'
+import { WorkerRpcError } from '../src/workspace/protocol/protocol.js'
 import {
   deletePath,
   editFile,
@@ -13,11 +13,11 @@ import {
   readFile,
   search,
   writeFile,
-} from '../src/worker/fs-ops.js'
-import { gitDiff, gitLog, gitStatus } from '../src/worker/git-ops.js'
-import { WorkerHandler } from '../src/worker/handler.js'
-import { resolveEntry, resolveInside, toRelative } from '../src/worker/jail.js'
-import { ProcessRegistry, shellExec, validateArgv } from '../src/worker/process-ops.js'
+} from '../src/workspace/filesystem/fs-ops.js'
+import { gitDiff, gitLog, gitStatus } from '../src/workspace/git/git-ops.js'
+import { WorkerHandler } from '../src/workspace/server/handler.js'
+import { resolveEntry, resolveInside, toRelative } from '../src/workspace/security/jail.js'
+import { ProcessRegistry, shellExec, validateArgv } from '../src/workspace/process/process-ops.js'
 import { tempDir } from './helpers/agents.js'
 
 async function rpcError(promise: Promise<unknown> | (() => unknown)): Promise<string> {

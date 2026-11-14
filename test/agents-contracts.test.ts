@@ -84,6 +84,7 @@ describe('contrato Claude Code 2.1.280', () => {
     expect(summarizeToolInput('mcp__azigate_workspace__shell_exec', { argv: ['npm', 'install', 'x'] })).toBe('npm install x')
     expect(summarizeToolInput('Edit', { file_path: 'src/a.ts' })).toBe('src/a.ts')
     expect(summarizeToolInput('Outro', 'texto')).toBe('Outro')
+    expect(summarizeToolInput('mcp__azigate_workspace__git_status', {})).toBe('')
     expect(summarizeToolInput('Bash', { command: 'x'.repeat(600) })).toHaveLength(500)
   })
 })

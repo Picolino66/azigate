@@ -65,7 +65,7 @@ Fastify, Pino e a camada de tradução (para extrair usage dos chunks OpenAI).
 
 ## Regras de negócio
 
-- IDs conhecidos recebem cores ANSI estáveis (por exemplo `deepseek-v4-flash` verde, `deepseek-v4-pro` azul e `codex-cli` vermelho); cada outro alias conhecido recebe outra cor.
+- IDs conhecidos recebem cores ANSI estáveis (por exemplo `deepseek-flash` verde, `deepseek-v4-pro` azul e `codex-cli` vermelho); cada outro alias conhecido recebe outra cor. Todo alias de `CLI_ALIAS_CATALOG` precisa de cor própria em `MODEL_LOG_COLORS` (o teste de regressão falha se um alias novo entrar sem cor). O campo `model` só aparece depois da validação; requisições rejeitadas antes disso (`400 invalid_request`, `403 model_not_allowed`) são registradas sem ele.
 - Para Claude, o log usa o effort efetivamente enviado à Messages API, já com default ou downgrade aplicados.
 - Para Codex, o log usa o valor efetivo enviado como `reasoning.effort`; uma solicitação `max` aparece como `xhigh`.
 - Para o upstream, valores reconhecidos são registrados; ausência ou valor desconhecido vira `não_informado`, sem alterar o payload opaco enviado ao upstream.

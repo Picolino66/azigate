@@ -90,16 +90,12 @@ export class AgyEventMapper {
     if (thinkingDelta) events.push({ event: 'reasoning.delta', text: thinkingDelta, native: message })
 
     if (isRecord(payload.tool_info) && stepKey) {
-      const info = payload.tool_info
-      const tool =
-        stringField(info, 'name') ??
-        stringField(info, 'tool_name') ??
-        stringField(info, 'canonical_name') ??
-        stringField(payload, 'step_type') ??
-        'unknown'
+      const { tool, summary } = describeTool(payload.tool_info, payload)
       if (!this.startedTools.has(stepKey)) {
         this.startedTools.add(stepKey)
-        events.push({ event: 'tool.started', tool, toolCallId: stepKey, native: message })
+        const started: AgentEventDraft = { event: 'tool.started', tool, toolCallId: stepKey, native: message }
+        if (summary) started.summary = summary
+        events.push(started)
       }
       if (finished) {
         this.startedTools.delete(stepKey)
@@ -123,6 +119,38 @@ export class AgyEventMapper {
 
     return events.length > 0 ? events : [nativeEvent(message)]
   }
+}
+
+/**
+ * Nome e resumo da ferramenta. Chamadas MCP chegam como `call_mcp_tool` com
+ * `parameters.{ServerName,ToolName,Arguments}` (formato observado na CLI 1.2.11) e são
+ * normalizadas para `mcp__<servidor>__<ferramenta>`, como nos outros agentes.
+ */
+function describeTool(info: Record<string, unknown>, payload: Record<string, unknown>): { tool: string; summary?: string } {
+  const name = stringField(info, 'name') ?? stringField(payload, 'tool_name') ?? stringField(info, 'canonical_name') ?? stringField(payload, 'step_type') ?? 'unknown'
+  const parameters = isRecord(info.parameters) ? info.parameters : {}
+  if (name === 'call_mcp_tool') {
+    const server = stringField(parameters, 'ServerName')
+    const toolName = stringField(parameters, 'ToolName')
+    if (server && toolName) {
+      const args = isRecord(parameters.Arguments) ? parameters.Arguments : {}
+      return { tool: `mcp__${server}__${toolName}`, summary: summarizeArguments(toolName, args) }
+    }
+  }
+  return Object.keys(parameters).length > 0 ? { tool: name, summary: summarizeArguments(name, parameters) } : { tool: name }
+}
+
+function summarizeArguments(tool: string, args: Record<string, unknown>): string {
+  const argv = Array.isArray(args.argv) ? args.argv.filter((item): item is string => typeof item === 'string') : undefined
+  const text =
+    (argv && argv.length > 0 ? argv.join(' ') : undefined) ??
+    stringField(args, 'path') ??
+    stringField(args, 'CommandLine') ??
+    stringField(args, 'AbsolutePath') ??
+    stringField(args, 'query') ??
+    stringField(args, 'pattern') ??
+    tool
+  return text.length > 300 ? `${text.slice(0, 299)}…` : text
 }
 
 function stepIdentifier(payload: Record<string, unknown>): string | undefined {

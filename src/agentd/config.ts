@@ -4,7 +4,7 @@ import type { AgentProviderId } from '../agents/core/agent-provider.js'
 import type { VersionPolicy } from '../agents/core/agent-registry.js'
 import type { SessionLimits } from '../agent-control/sessions.js'
 import { boolean, csv, integer, readValue, requiredSecret } from '../config.js'
-import { MIN_WORKER_SECRET_LENGTH } from '../worker-protocol/security.js'
+import { MIN_WORKER_SECRET_LENGTH } from '../workspace/security/token.js'
 
 export interface AgentProviderConfig {
   enabled: boolean
@@ -29,6 +29,8 @@ export interface AgentdConfig {
   workspacesFile?: string
   versionPolicy: VersionPolicy
   providers: Readonly<Record<AgentProviderId, AgentProviderConfig>>
+  /** Prepara o AGY para workspace remoto no startup (servidor MCP, agente e regras). */
+  agyRemoteAutoSetup: boolean
   limits: SessionLimits
   worker: {
     enabled: boolean
@@ -38,7 +40,7 @@ export interface AgentdConfig {
 }
 
 const MIN_AGENT_KEY_LENGTH = 16
-const BINARY_PATTERN = /^[A-Za-z0-9._/-]+$/u
+const BINARY_PATTERN = /^[A-Za-z0-9._-]+$/u
 
 /** Aceita `500ms`, `30s`, `30m`, `1h` ou um inteiro em milissegundos. */
 export function parseDuration(name: string, raw: string | undefined, fallbackMs: number, minMs: number, maxMs: number): number {
@@ -53,11 +55,11 @@ export function parseDuration(name: string, raw: string | undefined, fallbackMs:
   return value
 }
 
+/** Nome simples (resolvido no PATH) ou caminho absoluto; o spawn é sem shell, então espaços são seguros. */
 function binary(env: NodeJS.ProcessEnv, name: string, fallback: string): string {
   const value = env[name]?.trim() || fallback
-  if (!BINARY_PATTERN.test(value) || value.startsWith('-') || (value.includes('/') && !isAbsolute(value))) {
-    throw new Error(`${name} deve ser um nome de comando ou um caminho absoluto`)
-  }
+  const valid = value.includes('/') ? isAbsolute(value) && !value.includes('\0') : BINARY_PATTERN.test(value)
+  if (!valid || value.startsWith('-')) throw new Error(`${name} deve ser um nome de comando ou um caminho absoluto`)
   return value
 }
 
@@ -138,6 +140,7 @@ export function loadAgentdConfig(env: NodeJS.ProcessEnv = process.env, cwd = pro
       claude: { enabled: boolean(env, 'CLAUDE_AGENT_ENABLED', false), binary: binary(env, 'CLAUDE_BINARY', 'claude') },
       agy: { enabled: boolean(env, 'AGY_AGENT_ENABLED', false), binary: binary(env, 'AGY_BINARY', 'agy') },
     },
+    agyRemoteAutoSetup: boolean(env, 'AGY_REMOTE_AUTO_SETUP', true),
     limits: {
       maxSessions,
       maxSessionsPerProvider: integer(env, 'AGENT_MAX_SESSIONS_PER_PROVIDER', 4, 1, maxSessions),

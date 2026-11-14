@@ -11,6 +11,7 @@ export interface CodexThreadSettings {
   sandbox: 'read-only' | 'workspace-write'
   model?: string
   effort?: string
+  developerInstructions?: string
 }
 
 export interface CodexLaunch {
@@ -19,6 +20,8 @@ export interface CodexLaunch {
   cwd: string
   env: NodeJS.ProcessEnv
   thread: CodexThreadSettings
+  /** Sessão sobre workspace remoto: ferramentas nativas de A nunca são aprovadas. */
+  remote?: boolean
   resumeThreadId?: string
   clientVersion: string
   requestTimeoutMs: number
@@ -79,6 +82,7 @@ export class CodexSession extends ProcessBackedSession {
       sandbox: settings.sandbox,
     }
     if (settings.model) threadParams.model = settings.model
+    if (settings.developerInstructions) threadParams.developerInstructions = settings.developerInstructions
     let result: unknown
     if (this.launchOptions.resumeThreadId) {
       try {
@@ -171,7 +175,18 @@ export class CodexSession extends ProcessBackedSession {
     params: unknown,
     raw: Record<string, unknown>,
   ): Promise<void> {
+    if (method === 'mcpServer/elicitation/request') {
+      await this.answerElicitation(id, params, raw)
+      return
+    }
     const approval = codexApprovalRequest(method, params)
+    if (approval && this.launchOptions.remote) {
+      // Em sessão remota, comando ou arquivo nativo rodaria na máquina A: sempre negado.
+      this.context.diagnostic('codex_local_action_denied', { method })
+      this.rpc.respond(id, approval.respond('deny'))
+      this.emitTurn({ event: 'provider.event', native: raw })
+      return
+    }
     if (!approval) {
       this.rpc.respondError(id, -32601, 'Método não suportado pelo Azigate')
       this.emitTurn({ event: 'provider.event', native: raw })
@@ -184,5 +199,27 @@ export class CodexSession extends ProcessBackedSession {
       decision = 'deny'
     }
     this.rpc.respond(id, approval.respond(decision))
+  }
+
+  /** Elicitação de servidor MCP vira aprovação do Azigate; modo URL é recusado. */
+  private async answerElicitation(id: JsonRpcId, params: unknown, raw: Record<string, unknown>): Promise<void> {
+    const record = isRecord(params) ? params : {}
+    const server = stringField(record, 'serverName') ?? 'mcp'
+    if (record.mode === 'url') {
+      this.rpc.respond(id, { action: 'decline', content: null, _meta: null })
+      return
+    }
+    const message = stringField(record, 'message') ?? 'pedido do servidor MCP'
+    let decision: 'allow' | 'deny'
+    try {
+      decision = await this.context.requestApproval({
+        tool: `mcp:${server}`,
+        summary: message.length > 500 ? `${message.slice(0, 499)}…` : message,
+        native: raw,
+      })
+    } catch {
+      decision = 'deny'
+    }
+    this.rpc.respond(id, { action: decision === 'allow' ? 'accept' : 'decline', content: decision === 'allow' ? {} : null, _meta: null })
   }
 }
